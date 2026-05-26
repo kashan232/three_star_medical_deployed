@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three Star Medical ERP - Presentation</title>
+    <!-- Reveal.js CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/theme/dracula.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --r-main-font: 'Outfit', sans-serif;
+            --r-heading-font: 'Outfit', sans-serif;
+            --r-background-color: #0d1117;
+            --r-main-color: #e6edf3;
+            --r-heading-color: #58a6ff;
+        }
+        .reveal {
+            font-family: var(--r-main-font);
+        }
+        .reveal .slides section {
+            text-align: left;
+            padding: 40px;
+        }
+        .reveal h1, .reveal h2, .reveal h3 {
+            color: var(--r-heading-color);
+            text-transform: none;
+            font-weight: 700;
+        }
+        .reveal .controls {
+            color: #58a6ff;
+        }
+        .reveal .progress {
+            color: #58a6ff;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 20px;
+        }
+        .mermaid {
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .accent {
+            color: #3fb950;
+        }
+        .table-custom {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.7em;
+        }
+        .table-custom th, .table-custom td {
+            border: 1px solid #30363d;
+            padding: 10px;
+            text-align: left;
+        }
+        .table-custom th {
+            background: #161b22;
+            color: #58a6ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="reveal">
+        <div class="slides">
+            
+            <!-- Slide 1: Title -->
+            <section data-background-gradient="linear-gradient(to bottom, #0d1117, #161b22)">
+                <h1 style="font-size: 2.5em;">Three Star Medical ERP</h1>
+                <h3 class="accent">Integrated Distribution & Financial System</h3>
+                <p style="margin-top: 50px; opacity: 0.7;">System Architecture & Workflow Overview</p>
+                <div style="font-size: 0.8em; margin-top: 100px;">
+                    Created: April 2026 | Version 1.0
+                </div>
+            </section>
+
+            <!-- Slide 2: Core Components -->
+            <section>
+                <h2>System Core Modules</h2>
+                <div class="glass-card">
+                    <ul>
+                        <li><strong class="accent">Commercial:</strong> Purchase & Sales Lifecycle.</li>
+                        <li><strong class="accent">Logistics:</strong> Warehouse, Inventory & Batch Tracking.</li>
+                        <li><strong class="accent">Accounts:</strong> Chart of Accounts, Vouchers & Ledgers.</li>
+                        <li><strong class="accent">Reports:</strong> High-Fidelity PDF Reports & Analytics.</li>
+                        <li><strong class="accent">HR:</strong> Biometric Attendance & Payroll.</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Slide 3: Detailed Purchase Cycle -->
+            <section>
+                <h2>Purchase Lifecycle (Inward)</h2>
+                <div class="mermaid">
+                    graph LR
+                        PO[Purchase Order] -- "Approval" --> GRN[Goods Receipt Note]
+                        GRN -- "Inventory In" --> Batch[Batch & Expiry]
+                        Batch -- "Return to Vendor" --> PRN[Purchase Return]
+                        GRN -- "Accounts Payable" --> VL[Vendor Ledger]
+                </div>
+                <div class="glass-card" style="font-size: 0.6em;">
+                    <p><strong class="accent">1. Purchase Order (PO):</strong> Official procurement request to suppliers.</p>
+                    <p><strong class="accent">2. Goods Receipt Note (GRN):</strong> Documentation of physical arrival and stock digitization.</p>
+                    <p><strong class="accent">3. Purchase Return (PRN):</strong> Formal document for returning goods to suppliers.</p>
+                </div>
+            </section>
+
+            <!-- Slide 4: Detailed Sale Cycle -->
+            <section>
+                <h2>Sales Lifecycle (Outward)</h2>
+                <div class="mermaid">
+                    graph LR
+                        SO[Sale Order] -- "Verification" --> SRN[Sale Receipt Note]
+                        SRN -- "Physical Delivery" --> DN[Delivery Note]
+                        SRN -- "Account Receivable" --> CL[Customer Ledger]
+                        SRN -- "Customer Return" --> SR[Sale Return]
+                </div>
+                <div class="glass-card" style="font-size: 0.6em;">
+                    <p><strong class="accent">1. Sale Order (SO):</strong> Initial booking and customer commitment.</p>
+                    <p><strong class="accent">2. Sale Receipt Note (SRN):</strong> Primary billing document (Invoice) that triggers financials.</p>
+                    <p><strong class="accent">3. Delivery Note (DN):</strong> Official dispatch document for warehouse shipments.</p>
+                    <p><strong class="accent">4. Sale Return:</strong> Procedure for reversed shipments and credit notes.</p>
+                </div>
+            </section>
+
+            <!-- Slide 5: Standardized Returns -->
+            <section>
+                <h2>Return Management (PRN & SRN Return)</h2>
+                <div style="display: flex; gap: 20px;">
+                    <div class="glass-card" style="flex: 1;">
+                        <h4 class="accent">GRN Return (PRN)</h4>
+                        <ul style="font-size: 0.5em;">
+                            <li>Removes stock from specific batch.</li>
+                            <li>Decreases Vendor Balance.</li>
+                            <li>Generates Debit Note.</li>
+                        </ul>
+                    </div>
+                    <div class="glass-card" style="flex: 1;">
+                        <h4 class="accent">SRN Return (Sale Return)</h4>
+                        <ul style="font-size: 0.5em;">
+                            <li>Updates stock back to warehouse.</li>
+                            <li>Updates Customer Balance.</li>
+                            <li>Generates Credit Note.</li>
+                        </ul>
+                    </div>
+                </div>
+                <p style="font-size: 0.5em; margin-top: 20px; opacity: 0.8;">* Integrated approval system ensures all returns are audited by management.</p>
+            </section>
+
+            <!-- Slide 5: Chart of Accounts (COA) -->
+            <section>
+                <h2>Chart of Accounts (COA)</h2>
+                <p>The financial foundation of the system.</p>
+                <div class="glass-card">
+                    <p style="font-size: 0.8em;">Hierarchical Tree Structure:</p>
+                    <ul style="font-size: 0.7em;">
+                        <li><strong>Level 1:</strong> Assets, Liabilities, Equity, Revenue, Expense.</li>
+                        <li><strong>Level 2:</strong> Control Accounts (e.g., Accounts Receivable).</li>
+                        <li><strong>Level 3:</strong> Sub-Accounts (Customers, Vendors, Banks).</li>
+                    </ul>
+                </div>
+                <p style="font-size: 0.6em; margin-top: 20px;">* Every transaction creates a balanced Journal Entry (Debit = Credit).</p>
+            </section>
+
+            <!-- Slide 6: Vouchers -->
+            <section>
+                <h2>Vouchers & Posting</h2>
+                <table class="table-custom">
+                    <thead>
+                        <tr>
+                            <th>Voucher Type</th>
+                            <th>Usage</th>
+                        }   <th>Financial Impact</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Receipt (RV)</strong></td>
+                            <td>Payment from Customer</td>
+                            <td>Dr Bank / Cr Customer</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Payment (PV)</strong></td>
+                            <td>Payment to Vendor</td>
+                            <td>Dr Vendor / Cr Bank-Cash</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Expense (EV)</strong></td>
+                            <td>Utility Bills, Salaries</td>
+                            <td>Dr Expense / Cr Cash</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Journal (JV)</strong></td>
+                            <td>Adjustments, Transfers</td>
+                            <td>Custom Dr/Cr pairs</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <!-- Slide 7: Batch & Expiry -->
+            <section>
+                <h2>Inventory Management</h2>
+                <div class="glass-card">
+                    <h3>Batch-Wise Tracking</h3>
+                    <p style="font-size: 0.8em;">Every item in stock is tied to a specific batch from a Purchase.</p>
+                    <ul style="font-size: 0.7em;">
+                        <li><strong>Expiry Alerts:</strong> Visual indicators for critical expiry.</li>
+                        <li><strong>Stock Movement:</strong> History of every item movement.</li>
+                        <li><strong>Warehouse Control:</strong> View stock by specific warehouse.</li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Slide 8: Technology Stack -->
+            <section>
+                <h2>Technical Infrastructure</h2>
+                <div style="display: flex; gap: 20px;">
+                    <div class="glass-card" style="flex: 1;">
+                        <h4 class="accent">Backend</h4>
+                        <p style="font-size: 0.6em;">PHP 8.x / Laravel Framework<br>MySQL Relational DB</p>
+                    </div>
+                    <div class="glass-card" style="flex: 1;">
+                        <h4 class="accent">Frontend</h4>
+                        <p style="font-size: 0.6em;">Blade Templates<br>Bootstrap / AdminLTE</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Slide 9: Conclusion -->
+            <section style="text-align: center;">
+                <h2>End of Presentation</h2>
+                <p class="accent">Three Star Medical ERP - Moving Forward</p>
+                <div style="margin-top: 50px;">
+                    <p style="font-size: 0.8em;">Any Questions?</p>
+                </div>
+            </section>
+
+        </div>
+    </div>
+
+    <!-- Reveal.js & Mermaid Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.3.1/reveal.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        Reveal.initialize({
+            hash: true,
+            center: true,
+            transition: 'convex', // none/fade/slide/convex/concave/zoom
+            backgroundTransition: 'fade'
+        });
+        mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    </script>
+</body>
+</html>

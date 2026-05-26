@@ -1,0 +1,57 @@
+Three Star Medical ERP - System Overview
+    System Architecture & Workflow Overview
+    April 2026 | Version 1.0
+
+Core Modules and Architecture
+    Commercial: Purchase & Sales Lifecycle
+    Logistics: Warehouse, Inventory & Batch Tracking
+    Accounts: COA, Vouchers & Ledgers
+    Reports: PDF Reporting & Statistics
+    HR: Biometry & Payroll
+
+Detailed Purchase Cycle (Inward)
+    1. Purchase Order (PO): Procurement Planning
+    2. Goods Receipt Note (GRN): Physical Stock Entry
+    3. Batch & Expiry: Logic for Lot Tracking
+    4. Purchase Return (PRN): Returning defective/excess stock
+    5. Vendor Ledger: Impact on Payables
+
+Detailed Sale Cycle (Outward)
+    1. Sale Order (SO): Booking and Reservation
+    2. Delivery Note (DN): Warehouse Dispatch & Packing
+    3. Sale Receipt Note (SRN): Final Invoicing & Billing
+    4. Sale Return (SR): Customer Returns & Credit Notes
+    5. Customer Ledger: Impact on Receivables
+
+Chart of Accounts (COA)
+    Level 1: Assets, Liabilities, Equity, Revenue, Expense
+    Level 2: Control Accounts
+    Level 3: Party Accounts (Vendors & Customers)
+    Level 4: Transactional Accounts
+    All entries follow Double-Entry Accounting (Dr = Cr)
+
+Voucher Management System
+    Receipt Voucher (RV): Records money coming in
+    Payment Voucher (PV): Records payments sent out
+    Expense Voucher (EV): Records operational costs
+    Journal Voucher (JV): Non-cash adjustments
+    Vouchers provide the audit trail for all money movements
+
+Inventory & Batch Management
+    Batch Tracking: Every unit is linked to a GRN
+    Expiry Control: Prevent sales of expired medicine
+    FEFO: First Expiry, First Out distribution
+    Multi-Warehouse support and Stock Transfers
+    Units of Measure (UOM): Handling Boxes vs. Pieces
+
+Reporting and Analytics
+    Vendor & Customer Ledger Statements
+    Profit and Loss Calculation
+    Stock-on-Hand Reports
+    Daily Transaction Summaries
+    High-fidelity, print-ready documents (GRN, Invoice)
+
+Conclusion and Q&A
+    Three Star Medical: A Complete ERP Solution
+    Built for Accuracy, Speed, and Compliance
+    Contact Admin for Support
