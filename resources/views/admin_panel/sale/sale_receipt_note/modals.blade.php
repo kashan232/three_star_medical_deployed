@@ -17,8 +17,8 @@
                         <div class="search-wrapper position-relative">
                             <i class="bi bi-search text-muted position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%);"></i>
                             <input type="text" id="searchBookedProducts"
-                                class="form-control form-control-sm ps-5 py-2 rounded-pill"
-                                placeholder="Search by SO #, Customer, etc...">
+                                class="form-control form-control-sm pl-5 py-2 rounded-pill"
+                                placeholder="Search by SO #, Customer, etc..." style="padding-left: 2.5rem !important;">
                         </div>
                     </div>
                 </div>
@@ -138,7 +138,7 @@
                     <div class="col-md-6">
                         <div class="search-wrapper position-relative">
                             <i class="bi bi-search text-muted position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%);"></i>
-                            <input type="text" id="searchCustomer" class="form-control form-control-sm ps-5 py-2 rounded-pill" placeholder="Search by name or code...">
+                            <input type="text" id="searchCustomer" class="form-control form-control-sm pl-5 py-2 rounded-pill" placeholder="Search by name or code..." style="padding-left: 2.5rem !important;">
                         </div>
                     </div>
                 </div>
@@ -191,7 +191,7 @@
                     <div class="col-md-6">
                         <div class="search-wrapper position-relative">
                             <i class="bi bi-search text-muted position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%);"></i>
-                            <input type="text" id="searchOfficer" class="form-control form-control-sm ps-5 py-2 rounded-pill" placeholder="Search officers...">
+                            <input type="text" id="searchOfficer" class="form-control form-control-sm pl-5 py-2 rounded-pill" placeholder="Search officers..." style="padding-left: 2.5rem !important;">
                         </div>
                     </div>
                 </div>

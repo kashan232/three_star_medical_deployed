@@ -37,7 +37,9 @@
             @if (session()->has('success'))
                 <div class="alert alert-success alert-dismissible fade show">
                     ✅ {{ session('success') }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
                 </div>
             @endif
 
@@ -46,10 +48,6 @@
                     <input type="text" id="search_all" class="form-control" placeholder="Search Item Name, Code, Category, Brand">
                 </div>
                 <table id="productTable" class="table table-striped table-bordered align-middle nowrap" style="width:100%">
-                    <div class="mb-3">
-                        <input type="text" id="search_all" class="form-control"
-                            placeholder="Search Item Name, Code, Category, Brand">
-                    </div>
 
                     <thead class="table-light">
                         <tr>
@@ -159,7 +157,9 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Add Product</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
                 </div>
                 <div class="modal-body">
                     <p class="text-danger">Please use the main "Add Product" page for the new per-m² flow.</p>
@@ -188,7 +188,9 @@
                             </div>
                         </div>
                     </div>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
                 </div>
 
                 <!-- Body -->
@@ -265,7 +267,7 @@
                                         <span class="badge" id="view_size_mode_badge">Mode</span>
                                     </div>
 
-                                    <div style="min-height: 180px;">
+                                    <div class="h-100 d-flex flex-column justify-content-between">
                                         <!-- By Size -->
                                         <div id="sec_by_size" class="d-none h-100 flex-column justify-content-between">
                                             <div>
@@ -309,20 +311,18 @@
                                                         <strong class="text-dark fs-4" id="view_pcs_box">-</strong>
                                                     </div>
                                                 </div>
+                                            </div>
+                                            <div class="row text-center g-2 mt-3">
                                                 <div class="col-6">
-                                                    <div
-                                                        class="bg-primary bg-opacity-10 p-3 rounded-3 border border-primary border-opacity-25">
-                                                        <strong class="text-primary fs-4" id="view_boxes_qty">-</strong>
-                                                        <small class="d-block text-primary fw-bold text-uppercase"
-                                                            style="font-size: 0.7rem;">Full Cartons</small>
+                                                    <div role="group" aria-label="Full Cartons" class="bg-primary text-white p-3 rounded-3 border border-primary text-center shadow-sm">
+                                                        <small class="text-white fw-bold text-uppercase" style="font-size:0.7rem;">Full Cartons</small>
+                                                        <strong class="text-white fs-4 d-block mt-2" id="view_boxes_qty">-</strong>
                                                     </div>
                                                 </div>
                                                 <div class="col-6">
-                                                    <div
-                                                        class="bg-warning bg-opacity-10 p-3 rounded-3 border border-warning border-opacity-25">
-                                                        <strong class="text-warning fs-4" id="view_loose_pcs">-</strong>
-                                                        <small class="d-block text-warning fw-bold text-uppercase"
-                                                            style="font-size: 0.7rem;">Loose Pieces</small>
+                                                    <div role="group" aria-label="Loose Pieces" class="bg-warning bg-opacity-25 text-dark p-3 rounded-3 border border-warning shadow-sm text-center">
+                                                        <small class="text-dark fw-bold text-uppercase" style="font-size:0.7rem;">Loose Pieces</small>
+                                                        <strong class="text-dark fs-4 d-block mt-2" id="view_loose_pcs">-</strong>
                                                     </div>
                                                 </div>
                                             </div>
@@ -359,42 +359,39 @@
 
                         <!-- Panel 3: Financial -->
                         <div class="col-lg-4">
-                            <div class="card h-100 border-0 shadow-sm rounded-4 bg-dark text-white">
-                                <!-- Background subtle pattern could go here -->
-                                <div class="card-body p-4 position-relative" style="z-index: 1;">
-                                    <h6
-                                        class="text-uppercase text-light fw-bold small mb-4 border-bottom border-secondary pb-2">
-                                        <i class="las la-wallet fs-5 align-text-bottom text-success"></i> 3. Financials
-                                    </h6>
+                            <div class="card h-100 border-0 shadow-sm rounded-4">
+                                <div class="card-body p-4 position-relative">
+                                    <div class="d-flex justify-content-between align-items-center mb-3">
+                                        <h6 class="text-uppercase text-dark fw-bold small mb-0">
+                                            <i class="las la-wallet fs-5 align-text-bottom text-success"></i> 3. Financials
+                                        </h6>
+                                        <small class="text-muted">Summary</small>
+                                    </div>
 
                                     <div class="mb-4">
                                         <div class="d-flex justify-content-between align-items-end mb-2">
-                                            <span class="text-light opacity-75 small fw-bold" id="lbl_price_unit">Sale
-                                                Price</span>
+                                            <span class="text-muted small fw-bold" id="lbl_price_unit">Sale Price</span>
                                             <span class="fw-bold fs-5 text-success" id="view_price_unit">-</span>
                                         </div>
                                         <div class="d-flex justify-content-between align-items-end mb-2">
-                                            <span class="text-light opacity-75 small fw-bold" id="lbl_purch_unit">Purch
-                                                Price</span>
-                                            <span class="text-light fs-6" id="view_purch_unit">-</span>
+                                            <span class="text-muted small fw-bold" id="lbl_purch_unit">Purch Price</span>
+                                            <span class="text-dark fs-6" id="view_purch_unit">-</span>
                                         </div>
                                     </div>
 
-                                    <div class="p-3 mb-3 mt-4 rounded-3 border border-success border-opacity-50"
-                                        style="background: linear-gradient(145deg, rgba(25,135,84,0.1) 0%, rgba(25,135,84,0.05) 100%);">
-                                        <span class="d-block text-success opacity-75 fw-bold text-uppercase mb-1"
+                                    <div class="p-3 mb-3 mt-3 rounded-3 border border-success bg-success bg-opacity-10">
+                                        <span class="d-block text-white opacity-75 fw-bold text-uppercase mb-1"
                                             style="font-size: 0.75rem; letter-spacing: 1px;">Est. Sales Value</span>
                                         <div class="fw-bold text-white fs-2 lh-1" id="view_sale_total">-</div>
                                     </div>
 
-                                    <div
-                                        class="p-3 rounded-3 border border-secondary border-opacity-50 bg-secondary bg-opacity-25">
-                                        <span class="d-block text-light opacity-75 fw-bold text-uppercase mb-1"
+                                    <div class="p-3 rounded-3 border border-secondary bg-light">
+                                        <span class="d-block text-muted fw-bold text-uppercase mb-1"
                                             style="font-size: 0.75rem; letter-spacing: 1px;">Est. Cost Value</span>
-                                        <div class="fw-bold text-white fs-4 lh-1" id="view_purch_total">-</div>
+                                        <div class="fw-bold text-dark fs-4 lh-1" id="view_purch_total">-</div>
                                         <div class="mt-2 text-end">
                                             <span
-                                                class="badge bg-success bg-opacity-25 text-success border border-success px-2 py-1"
+                                                class="badge bg-success bg-opacity-10 text-white border border-success px-2 py-1"
                                                 id="view_profit_margin">Margin: -</span>
                                         </div>
                                     </div>
@@ -409,7 +406,7 @@
                 <!-- Footer -->
                 <div class="modal-footer border-top-0 bg-light rounded-bottom pb-3 pe-4">
                     <button type="button" class="btn btn-secondary px-4 fw-bold shadow-sm"
-                        data-bs-dismiss="modal">Close</button>
+                        data-dismiss="modal">Close</button>
                 </div>
 
             </div>
@@ -422,10 +419,8 @@
     <!-- SweetAlert2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
 
-    <!-- SweetAlert2 JS -->
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
     {{-- product model --}}
+    @section('js')
     <script>
         $(document).on('click', '.viewProductBtn', function() {
             let productId = $(this).data('id');
@@ -678,10 +673,9 @@
 
     <!-- DataTables CSS -->
 @endsection
-<script src="https://code.jquery.com/jquery-3.7.1.slim.min.js"></script>
 
-<script>
-    document.addEventListener("DOMContentLoaded", function() {
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
         let cartonQuantityInput = document.getElementById("carton_quantity");
         let piecesPerCartonInput = document.getElementById("pieces_per_carton");
         let initialStockInput = document.getElementById("initial_stock");
@@ -763,4 +757,5 @@
             }
         });
     });
-</script>
+    </script>
+@endsection

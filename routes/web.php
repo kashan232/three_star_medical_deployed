@@ -1,6 +1,6 @@
 <?php
-    Route::get('sale/details/{id}', [App\Http\Controllers\SaleReturnController::class, 'getSaleDetails'])->name('sale.details');
 
+use App\Http\Controllers\SaleController;
 use App\Http\Controllers\AccountsHeadController;
 use App\Http\Controllers\BranchController;
 use App\Http\Controllers\BranchSwitcherController;
@@ -18,7 +18,6 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\ReportingController;
 use App\Http\Controllers\RoleController;
-use App\Http\Controllers\SaleController;
 use App\Http\Controllers\SalesOfficerController;
 use App\Http\Controllers\StocksController;
 use App\Http\Controllers\StockTransferController;
@@ -146,6 +145,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/parties/store', [\App\Http\Controllers\PartyController::class, 'store'])->name('parties.store');
     Route::get('/parties/edit/{id}', [\App\Http\Controllers\PartyController::class, 'edit'])->name('parties.edit');
     Route::post('/parties/update/{id}', [\App\Http\Controllers\PartyController::class, 'update'])->name('parties.update');
+    Route::post('/parties/export-docx', [\App\Http\Controllers\PartyController::class, 'exportDocx'])->name('parties.export-docx');
 
     // CDR Management
     Route::get('/cdrs', [\App\Http\Controllers\CdrController::class, 'index'])->name('cdrs.index');
@@ -518,3 +518,7 @@ require __DIR__.'/auth.php';
 require __DIR__.'/hr.php';
 
 // Removed duplicate closing moved inside
+
+Route::get('/sales/registry/export-docx', [SaleController::class, 'exportRegistryDocx'])
+    ->name('sales.registry.docx');
+Route::get('sale/details/{id}', [App\Http\Controllers\SaleReturnController::class, 'getSaleDetails'])->name('sale.details');

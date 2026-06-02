@@ -54,6 +54,10 @@ class CategoryController extends Controller
     $category->name = $request->name;
     $category->save();
 
+    if ($request->ajax()) {
+        return response()->json(['status' => 'success', 'id' => $category->id, 'name' => $category->name]);
+    }
+
     /**
      * IF REQUEST FROM PRODUCT PAGE
      */
@@ -70,7 +74,7 @@ class CategoryController extends Controller
         'success'  => 'Category Created Successfully',
         'redirect' => route('Category.home')
     ]);
-}
+} 
 
     public function delete($id)
     {

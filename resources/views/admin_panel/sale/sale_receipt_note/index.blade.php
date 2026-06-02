@@ -305,6 +305,118 @@
             box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.1);
             background-color: white;
         }
+
+        /* Word-like print modal */
+        #print-overlay { display:none; position:fixed; inset:0; background:#fff; z-index:9999; flex-direction:column; }
+        #print-overlay.active { display:flex; }
+        .po-topbar { height:36px; background:#f3f3f3; border-bottom:1px solid #ddd; display:flex; align-items:center; padding:0 16px; font-size:12px; color:#555; flex-shrink:0; }
+        .po-body { display:flex; flex:1; overflow:hidden; }
+        .po-sidebar { width:320px; flex-shrink:0; border-right:1px solid #e0e0e0; overflow-y:auto; padding:24px 20px; background:#fff; }
+        .po-heading { font-size:28px; font-weight:300; color:#111; margin-bottom:20px; }
+        .po-print-btn-row { display:flex; align-items:center; gap:16px; margin-bottom:24px; }
+        .po-print-big { display:flex; flex-direction:column; align-items:center; background:#dce6f1; border:none; padding:10px 14px; border-radius:4px; cursor:pointer; width:80px; gap:4px; transition:background 0.15s; }
+        .po-print-big:hover { background:#c8d8ed; }
+        .po-section-title { font-size:14px; font-weight:600; color:#2e74b5; margin-bottom:10px; margin-top:4px; }
+        .po-printer-box { border:1px solid #ccc; border-radius:3px; padding:8px 10px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; background:#fff; margin-bottom:6px; position:relative; }
+        .po-printer-left { display:flex; align-items:center; gap:10px; }
+        .po-ready-dot { width:10px; height:10px; background:#2e7d32; border-radius:50%; border:2px solid #fff; position:absolute; bottom:-1px; right:-2px; }
+        .po-printer-props { font-size:12px; color:#2e74b5; cursor:pointer; display:block; margin-bottom:18px; text-decoration:none; }
+        .po-printer-props:hover { text-decoration:underline; }
+        .po-setting { border:1px solid #ccc; border-radius:3px; padding:7px 10px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; background:#fff; margin-bottom:4px; user-select:none; position:relative; }
+        .po-setting:hover { background:#f5f5f5; }
+        .po-setting-left { display:flex; align-items:center; gap:10px; }
+        .po-setting-text p { font-size:13px; color:#222; font-weight:500; }
+        .po-setting-text span { font-size:11px; color:#666; }
+        .po-dropdown-menu { display:none; position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid #bbb; z-index:100; box-shadow:0 4px 12px rgba(0,0,0,0.12); }
+        .po-dropdown-menu.open { display:block; }
+        .po-dropdown-item { padding:8px 12px; font-size:13px; cursor:pointer; color:#222; }
+        .po-dropdown-item:hover { background:#e8f0fb; color:#1a56a0; }
+        .po-copies { display:flex; align-items:center; gap:8px; font-size:13px; color:#333; }
+        .po-copies input { width:60px; padding:4px 6px; border:1px solid #ccc; font-size:13px; text-align:center; }
+        .po-preview { flex:1; background:#b3b3b3; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; overflow-y:auto; padding:32px 24px 16px; }
+        .po-page { background:#fff; box-shadow:0 2px 12px rgba(0,0,0,0.3); width:595px; min-height:842px; padding:56px 48px; position:relative; flex-shrink:0; }
+        .po-page.landscape { width:842px; min-height:595px; }
+        .po-page-header { border-bottom:1px solid #ccc; padding-bottom:10px; margin-bottom:20px; }
+        .po-page-header h2 { font-size:14px; font-weight:600; color:#2d2d5e; margin-bottom:2px; }
+        .po-page-header p { font-size:10px; color:#888; }
+        .po-page table { width:100%; border-collapse:collapse; font-size:9px; }
+        .po-page thead { background:#f0f0f7; }
+        .po-page th { padding:6px 8px; text-align:left; font-size:9px; font-weight:600; color:#444; border:0.5px solid #ddd; }
+        .po-page td { padding:5px 8px; border:0.5px solid #ddd; color:#555; font-size:9px; }
+        .po-page-footer { position:absolute; bottom:28px; left:48px; right:48px; display:flex; justify-content:space-between; border-top:0.5px solid #ccc; padding-top:6px; }
+        .po-page-footer span { font-size:8px; color:#999; }
+        .po-nav { background:#f3f3f3; border-top:1px solid #ddd; height:36px; display:flex; align-items:center; justify-content:center; gap:8px; flex-shrink:0; }
+        .po-nav button { background:none; border:none; cursor:pointer; color:#333; padding:4px 6px; border-radius:3px; display:flex; align-items:center; }
+        .po-nav button:hover { background:#e0e0e0; }
+        .po-nav button:disabled { opacity:0.3; cursor:default; }
+        .po-nav input { width:36px; text-align:center; border:1px solid #ccc; padding:2px 4px; font-size:12px; }
+        .po-nav span { font-size:12px; color:#555; }
+        .po-zoom { font-size:12px; color:#555; margin-left:20px; }
+
+        @media print {
+            body {
+                background: #fff !important;
+                color: #000 !important;
+            }
+
+            .hero-header,
+            .stat-card,
+            .dataTables_wrapper .dataTables_filter,
+            .dataTables_wrapper .dataTables_length,
+            .dataTables_wrapper .dataTables_paginate,
+            .dataTables_wrapper .dataTables_info,
+            .d-flex.gap-2,
+            .btn,
+            .page-link,
+            .dropdown,
+            .dropdown-menu,
+            .dropdown-toggle,
+            .form-control,
+            .input-group,
+            .search-box,
+            .select2-container,
+            nav,
+            footer,
+            .breadcrumb,
+            .btn.btn-light,
+            .btn.btn-outline-secondary {
+                display: none !important;
+            }
+
+            .premium-table-container {
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+
+            .premium-table-container .d-flex.justify-content-between {
+                display: none !important;
+            }
+
+            .table-responsive {
+                overflow: visible !important;
+            }
+
+            #grn-table,
+            #grn-table th,
+            #grn-table td {
+                color: #000 !important;
+                border: 1px solid #000 !important;
+            }
+
+            #grn-table th {
+                background: #f8f8f8 !important;
+            }
+
+            #grn-table td {
+                background: transparent !important;
+            }
+
+            .main-content {
+                padding: 0 !important;
+            }
+        }
     </style>
 
     <div class="main-content">
@@ -324,6 +436,86 @@
                         </a>
                     @endcan
                 </div>
+            </div>
+
+            <!-- Print Overlay (Word-like) -->
+            <div id="print-overlay">
+              <div class="po-topbar">
+                <span>Three-Star Medical · Verified Registry – Print Preview</span>
+              </div>
+              <div class="po-body">
+                <div class="po-sidebar">
+                  <div style="display:flex; align-items:center; gap:12px; margin-bottom:20px;">
+                    <button onclick="closePrint()" style="background:none;border:none;cursor:pointer;display:flex;align-items:center;gap:6px;font-size:13px;color:#555;padding:0;">
+                      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg> Back
+                    </button>
+                  </div>
+                  <div class="po-heading">Print</div>
+                  <div class="po-print-btn-row">
+                    <button class="po-print-big" onclick="triggerPrint()">
+                      <svg width="28" height="28" fill="none" stroke="#1f4e79" stroke-width="1.5" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z"/></svg>
+                      <span>Print</span>
+                    </button>
+                    <div class="po-copies">
+                      <label for="copies" style="font-size:13px;">Copies:</label>
+                      <input type="number" id="copies" value="1" min="1" max="99">
+                    </div>
+                  </div>
+                  <div class="po-section-title">Printer</div>
+                  <div class="po-printer-box">
+                    <div class="po-printer-left">
+                      <svg width="28" height="28" fill="none" stroke="#1f4e79" stroke-width="1.5" viewBox="0 0 24 24"><path d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6v-8z"/></svg>
+                      <div class="po-printer-info">
+                        <p>Microsoft Print to PDF</p>
+                        <span>Ready</span>
+                      </div>
+                    </div>
+                  </div>
+                  <a href="#" class="po-printer-props">Printer Properties</a>
+                  <div class="po-section-title">Settings</div>
+                  <div class="po-setting" onclick="toggleDropdown(this)">
+                    <div class="po-setting-left">
+                      <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M9 21V9"/></svg>
+                      <div class="po-setting-text"><p>Print All Pages</p><span>The whole thing</span></div>
+                    </div>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+                    <div class="po-dropdown-menu"><div class="po-dropdown-item" onclick="selectOption(this, 'Print All Pages', 'The whole thing')">Print All Pages</div></div>
+                  </div>
+                  <div class="po-setting" id="orientation-setting" onclick="toggleDropdown(this)">
+                    <div class="po-setting-left">
+                      <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="1"/></svg>
+                      <div class="po-setting-text"><p>Portrait Orientation</p><span id="orientation-sub">Tall page layout</span></div>
+                    </div>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg>
+                    <div class="po-dropdown-menu"><div class="po-dropdown-item" onclick="setOrientation('portrait')">Portrait Orientation</div><div class="po-dropdown-item" onclick="setOrientation('landscape')">Landscape Orientation</div></div>
+                  </div>
+                </div>
+                <div class="po-preview" id="po-preview">
+                  <div class="po-page" id="po-page">
+                    <div class="po-page-header">
+                      <h2>Three Star Company – Verified Registry</h2>
+                      <p>Printed on: <span id="print-date"></span> | Microsoft Print to PDF</p>
+                    </div>
+                    <table id="preview-table"><thead><tr><th>#ID</th><th>Verification Date</th><th>Sale Ref #</th><th>Customer / Institution</th><th>Product Details</th><th>Billing Detail</th></tr></thead><tbody><tr><td colspan="6" style="text-align:center;padding:24px;color:#bbb;font-size:10px;">No records found</td></tr></tbody></table>
+                    <div class="po-page-footer">
+                      <span>Three Star Company – Confidential</span>
+                      <span>Page <span id="preview-page-num">1</span> of <span id="preview-total-pages">1</span></span>
+                      <span id="footer-date"></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="po-nav">
+                <button id="nav-prev" onclick="changePage(-1)" disabled>
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+                </button>
+                <input type="number" id="nav-page" value="1" min="1" max="1" onchange="goToPage(this.value)">
+                <span>of <span id="nav-total">1</span></span>
+                <button id="nav-next" onclick="changePage(1)" disabled>
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+                </button>
+                <span class="po-zoom">49%</span>
+              </div>
             </div>
 
             <!-- Dashboard Stats -->
@@ -365,9 +557,9 @@
                     </h5>
                     <div class="d-flex gap-2">
                         <button type="button" id="export-registry" class="btn btn-sm btn-outline-secondary rounded-pill px-3"><i
-                                class="fas fa-download me-2"></i>Excel</button>
+                            class="fas fa-download me-2"></i>Excel</button>
                         <button type="button" id="print-registry" class="btn btn-sm btn-outline-secondary rounded-pill px-3"><i
-                                class="fas fa-print me-2"></i>Print Registry</button>
+                            class="fas fa-print me-2"></i>Print Registry</button>
                     </div>
                 </div>
 
@@ -541,18 +733,27 @@
                     var blob = new Blob(['\ufeff', tableHTML], { type: dataType });
                     navigator.msSaveOrOpenBlob(blob, filename);
                 } else {
-                    downloadLink.href = 'data:' + dataType + ', ' + tableHTML;
+                    downloadLink.style.display = 'none';
+                    var encodedData = encodeURIComponent('\uFEFF' + tableHTML);
+                    downloadLink.href = 'data:' + dataType + ';charset=utf-8,' + encodedData;
                     downloadLink.download = filename;
                     downloadLink.click();
+                    document.body.removeChild(downloadLink);
                 }
             }
 
-            $('#export-registry').on('click', function() {
+            function printRegistry() {
+                window.print();
+            }
+
+            $('#export-registry').on('click', function(e) {
+                e.preventDefault();
                 exportTableToExcel('grn-table', 'Verified_Sales_Registry');
             });
 
-            $('#print-registry').on('click', function() {
-                window.print();
+            $('#print-registry').on('click', function(e) {
+                e.preventDefault();
+                openPrint();
             });
 
             $(document).on('click', '.btn-unpost-srn', function() {
@@ -575,5 +776,126 @@
                 });
             });
         });
+
+        (function () {
+            var now = new Date();
+            var dateStr = now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+            document.getElementById('print-date').textContent = dateStr;
+            document.getElementById('footer-date').textContent = dateStr;
+        })();
+
+        function openPrint() {
+            var dtInstance = $('#grn-table').DataTable();
+            var previewBody = document.querySelector('#preview-table tbody');
+            if (!previewBody) return;
+
+            previewBody.innerHTML = '';
+            var allRows = dtInstance.rows().nodes().toArray();
+
+            if (allRows.length === 0) {
+                previewBody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:24px;color:#bbb;font-size:10px;">No records found</td></tr>';
+            } else {
+                allRows.forEach(function (row) {
+                    var cells = row.querySelectorAll('td');
+                    if (cells.length === 0) return;
+                    var newRow = document.createElement('tr');
+                    [0, 1, 2, 3, 4, 5].forEach(function (index) {
+                        var td = document.createElement('td');
+                        td.textContent = cells[index] ? cells[index].textContent.trim() : '';
+                        newRow.appendChild(td);
+                    });
+                    previewBody.appendChild(newRow);
+                });
+            }
+
+            document.getElementById('print-overlay').classList.add('active');
+            document.body.style.overflow = 'hidden';
+            closeAllDropdowns();
+        }
+
+        function closePrint() {
+            document.getElementById('print-overlay').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function triggerPrint() {
+            var page = document.getElementById('po-page').outerHTML;
+            var w = window.open('', '_blank');
+            w.document.write('<!DOCTYPE html><html><head><title>Print Registry</title><style>' +
+                'body { font-family: Segoe UI, sans-serif; margin: 0; padding: 40px; }' +
+                'table { width:100%; border-collapse:collapse; font-size:9px; }' +
+                'th,td { border:0.5px solid #ddd; padding:5px 8px; text-align:left; }' +
+                'thead { background:#f0f0f7; }' +
+                'h2 { font-size:13px; margin-bottom:4px; }' +
+                'p { font-size:9px; color:#888; margin:0; }' +
+                '.po-page-footer { display:flex; justify-content:space-between; border-top:0.5px solid #ccc; padding-top:6px; margin-top:40px; font-size:8px; color:#999; }' +
+                '</style></head><body>' + page + '</body></html>');
+            w.document.close();
+            w.focus();
+            setTimeout(function () { w.print(); w.close(); }, 400);
+        }
+
+        function toggleDropdown(el) {
+            var menu = el.querySelector('.po-dropdown-menu');
+            if (!menu) return;
+            var wasOpen = menu.classList.contains('open');
+            closeAllDropdowns();
+            if (!wasOpen) menu.classList.add('open');
+            event.stopPropagation();
+        }
+
+        function closeAllDropdowns() {
+            document.querySelectorAll('.po-dropdown-menu.open').forEach(function (m) {
+                m.classList.remove('open');
+            });
+        }
+
+        document.addEventListener('click', closeAllDropdowns);
+
+        function selectOption(item, title, sub) {
+            event.stopPropagation();
+            var setting = item.closest('.po-setting');
+            setting.querySelector('.po-setting-text p').textContent = title;
+            setting.querySelector('.po-setting-text span').textContent = sub;
+            closeAllDropdowns();
+        }
+
+        function setOrientation(mode) {
+            event.stopPropagation();
+            var page = document.getElementById('po-page');
+            var setting = document.getElementById('orientation-setting');
+            if (mode === 'landscape') {
+                page.classList.add('landscape');
+                setting.querySelector('.po-setting-text p').textContent = 'Landscape Orientation';
+                setting.querySelector('.po-setting-text span').textContent = 'Wide page layout';
+            } else {
+                page.classList.remove('landscape');
+                setting.querySelector('.po-setting-text p').textContent = 'Portrait Orientation';
+                setting.querySelector('.po-setting-text span').textContent = 'Tall page layout';
+            }
+            closeAllDropdowns();
+        }
+
+        var currentPage = 1;
+        var totalPages = 1;
+
+        function changePage(dir) {
+            currentPage = Math.min(Math.max(1, currentPage + dir), totalPages);
+            document.getElementById('nav-page').value = currentPage;
+            updateNavButtons();
+        }
+
+        function goToPage(val) {
+            currentPage = Math.min(Math.max(1, parseInt(val) || 1), totalPages);
+            document.getElementById('nav-page').value = currentPage;
+            updateNavButtons();
+        }
+
+        function updateNavButtons() {
+            document.getElementById('nav-prev').disabled = currentPage <= 1;
+            document.getElementById('nav-next').disabled = currentPage >= totalPages;
+        }
+
+        updateNavButtons();
     </script>
 @endsection

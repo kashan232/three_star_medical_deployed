@@ -1,0 +1,23 @@
+﻿
+route_output.txt:38:  GET|HEAD        api/product-filters products.filters ΓÇ║ 
+ProductController@geΓÇª
+route_output.txt:116:  GET|HEAD        get-products-by-warehouse 
+get.products.by.warehouse ΓÇ║ StockΓÇª
+route_output.txt:236:  GET|HEAD        products/ajax-search 
+products.ajax.search ΓÇ║ ProductControllΓÇª
+route_output.txt:237:  GET|HEAD        products/price . products.price ΓÇ║ 
+ProductController@getPrice
+route_output.txt:238:  GET|HEAD        products/search products.search ΓÇ║ 
+ProductController@searchPΓÇª
+route_output.txt:239:  GET|HEAD        products/{id}/batches product.batches 
+ΓÇ║ ProductBatchControlΓÇª
+route_output.txt:240:  GET|HEAD        products/{id}/edit .. products.edit ΓÇ║ 
+ProductController@edit
+route_output.txt:325:  GET|HEAD        search-products search-products ΓÇ║ 
+ProductController@searchPΓÇª
+route_output.txt:326:  GET|HEAD        search-products-inward 
+search-products-inward ΓÇ║ InwardgatepΓÇª
+route_output.txt:369:  GET|HEAD        warehouse-stock/search-products 
+warehouse_stock.search-prodΓÇª
+
+

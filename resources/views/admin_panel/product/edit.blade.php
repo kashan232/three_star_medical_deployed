@@ -1,4 +1,4 @@
-@extends('admin_panel.layout.app')
+﻿@extends('admin_panel.layout.app')
 
 @section('content')
     {{-- 
@@ -392,7 +392,7 @@
                                                 <option value="{{ $cat->id }}" {{ $product->category_id == $cat->id ? 'selected' : '' }}>{{ $cat->name }}</option> 
                                             @endforeach
                                         </select>
-                                        <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#categoryModal"><i class="las la-plus"></i></button>
+                                        <button type="button" class="btn btn-outline-secondary border ms-2" data-toggle="modal" data-target="#categoryModal"><i class="las la-plus"></i></button>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
@@ -406,7 +406,7 @@
                                                 @endif
                                             @endforeach
                                         </select>
-                                        <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#subcategoryModal"><i class="las la-plus"></i></button>
+                                        <button type="button" class="btn btn-outline-secondary border ms-2" data-toggle="modal" data-target="#subcategoryModal"><i class="las la-plus"></i></button>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
@@ -418,7 +418,7 @@
                                                 <option value="{{ $brand->id }}" {{ $product->brand_id == $brand->id ? 'selected' : '' }}>{{ $brand->name }}</option> 
                                             @endforeach
                                         </select>
-                                        <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#brandModal"><i class="las la-plus"></i></button>
+                                        <button type="button" class="btn btn-outline-secondary border ms-2" data-toggle="modal" data-target="#brandModal"><i class="las la-plus"></i></button>
                                     </div>
                                 </div>
 
@@ -551,11 +551,11 @@
         <div id="categoryModal" class="modal fade" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered modal-sm">
                 <div class="modal-content border-0 shadow-lg" style="border-radius: var(--radius-md);">
-                    <form action="{{ route('store.category') }}" method="POST">
+                    <form id="categoryForm" action="{{ route('store.category') }}" method="POST">
                         @csrf
                         <div class="modal-header border-0 pb-0">
                             <h6 class="modal-title fw-bold">New Category</h6>
-                            <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close"></button>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                         </div>
                         <div class="modal-body">
                             <input type="hidden" name="page" value="product_page">
@@ -574,11 +574,11 @@
         <div id="subcategoryModal" class="modal fade" tabindex="-1" aria-hidden="true">
             <div class="modal-dialog modal-dialog-centered modal-sm">
                 <div class="modal-content border-0 shadow-lg" style="border-radius: var(--radius-md);">
-                    <form action="{{ route('store.subcategory') }}" method="POST">
+                    <form id="subcategoryForm" action="{{ route('store.subcategory') }}" method="POST">
                         @csrf
                         <div class="modal-header border-0 pb-0">
                             <h6 class="modal-title fw-bold">New Subcategory</h6>
-                            <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close"></button>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                         </div>
                         <div class="modal-body">
                             <input type="hidden" name="page" value="product_page">
@@ -596,6 +596,28 @@
                                     placeholder="e.g. Floor Tiles">
                             </div>
                             <button type="submit" class="btn btn-primary w-100 rounded-pill">Create Subcategory</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="brandModal" class="modal fade" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content border-0 shadow-lg" style="border-radius: var(--radius-md);">
+                    <form id="brandForm" action="{{ route('store.Brand') }}" method="POST">
+                        @csrf
+                        <div class="modal-header border-0 pb-0">
+                            <h6 class="modal-title fw-bold">New Brand</h6>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" name="page" value="product_page">
+                            <div class="mb-3">
+                                <label class="form-label-pro">Brand Name</label>
+                                <input type="text" name="name" class="form-control-pro" required placeholder="e.g. Acme Pharma">
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 rounded-pill">Create Brand</button>
                         </div>
                     </form>
                 </div>
@@ -784,6 +806,81 @@
             $packingTableBody.find('.ratio-input').each(function() {
                 updateMode($(this));
             });
+
+            // --- AJAX modals submit (Category / Subcategory / Brand) ---
+            $('#categoryForm').on('submit', function(e) {
+                e.preventDefault();
+                const $f = $(this);
+                $.ajax({
+                    url: $f.attr('action'),
+                    method: 'POST',
+                    data: $f.serialize(),
+                    success(res) {
+                        if (res && res.status === 'success') {
+                            const opt = new Option(res.name, res.id, true, true);
+                            $('#category-dropdown').append(opt).trigger('change');
+                            $('#categoryModal').modal('hide');
+                            Swal.fire({icon:'success',title:res.name + ' created',toast:true,position:'top-end',showConfirmButton:false,timer:1500});
+                        } else {
+                            location.reload();
+                        }
+                    },
+                    error() {
+                        Swal.fire('Error', 'Failed to create category', 'error');
+                    }
+                });
+            });
+
+            $('#brandForm').on('submit', function(e) {
+                e.preventDefault();
+                const $f = $(this);
+                $.ajax({
+                    url: $f.attr('action'),
+                    method: 'POST',
+                    data: $f.serialize(),
+                    success(res) {
+                        if (res && res.status === 'success') {
+                            const opt = new Option(res.name, res.id, true, true);
+                            $('select[name="brand_id"]').append(opt).trigger('change');
+                            $('#brandModal').modal('hide');
+                            Swal.fire({icon:'success',title:res.name + ' created',toast:true,position:'top-end',showConfirmButton:false,timer:1500});
+                        } else {
+                            location.reload();
+                        }
+                    },
+                    error() {
+                        Swal.fire('Error', 'Failed to create brand', 'error');
+                    }
+                });
+            });
+
+            $('#subcategoryForm').on('submit', function(e) {
+                e.preventDefault();
+                const $f = $(this);
+                $.ajax({
+                    url: $f.attr('action'),
+                    method: 'POST',
+                    data: $f.serialize(),
+                    success(res) {
+                        if (res && res.status === 'success') {
+                            // only append if current category matches
+                            const currentCat = $('#category-dropdown').val();
+                            if (String(currentCat) === String(res.category_id)) {
+                                const opt = new Option(res.name, res.id, true, true);
+                                $('#subcategory-dropdown').append(opt).trigger('change');
+                            }
+                            $('#subcategoryModal').modal('hide');
+                            Swal.fire({icon:'success',title:res.name + ' created',toast:true,position:'top-end',showConfirmButton:false,timer:1500});
+                        } else {
+                            location.reload();
+                        }
+                    },
+                    error() {
+                        Swal.fire('Error', 'Failed to create subcategory', 'error');
+                    }
+                });
+            });
+
         });
     </script>
 @endsection

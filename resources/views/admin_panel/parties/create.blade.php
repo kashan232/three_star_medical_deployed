@@ -342,8 +342,8 @@
                     <p>Registration system for Customers and Vendors</p>
                 </div>
                 <div class="d-flex gap-3">
-                    <div class="icon-box" title="Quick Print"><i class="fa fa-print"></i></div>
-                    <div class="icon-box" style="background:#fef3c7; color:#d97706;" title="Drafts"><i
+                    <div class="icon-box" title="Export to Word" onclick="exportToDocx()" style="cursor:pointer;"><i class="fa fa-print"></i></div>
+                    <div class="icon-box" style="background:#fef3c7; color:#d97706; cursor:pointer;" title="Export to Word" onclick="exportToDocx()"><i
                             class="fa fa-sticky-note"></i></div>
                 </div>
             </div>
@@ -962,6 +962,60 @@
                 }
                 reader.readAsDataURL(input.files[0]);
             }
+        }
+
+        function exportToDocx() {
+            const form = document.getElementById('partyForm');
+            const partyType = document.getElementById('partyType')?.value || 'N/A';
+            const systemCode = document.getElementById('systemCode')?.value || 'N/A';
+
+            // Safely read values from the form by name (avoid missing IDs)
+            const businessName = form.querySelector('[name="business_name"]')?.value || 'N/A';
+            const accountHolder = form.querySelector('[name="title"]')?.value || 'N/A';
+            const contactPerson = form.querySelector('[name="contact_person"]')?.value || 'N/A';
+            const phone = form.querySelector('[name="phone"]')?.value || 'N/A';
+            const email = form.querySelector('[name="email"]')?.value || 'N/A';
+            const mailingCity = form.querySelector('[name="city"]')?.value || 'N/A';
+            const shippingCity = form.querySelector('[name="shipping_city"]')?.value || 'N/A';
+
+            // Send to backend to generate docx
+            fetch('{{ route('parties.export-docx') }}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value
+                },
+                body: JSON.stringify({
+                    partyType,
+                    systemCode,
+                    businessName,
+                    accountHolder,
+                    contactPerson,
+                    phone,
+                    email,
+                    mailingCity,
+                    shippingCity
+                })
+            })
+            .then(response => {
+                if (!response.ok) throw new Error('Export failed');
+                return response.blob();
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `Party_${systemCode}_${new Date().getTime()}.docx`;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+                Swal.fire('Success', 'Document exported successfully!', 'success');
+            })
+            .catch(err => {
+                console.error('Error:', err);
+                Swal.fire('Error', 'Failed to export document', 'error');
+            });
         }
     </script>
 @endsection

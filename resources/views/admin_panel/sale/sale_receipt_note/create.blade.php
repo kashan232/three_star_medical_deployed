@@ -102,6 +102,28 @@
             cursor: not-allowed;
         }
 
+        /* Sale Invoice Note input-group fixes */
+        .sale-invoice-meta .input-group {
+            display: flex;
+            width: 100%;
+            min-width: 0;
+        }
+
+        .sale-invoice-meta .input-group .form-control {
+            flex: 1 1 auto;
+            min-width: 0;
+            width: 100%;
+            border-top-left-radius: 0;
+            border-bottom-left-radius: 0;
+        }
+
+        .sale-invoice-meta .input-group .btn.input-group-text,
+        .sale-invoice-meta .input-group .input-group-text {
+            flex: 0 0 auto;
+            border-top-right-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+
         /* Table Styles */
         .erp-table-wrapper {
             border: 1px solid #e2e8f0;
@@ -615,7 +637,7 @@
 
                                 <!-- Right Section (Vendor & Settings) -->
                                 <div class="col-lg-4">
-                                    <div class="bg-white border rounded p-3 shadow-sm h-100 d-flex flex-column">
+                                    <div class="bg-white border rounded p-3 shadow-sm h-100 d-flex flex-column sale-invoice-meta">
                                         <div class="form-group mb-3">
                                             <label class="form-label" style="font-size: 11px;">CUSTOMER ACCOUNT</label>
                                             <div class="input-group shadow-sm">
@@ -1170,7 +1192,7 @@
                         <div class="col-md-6">
                             <div class="search-wrapper position-relative">
                                 <i class="bi bi-search text-muted position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%);"></i>
-                                <input type="text" id="searchCustomer" class="form-control form-control-sm ps-5 py-2 rounded-pill" placeholder="Search by name, code, or business...">
+                                <input type="text" id="searchCustomer" class="form-control form-control-sm pl-5 py-2 rounded-pill" placeholder="Search by name, code, or business..." style="padding-left: 2.5rem !important;">
                             </div>
                         </div>
                     </div>
@@ -1243,7 +1265,7 @@
                         <div class="col-md-6">
                             <div class="search-wrapper position-relative">
                                 <i class="bi bi-search text-muted position-absolute" style="left: 15px; top: 50%; transform: translateY(-50%);"></i>
-                                <input type="text" id="searchOfficer" class="form-control form-control-sm ps-5 py-2 rounded-pill" placeholder="Search by name...">
+                                <input type="text" id="searchOfficer" class="form-control form-control-sm pl-5 py-2 rounded-pill" placeholder="Search by name..." style="padding-left: 2.5rem !important;">
                             </div>
                         </div>
                     </div>

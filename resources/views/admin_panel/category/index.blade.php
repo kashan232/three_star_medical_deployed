@@ -1,13 +1,14 @@
 @extends('admin_panel.layout.app')
 @section('content')
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
     @if (session('success'))
         <script>
             document.addEventListener('DOMContentLoaded', function() {
                 Swal.fire({
                     icon: 'success',
                     title: 'Success',
-                    text: '{{ session('success') }}'
+                    text: @json(session('success'))
                 });
             });
         </script>
@@ -102,6 +103,7 @@
             </div>
         </div>
     </div>
+
     <!-- DataTable CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 
@@ -117,6 +119,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="{{ asset('assets/js/mycode.js') }}"></script>
+
     <script>
         $(document).on('submit', '.myform', function(e) {
             e.preventDefault();
@@ -126,18 +129,19 @@
             $(this).find(':submit').attr('disabled', true);
             myAjax(url, formdata, method);
         });
+
         $(document).on('click', '.edit-btn', function() {
 
             var tr = $(this).closest("tr");
             var id = tr.find(".id").text();
             var name = tr.find(".name").text();
-            $('#id').val(id); // Set the ID in the hidden input field
+            $('#id').val(id);
             $('#name').val(name)
             $("#exampleModal").modal("show")
 
-
         });
     </script>
+
     <script>
         $(document).ready(function() {
             $('#default-datatable').DataTable({
