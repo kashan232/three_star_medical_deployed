@@ -2897,13 +2897,20 @@ class ReportingController extends Controller
             // ── Opening Balance ──────────────────────────────────────────────
             $purchBeforeQ = DB::table('purchase_items')
                 ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
+                ->leftJoin('product_batches', 'product_batches.purchase_item_id', '=', 'purchase_items.id')
                 ->where('purchase_items.product_id', $productId)
                 ->where('purchases.status_purchase', '!=', 'draft');
             if ($branchId)    $purchBeforeQ->where('purchases.branch_id', $branchId);
             if ($warehouseId) $purchBeforeQ->where('purchase_items.warehouse_id', $warehouseId);
             if ($startDate)   $purchBeforeQ->where('purchases.purchase_date', '<', $startDate);
             $purchasedBefore = (float)$purchBeforeQ->sum(
-                DB::raw("COALESCE(NULLIF(purchase_items.boxes_qty * purchase_items.pieces_per_box, 0), purchase_items.qty)")
+                DB::raw("COALESCE(
+                    NULLIF(product_batches.qty_received, 0),
+                    NULLIF(purchase_items.boxes_qty * COALESCE(purchase_items.pieces_per_box, 1), 0),
+                    NULLIF(purchase_items.qty * COALESCE(purchase_items.uom_factor, 1), 0),
+                    purchase_items.qty,
+                    0
+                )")
             );
 
             $saleBeforeQ = DB::table('sale_items')
@@ -2971,13 +2978,20 @@ class ReportingController extends Controller
             $purchQ = DB::table('purchase_items')
                 ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
                 ->leftJoin('vendors', 'vendors.id', '=', 'purchases.vendor_id')
+                ->leftJoin('product_batches', 'product_batches.purchase_item_id', '=', 'purchase_items.id')
                 ->where('purchase_items.product_id', $productId)
                 ->where('purchases.status_purchase', '!=', 'draft')
                 ->select(
                     'purchases.purchase_date as date',
                     DB::raw('COALESCE(NULLIF(purchases.invoice_no, ""), purchases.po_ref, CONCAT("GRN#", purchases.id)) as ref'),
                     DB::raw('COALESCE(vendors.name, "Unknown Vendor") as party'),
-                    DB::raw('COALESCE(NULLIF(purchase_items.boxes_qty * purchase_items.pieces_per_box, 0), purchase_items.qty) as qty'),
+                    DB::raw('COALESCE(
+                        NULLIF(product_batches.qty_received, 0),
+                        NULLIF(purchase_items.boxes_qty * COALESCE(purchase_items.pieces_per_box, 1), 0),
+                        NULLIF(purchase_items.qty * COALESCE(purchase_items.uom_factor, 1), 0),
+                        purchase_items.qty,
+                        0
+                    ) as qty'),
                     'purchase_items.price',
                     'purchase_items.line_total',
                     'purchase_items.batch_no',
