@@ -544,8 +544,9 @@
                     <p style="margin:4px 0 0; font-size:.85rem; color:#64748b;">Chronological stock movement ledger — purchases, sales, delivery challans &amp; returns</p>
                 </div>
                 <div style="display:flex; gap:8px;">
-                    <button type="button" id="btnSummaryPdf" class="btn-pdf" style="background:#10b981; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Export Summary PDF"><i class="fas fa-file-pdf"></i> Summary PDF</button>
-                    <button type="button" id="btnPdf" style="background:#7c3aed; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Export Detail PDF"><i class="fas fa-list-alt"></i> Detail PDF</button>
+                    <button type="button" id="btnExcel" style="background:#059669; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Export Excel Spreadsheet"><i class="fas fa-file-excel me-1"></i> Excel Export</button>
+                    <button type="button" id="btnSummaryPdf" class="btn-pdf" style="background:#10b981; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Export Summary PDF"><i class="fas fa-file-pdf me-1"></i> Summary PDF</button>
+                    <button type="button" id="btnPdf" style="background:#7c3aed; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Export Detail PDF"><i class="fas fa-list-alt me-1"></i> Detail PDF</button>
                     <button type="button" id="btnPrint" class="btn-print" style="background:#6366f1; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Print View">🖨 Print</button>
                 </div>
             </div>
@@ -585,7 +586,7 @@
                 <div class="filter-group" style="flex: 2; min-width: 250px;">
                     <label>Product</label>
                     <select id="sel_product" class="form-control select2-product">
-                        <option value="">— Select Product —</option>
+                        <option value="">— All Products (Consolidated) —</option>
                         @foreach($products as $p)
                             <option value="{{ $p->id }}"
                                 data-cat="{{ $p->category_id }}"
@@ -757,6 +758,7 @@
 <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 (function () {
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -906,22 +908,29 @@
         updateFilters();
     });
 
-    // ── Generate ────────────────────────────────────────────────────────────
+        // ── Generate ────────────────────────────────────────────────────────────
     document.getElementById('btnGenerate').addEventListener('click', function(){
-        const pid  = document.getElementById('sel_product').value;
-        const sd   = document.getElementById('sel_start').value;
-        const ed   = document.getElementById('sel_end').value;
-        const wid  = document.getElementById('sel_warehouse').value;
-        const bid  = document.getElementById('filterBranch') ? document.getElementById('filterBranch').value : 'all';
-
-        if (!pid) { alert('Please select a product.'); return; }
+        const pid   = document.getElementById('sel_product').value;
+        const catId = document.getElementById('filterCategory').value;
+        const subId = document.getElementById('filterSubCategory').value;
+        const bndId = document.getElementById('filterBrand').value;
+        const stId  = document.getElementById('filterStatus').value;
+        const sd    = document.getElementById('sel_start').value;
+        const ed    = document.getElementById('sel_end').value;
+        const wid   = document.getElementById('sel_warehouse').value;
+        const bid   = document.getElementById('filterBranch') ? document.getElementById('filterBranch').value : 'all';
 
         document.getElementById('pledLoader').style.display  = 'flex';
         document.getElementById('pledResult').style.display  = 'none';
 
-        const qs = new URLSearchParams({ product_id:pid, start_date:sd, end_date:ed });
-        if (wid) qs.set('warehouse_id', wid);
-        if (bid && bid !== 'all') qs.set('branch_id', bid);
+        const qs = new URLSearchParams({ start_date: sd, end_date: ed });
+        if (pid)                      qs.set('product_id', pid);
+        if (catId && catId !== 'all') qs.set('category_id', catId);
+        if (subId && subId !== 'all') qs.set('sub_category_id', subId);
+        if (bndId && bndId !== 'all') qs.set('brand_id', bndId);
+        if (stId  && stId  !== 'all') qs.set('status', stId);
+        if (wid)                      qs.set('warehouse_id', wid);
+        if (bid   && bid   !== 'all') qs.set('branch_id', bid);
 
         fetch('{{ route("report.product.ledger.fetch") }}?' + qs.toString(), {
             headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' }
@@ -940,16 +949,17 @@
     });
 
     function renderLedger(res) {
-        const { rows, summary } = res;
+        const { rows, summary, is_consolidated, product_count, products_data } = res;
         const p = summary.product;
 
         // ── Product profile ─────────────────────────────────────────────────
+        const headerTitle = is_consolidated ? `📦 Consolidated Product Ledger (${product_count} Products)` : `📦 ${p.item_name}`;
         document.getElementById('prodProfile').innerHTML = `
             <div>
-                <h5>📦 ${p.item_name}</h5>
+                <h5>${headerTitle}</h5>
                 <div class="prod-meta">
                     <span>🏷 Code: <b>${p.item_code || '-'}</b></span>
-                    <span>🏷 Brand: <b>${p.brand_name || '-'}</b></span>
+                    <span>🏷 Company: <b>${p.brand_name || '-'}</b></span>
                     <span>📂 Category: <b>${p.category_name || '-'}</b></span>
                     <span>📏 Unit: <b>${p.unit_name || 'pcs'}</b></span>
                 </div>
@@ -998,13 +1008,94 @@
         const tbody = document.getElementById('ledgerBody');
         tbody.innerHTML = '';
 
-        if (!rows || rows.length === 0) {
+        if ((!rows || rows.length === 0) && (!products_data || products_data.length === 0)) {
             tbody.innerHTML = `<tr><td colspan="8" class="empty-state">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                <div>No transactions found for this product in the selected period.</div>
+                <div>No transactions found for the selected filters.</div>
             </td></tr>`;
             document.getElementById('totalStrip').style.display = 'none';
+        } else if (products_data && products_data.length > 0 && is_consolidated) {
+            // ── GROUPED PRODUCT VIEW (MULTI-PRODUCT) ──────────────────────────
+            let grandIn = 0, grandOut = 0, grandSaleVal = 0;
+
+            products_data.forEach((pData, idx) => {
+                const prod = pData.product;
+
+                // Section Header Row
+                const headTr = document.createElement('tr');
+                headTr.className = 'product-group-header';
+                headTr.innerHTML = `
+                    <td colspan="8" style="background:#1e3a8a; color:#ffffff; padding:10px 16px; font-size:0.95rem; font-weight:700; border-top: 3px solid #0f172a;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span>📦 Product #${idx+1}: [${escHtml(prod.item_code)}] ${escHtml(prod.item_name)}
+                                <span style="font-weight:400; font-size:0.82rem; margin-left:12px; color:#cbd5e1;">
+                                    Company: <b>${escHtml(prod.brand_name)}</b> | Category: <b>${escHtml(prod.category_name)}</b> | Unit: <b>${escHtml(prod.unit_name)}</b>
+                                </span>
+                            </span>
+                            <span style="background:rgba(255,255,255,0.2); padding:3px 12px; border-radius:12px; font-size:0.82rem;">
+                                Closing Stock: <b>${fmtQty(pData.closing_balance)} pcs</b>
+                            </span>
+                        </div>
+                    </td>`;
+                tbody.appendChild(headTr);
+
+                // Transaction Rows for this Product
+                pData.rows.forEach(r => {
+                    const info       = txInfo[r.type] || txInfo.purchase;
+                    const qtyInHtml  = r.qty_in  ? `<span class="qty-in">+${fmtQty(r.qty_in)}</span>`  : `<span class="qty-nil">—</span>`;
+                    const qtyOutHtml = r.qty_out ? `<span class="qty-out">-${fmtQty(r.qty_out)}</span>` : `<span class="qty-nil">—</span>`;
+                    const salePriceHtml = r.sale_price ? `<span style="color:#0f172a;">${fmtAmt(r.sale_price)}</span>` : `<span class="qty-nil">—</span>`;
+                    const costPriceHtml = r.cost_price ? `<span style="color:#64748b;">${fmtAmt(r.cost_price)}</span>` : `<span class="qty-nil">—</span>`;
+                    const bal = parseFloat(r.balance ?? 0);
+                    const balHtml = `<span class="${balClass(bal)}">${fmtQty(bal)}</span>`;
+                    const descHtml = r.type === 'opening'
+                        ? `<span class="tx-badge ${info.cls}">${info.label}</span>`
+                        : `<span class="tx-badge ${info.cls}">${info.label}</span>
+                           <span style="margin-left:6px;color:#334155;font-weight:500;font-size:.82rem;">${escHtml(r.description)}</span>`;
+
+                    const tr = document.createElement('tr');
+                    tr.className = info.rowCls;
+                    tr.innerHTML = `
+                        <td style="white-space:nowrap;">${fmtDate(r.date)}</td>
+                        <td>${descHtml}</td>
+                        <td><span class="ref-badge">${escHtml(r.ref || '—')}</span></td>
+                        <td class="tr">${qtyInHtml}</td>
+                        <td class="tr">${qtyOutHtml}</td>
+                        <td class="tr">${salePriceHtml}</td>
+                        <td class="tr">${costPriceHtml}</td>
+                        <td class="tr">${balHtml}</td>`;
+                    tbody.appendChild(tr);
+
+                    if (r.type !== 'opening') {
+                        grandIn  += parseFloat(r.qty_in  ?? 0);
+                        grandOut += parseFloat(r.qty_out ?? 0);
+                        if (r.sale_price && r.qty_out) grandSaleVal += r.sale_price * r.qty_out;
+                    }
+                });
+
+                // Product Subtotal Row
+                const subTr = document.createElement('tr');
+                subTr.style.background = '#f1f5f9';
+                subTr.style.fontWeight = '700';
+                subTr.style.borderBottom = '2px solid #cbd5e1';
+                subTr.innerHTML = `
+                    <td colspan="3" style="color:#334155; font-size:0.85rem; text-align:right;">Subtotal for [${escHtml(prod.item_code)}] ${escHtml(prod.item_name)}:</td>
+                    <td class="tr" style="color:#16a34a;">+${fmtQty(pData.total_qty_in)}</td>
+                    <td class="tr" style="color:#dc2626;">-${fmtQty(pData.total_qty_out)}</td>
+                    <td class="tr" colspan="2"></td>
+                    <td class="tr" style="color:#1e3a8a; font-weight:700;">${fmtQty(pData.closing_balance)} pcs</td>`;
+                tbody.appendChild(subTr);
+            });
+
+            // Update footer totals
+            const closingBal = parseFloat(summary.closing_balance ?? 0);
+            document.getElementById('ftQtyIn').innerHTML   = `<span class="qty-in">${fmtQty(grandIn)}</span>`;
+            document.getElementById('ftQtyOut').innerHTML  = `<span class="qty-out">${fmtQty(grandOut)}</span>`;
+            document.getElementById('ftSaleVal').innerHTML = grandSaleVal ? fmtAmt(grandSaleVal) : '—';
+            document.getElementById('ftCostVal').innerHTML = '—';
+            document.getElementById('ftBalance').innerHTML = `<span class="${balClass(closingBal)}">${fmtQty(closingBal)}</span>`;
         } else {
+            // ── SINGLE PRODUCT VIEW ──────────────────────────────────────────
             let grandIn = 0, grandOut = 0, grandSaleVal = 0;
             rows.forEach(r => {
                 const info     = txInfo[r.type] || txInfo.purchase;
@@ -1017,7 +1108,7 @@
                 const descHtml = r.type === 'opening'
                     ? `<span class="tx-badge ${info.cls}">${info.label}</span>`
                     : `<span class="tx-badge ${info.cls}">${info.label}</span>
-                       <span style="margin-left:6px;color:#64748b;font-size:.8rem;">${escHtml(r.description.replace(/^[^(]+\(/, '').replace(/\)$/, ''))}</span>`;
+                       <span style="margin-left:6px;color:#334155;font-weight:500;font-size:.82rem;">${escHtml(r.description)}</span>`;
 
                 const tr = document.createElement('tr');
                 tr.className = info.rowCls;
@@ -1054,22 +1145,21 @@
                 <td class="tr"><span class="${balClass(closingBal)}" style="font-size:1rem;">${fmtQty(closingBal)}</span></td>`;
             tbody.appendChild(closingTr);
 
-            // ── Update tfoot grand totals (matches item_stock_report tfoot)
             document.getElementById('ftQtyIn').innerHTML   = `<span class="qty-in">${fmtQty(grandIn)}</span>`;
             document.getElementById('ftQtyOut').innerHTML  = `<span class="qty-out">${fmtQty(grandOut)}</span>`;
             document.getElementById('ftSaleVal').innerHTML = grandSaleVal ? fmtAmt(grandSaleVal) : '—';
             document.getElementById('ftCostVal').innerHTML = '—';
             document.getElementById('ftBalance').innerHTML = `<span class="${balClass(closingBal)}">${fmtQty(closingBal)}</span>`;
-
-            // ── Update total strip
-            document.getElementById('tsOpening').textContent = fmtQty(summary.opening_balance) + ' pcs';
-            document.getElementById('tsIn').textContent      = fmtQty(summary.total_qty_in)  + ' pcs';
-            document.getElementById('tsOut').textContent     = fmtQty(summary.total_qty_out) + ' pcs';
-            document.getElementById('tsClosing').textContent = fmtQty(summary.closing_balance) + ' pcs';
-            document.getElementById('tsSaleVal').textContent = fmtAmt(summary.total_sale_value);
-            document.getElementById('tsTxCount').textContent = (rows.length) + ' transactions';
-            document.getElementById('totalStrip').style.display = 'flex';
         }
+
+                // ── Update total strip
+        document.getElementById('tsOpening').textContent = fmtQty(summary.opening_balance) + ' pcs';
+        document.getElementById('tsIn').textContent      = fmtQty(summary.total_qty_in)  + ' pcs';
+        document.getElementById('tsOut').textContent     = fmtQty(summary.total_qty_out) + ' pcs';
+        document.getElementById('tsClosing').textContent = fmtQty(summary.closing_balance) + ' pcs';
+        document.getElementById('tsSaleVal').textContent = fmtAmt(summary.total_sale_value);
+        document.getElementById('tsTxCount').textContent = (rows ? rows.length : 0) + ' transactions';
+        document.getElementById('totalStrip').style.display = 'flex';
         document.getElementById('pledResult').style.display = 'block';
     }
 
@@ -1174,7 +1264,7 @@
         doc.save(`Product_Summary_${p.item_code}_${sum.period_start || 'all'}_to_${sum.period_end || 'all'}.pdf`);
     });
 
-    // ── Detail PDF Export ────────────────────────────────────────────────────
+        // ── Detail PDF Export ───────────────────────────────────────────────────
     document.getElementById('btnPdf').addEventListener('click', function(){
         if (!lastData) { alert('Please select a product and generate the ledger first.'); return; }
         const { jsPDF } = window.jspdf;
@@ -1189,24 +1279,70 @@
         doc.text(`Product: ${p.item_name} (${p.item_code})  |  Brand: ${p.brand_name}  |  Period: ${sum.period_start || 'All'} to ${sum.period_end || 'All'}`, 40, 58);
         doc.text(`Opening: ${fmtQty(sum.opening_balance)} pcs  |  Total IN: ${fmtQty(sum.total_qty_in)} pcs  |  Total OUT: ${fmtQty(sum.total_qty_out)} pcs  |  Closing: ${fmtQty(sum.closing_balance)} pcs`, 40, 72);
 
-        const tableRows = lastData.rows.map(r => [
-            fmtDate(r.date),
-            r.description,
-            r.ref || '—',
-            r.qty_in  ? '+' + fmtQty(r.qty_in)  : '—',
-            r.qty_out ? '-' + fmtQty(r.qty_out) : '—',
-            r.sale_price ? fmtAmt(r.sale_price) : '—',
-            r.cost_price ? fmtAmt(r.cost_price) : '—',
-            fmtQty(r.balance),
-        ]);
-
-        // closing row
-        tableRows.push([
-            fmtDate(sum.period_end || today),
-            'Closing Balance',
-            '—','—','—','—','—',
-            fmtQty(sum.closing_balance),
-        ]);
+        const tableRows = [];
+        if (lastData.is_consolidated && lastData.products_data) {
+            lastData.products_data.forEach((pData, idx) => {
+                const prod = pData.product;
+                
+                // Group Header Row
+                const headerRow = [
+                    { content: `📦 Product #${idx+1}: [${prod.item_code}] ${prod.item_name} (Company: ${prod.brand_name} | Closing: ${fmtQty(pData.closing_balance)} pcs)`, colSpan: 8, styles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' } }
+                ];
+                headerRow.isGroupHeader = true;
+                tableRows.push(headerRow);
+                
+                pData.rows.forEach(r => {
+                    const rowData = [
+                        fmtDate(r.date),
+                        r.description,
+                        r.ref || '—',
+                        r.qty_in  ? '+' + fmtQty(r.qty_in)  : '—',
+                        r.qty_out ? '-' + fmtQty(r.qty_out) : '—',
+                        r.sale_price ? fmtAmt(r.sale_price) : '—',
+                        r.cost_price ? fmtAmt(r.cost_price) : '—',
+                        fmtQty(r.balance),
+                    ];
+                    rowData.txType = r.type;
+                    tableRows.push(rowData);
+                });
+                
+                // Subtotal Row
+                const subtotalRow = [
+                    { content: `Subtotal for [${prod.item_code}] ${prod.item_name}:`, colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', fillColor: [241, 245, 249] } },
+                    { content: `+${fmtQty(pData.total_qty_in)}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [21, 128, 61], fillColor: [241, 245, 249] } },
+                    { content: `-${fmtQty(pData.total_qty_out)}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [185, 28, 28], fillColor: [241, 245, 249] } },
+                    { content: '', colSpan: 2, styles: { fillColor: [241, 245, 249] } },
+                    { content: `${fmtQty(pData.closing_balance)}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [30, 58, 138], fillColor: [241, 245, 249] } }
+                ];
+                subtotalRow.isSubtotal = true;
+                tableRows.push(subtotalRow);
+            });
+        } else {
+            lastData.rows.forEach(r => {
+                const rowData = [
+                    fmtDate(r.date),
+                    r.description,
+                    r.ref || '—',
+                    r.qty_in  ? '+' + fmtQty(r.qty_in)  : '—',
+                    r.qty_out ? '-' + fmtQty(r.qty_out) : '—',
+                    r.sale_price ? fmtAmt(r.sale_price) : '—',
+                    r.cost_price ? fmtAmt(r.cost_price) : '—',
+                    fmtQty(r.balance),
+                ];
+                rowData.txType = r.type;
+                tableRows.push(rowData);
+            });
+            
+            // Add closing row
+            const closingRow = [
+                fmtDate(sum.period_end || today),
+                'Closing Balance',
+                '—', '—', '—', '—', '—',
+                fmtQty(sum.closing_balance),
+            ];
+            closingRow.isClosing = true;
+            tableRows.push(closingRow);
+        }
 
         doc.autoTable({
             startY: 85,
@@ -1226,16 +1362,24 @@
             },
             didParseCell: function(data) {
                 if (data.section === 'body') {
-                    const row = lastData.rows[data.row.index];
-                    if (row) {
-                        if (row.type === 'opening') data.cell.styles.fillColor = [219,234,254];
-                        if (row.type === 'purchase') data.cell.styles.fillColor = [240,253,244];
-                        if (row.type === 'sale')    data.cell.styles.fillColor = [255,241,242];
-                        if (row.type === 'delivery_challan') data.cell.styles.fillColor = [255,247,237];
-                    }
-                    if (data.row.index === lastData.rows.length) {
-                        data.cell.styles.fillColor = [245,243,255];
-                        data.cell.styles.fontStyle = 'bold';
+                    const rowData = tableRows[data.row.index];
+                    if (rowData) {
+                        if (rowData.isGroupHeader) {
+                            // Style already defined in cell
+                        } else if (rowData.isSubtotal) {
+                            // Style already defined in cell
+                        } else if (rowData.isClosing) {
+                            data.cell.styles.fillColor = [245,243,255];
+                            data.cell.styles.fontStyle = 'bold';
+                        } else if (rowData.txType === 'opening') {
+                            data.cell.styles.fillColor = [219,234,254];
+                        } else if (rowData.txType === 'purchase') {
+                            data.cell.styles.fillColor = [240,253,244];
+                        } else if (rowData.txType === 'sale') {
+                            data.cell.styles.fillColor = [255,241,242];
+                        } else if (rowData.txType === 'delivery_challan') {
+                            data.cell.styles.fillColor = [255,247,237];
+                        }
                     }
                 }
             },
@@ -1249,6 +1393,232 @@
         });
 
         doc.save(`Product_Ledger_${p.item_code}_${sum.period_start || 'all'}_to_${sum.period_end || 'all'}.pdf`);
+    });
+
+        // ── Official Styled Excel Export ─────────────────────────────────────────────────────────
+    document.getElementById('btnExcel').addEventListener('click', function(){
+        if (!lastData) { alert('Please select a product and generate the ledger first.'); return; }
+
+        const p   = lastData.summary.product;
+        const sum = lastData.summary;
+        const rows = lastData.rows || [];
+
+        const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+        const xTag = 'x:';
+        let tableHtml = `
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+        <head>
+            <meta charset="utf-8">
+            <!--[if gte mso 9]>
+            <xml>
+             <${xTag}ExcelWorkbook>
+              <${xTag}ExcelWorksheets>
+               <${xTag}ExcelWorksheet>
+                <${xTag}Name>Product Ledger</${xTag}Name>
+                <${xTag}WorksheetOptions>
+                 <${xTag}DisplayGridlines/>
+                </${xTag}WorksheetOptions>
+               </${xTag}ExcelWorksheet>
+              </${xTag}ExcelWorksheets>
+             </${xTag}ExcelWorkbook>
+            </xml>
+            <![endif]-->` + `
+            <style>
+                body { font-family: 'Segoe UI', Calibri, Arial, sans-serif; }
+                table { border-collapse: collapse; width: 100%; font-size: 10pt; }
+                th, td { border: 1px solid #cbd5e1; padding: 7px 10px; vertical-align: middle; }
+                
+                /* Title Header */
+                .title-header { background-color: #1e3a8a; color: #ffffff; font-size: 15pt; font-weight: bold; text-align: center; height: 42px; border: 1px solid #1e3a8a; }
+                
+                /* Meta info block */
+                .meta-lbl { background-color: #f1f5f9; color: #1e293b; font-weight: bold; border: 1px solid #cbd5e1; }
+                .meta-val { background-color: #ffffff; color: #0f172a; border: 1px solid #cbd5e1; }
+                
+                /* KPI Summary */
+                .kpi-hdr { background-color: #0f172a; color: #ffffff; font-weight: bold; text-align: center; font-size: 10pt; }
+                .kpi-val { background-color: #f8fafc; font-weight: bold; text-align: center; font-size: 11pt; border: 1px solid #cbd5e1; }
+                
+                /* Main Table Headings */
+                .tbl-hdr { background-color: #1e3a8a; color: #ffffff; font-weight: bold; font-size: 11pt; text-align: center; height: 32px; border: 1px solid #1e293b; }
+                
+                /* Data rows */
+                .row-even { background-color: #ffffff; }
+                .row-odd { background-color: #f8fafc; }
+                .row-closing { background-color: #eff6ff; font-weight: bold; }
+                
+                /* Cell utility classes */
+                .text-center { text-align: center; }
+                .text-right { text-align: right; }
+                .text-left { text-align: left; }
+                
+                .qty-in { color: #15803d; font-weight: bold; text-align: right; }
+                .qty-out { color: #b91c1c; font-weight: bold; text-align: right; }
+                .bal-val { color: #0f172a; font-weight: bold; text-align: right; }
+                
+                /* Grand Totals Footer */
+                .tbl-foot { background-color: #0f172a; color: #ffffff; font-weight: bold; font-size: 11pt; height: 34px; border: 1px solid #0f172a; }
+            </style>
+        </head>
+        <body>
+            <table>
+                <!-- Main Header Banner -->
+                <tr>
+                    <th colspan="8" class="title-header">PRODUCT LEDGER REPORT</th>
+                </tr>
+                <tr><td colspan="8" style="border:none; height:10px;"></td></tr>
+
+                <!-- Product Profile Metadata -->
+                <tr>
+                    <td class="meta-lbl">Product Name:</td>
+                    <td class="meta-val" colspan="3"><b>${esc(p.item_name)}</b></td>
+                    <td class="meta-lbl">Product Code:</td>
+                    <td class="meta-val" colspan="3"><b>${esc(p.item_code)}</b></td>
+                </tr>
+                <tr>
+                    <td class="meta-lbl">Category:</td>
+                    <td class="meta-val" colspan="3">${esc(p.category_name)}</td>
+                    <td class="meta-lbl">Brand / Company:</td>
+                    <td class="meta-val" colspan="3">${esc(p.brand_name)}</td>
+                </tr>
+                <tr>
+                    <td class="meta-lbl">Unit:</td>
+                    <td class="meta-val" colspan="3">${esc(p.unit_name || 'pcs')}</td>
+                    <td class="meta-lbl">Period Range:</td>
+                    <td class="meta-val" colspan="3">${fmtDate(sum.period_start)} to ${fmtDate(sum.period_end)}</td>
+                </tr>
+                <tr><td colspan="8" style="border:none; height:10px;"></td></tr>
+
+                <!-- KPI Executive Summary -->
+                <tr>
+                    <th class="kpi-hdr" colspan="2">Opening Stock</th>
+                    <th class="kpi-hdr" colspan="2">Total Qty IN</th>
+                    <th class="kpi-hdr" colspan="2">Total Qty OUT</th>
+                    <th class="kpi-hdr">Closing Stock</th>
+                    <th class="kpi-hdr">Total Sale Revenue</th>
+                </tr>
+                <tr>
+                    <td class="kpi-val" colspan="2">${fmtQty(sum.opening_balance)} pcs</td>
+                    <td class="kpi-val" style="color:#15803d;" colspan="2">+${fmtQty(sum.total_qty_in)} pcs</td>
+                    <td class="kpi-val" style="color:#b91c1c;" colspan="2">-${fmtQty(sum.total_qty_out)} pcs</td>
+                    <td class="kpi-val" style="color:#1e3a8a;">${fmtQty(sum.closing_balance)} pcs</td>
+                    <td class="kpi-val" style="color:#b45309;">${fmtAmt(sum.total_sale_value)}</td>
+                </tr>
+                <tr><td colspan="8" style="border:none; height:12px;"></td></tr>
+
+                <!-- Highlighted Column Headings -->
+                <thead>
+                    <tr class="tbl-hdr">
+                        <th style="width:110px;">Date</th>
+                        <th style="width:300px;">Description</th>
+                        <th style="width:130px;">Ref / Doc #</th>
+                        <th style="width:110px;">Qty IN</th>
+                        <th style="width:110px;">Qty OUT</th>
+                        <th style="width:120px;">Sale Price</th>
+                        <th style="width:120px;">Cost Price</th>
+                        <th style="width:130px;">Balance (Pcs)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        // Data Rows
+        if (lastData.is_consolidated && lastData.products_data) {
+            lastData.products_data.forEach((pData, idx) => {
+                const prod = pData.product;
+                tableHtml += `
+                    <tr style="background-color:#1e3a8a; color:#ffffff; font-weight:bold;">
+                        <td colspan="8">📦 Product #${idx+1}: [${esc(prod.item_code)}] ${esc(prod.item_name)} (Company: ${esc(prod.brand_name)} | Closing: ${fmtQty(pData.closing_balance)} pcs)</td>
+                    </tr>
+                `;
+                pData.rows.forEach((r, idx2) => {
+                    const descClean = esc(r.description ? r.description.replace(/<[^>]+>/g, '') : '');
+                    const rowClass  = idx2 % 2 === 0 ? 'row-even' : 'row-odd';
+                    tableHtml += `
+                        <tr class="${rowClass}">
+                            <td class="text-center">${fmtDate(r.date)}</td>
+                            <td class="text-left">${descClean}</td>
+                            <td class="text-center">${esc(r.ref || '—')}</td>
+                            <td class="qty-in">${r.qty_in ? '+' + fmtQty(r.qty_in) : '—'}</td>
+                            <td class="qty-out">${r.qty_out ? '-' + fmtQty(r.qty_out) : '—'}</td>
+                            <td class="text-right">${r.sale_price ? fmtAmt(r.sale_price) : '—'}</td>
+                            <td class="text-right">${r.cost_price ? fmtAmt(r.cost_price) : '—'}</td>
+                            <td class="bal-val">${fmtQty(r.balance)}</td>
+                        </tr>
+                    `;
+                });
+                tableHtml += `
+                    <tr style="background-color:#f1f5f9; font-weight:bold;">
+                        <td colspan="3" class="text-right">Subtotal for [${esc(prod.item_code)}] ${esc(prod.item_name)}:</td>
+                        <td class="qty-in" style="color:#15803d;">+${fmtQty(pData.total_qty_in)}</td>
+                        <td class="qty-out" style="color:#b91c1c;">-${fmtQty(pData.total_qty_out)}</td>
+                        <td colspan="2"></td>
+                        <td class="bal-val" style="color:#1e3a8a;">${fmtQty(pData.closing_balance)}</td>
+                    </tr>
+                `;
+            });
+        } else {
+            rows.forEach((r, idx) => {
+                const descClean = esc(r.description ? r.description.replace(/<[^>]+>/g, '') : '');
+                const rowClass  = idx % 2 === 0 ? 'row-even' : 'row-odd';
+                tableHtml += `
+                    <tr class="${rowClass}">
+                        <td class="text-center">${fmtDate(r.date)}</td>
+                        <td class="text-left">${descClean}</td>
+                        <td class="text-center">${esc(r.ref || '—')}</td>
+                        <td class="qty-in">${r.qty_in ? '+' + fmtQty(r.qty_in) : '—'}</td>
+                        <td class="qty-out">${r.qty_out ? '-' + fmtQty(r.qty_out) : '—'}</td>
+                        <td class="text-right">${r.sale_price ? fmtAmt(r.sale_price) : '—'}</td>
+                        <td class="text-right">${r.cost_price ? fmtAmt(r.cost_price) : '—'}</td>
+                        <td class="bal-val">${fmtQty(r.balance)}</td>
+                    </tr>
+                `;
+            });
+            // Closing Balance Row
+            tableHtml += `
+                <tr class="row-closing">
+                    <td class="text-center">${fmtDate(sum.period_end || today)}</td>
+                    <td class="text-left"><b>🏁 Closing Balance</b></td>
+                    <td class="text-center">—</td>
+                    <td class="text-right">—</td>
+                    <td class="text-right">—</td>
+                    <td class="text-right">—</td>
+                    <td class="text-right">—</td>
+                    <td class="bal-val" style="color:#1e3a8a;">${fmtQty(sum.closing_balance)}</td>
+                </tr>
+            `;
+        }
+
+        // Grand Totals Footer Row
+        tableHtml += `
+                </tbody>
+                <tfoot>
+                    <tr class="tbl-foot">
+                        <td colspan="3" class="text-right">GRAND TOTALS:</td>
+                        <td class="text-right" style="color:#4ade80;">+${fmtQty(sum.total_qty_in)}</td>
+                        <td class="text-right" style="color:#fca5a5;">-${fmtQty(sum.total_qty_out)}</td>
+                        <td class="text-right">—</td>
+                        <td class="text-right">—</td>
+                        <td class="text-right" style="color:#93c5fd;">${fmtQty(sum.closing_balance)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </body>
+        </html>
+        `;
+
+        // Create Blob and Trigger Download
+        const blob = new Blob(['﻿' + tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const safeCode = (p.item_code || 'Ledger').replace(/[^a-zA-Z0-9_-]/g, '_');
+        a.href = url;
+        a.download = `Product_Ledger_${safeCode}_${sum.period_start || 'all'}_to_${sum.period_end || 'all'}.xls`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     });
 
 })();

@@ -28,11 +28,19 @@ class EmployeeController extends Controller
 
     public function store(Request $request)
     {
+        $userId = null;
+        if ($request->filled('edit_id')) {
+            $employee = Employee::find($request->edit_id);
+            if ($employee) {
+                $userId = $employee->user_id;
+            }
+        }
+
         $validator = Validator::make($request->all(), [
             'first_name' => 'required|string',
             'last_name' => 'required|string',
             'phone' => 'required|string|max:11',
-            'email' => 'required|email|max:255|unique:hr_employees,email,'.$request->edit_id,
+            'email' => 'required|email|max:255|unique:hr_employees,email,'.$request->edit_id.'|unique:users,email,'.$userId,
             'department_id' => 'required|exists:hr_departments,id',
             'designation_id' => 'required|exists:hr_designations,id',
             'joining_date' => 'required|date',

@@ -389,7 +389,7 @@
                                             <option value="">Select...</option>
                                             @foreach ($categories as $cat) <option value="{{ $cat->id }}">{{ $cat->name }}</option> @endforeach
                                         </select>
-                                        <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#categoryModal"><i class="las la-plus"></i></button>
+                                        <button type="button" class="btn btn-light border" data-toggle="modal" data-target="#categoryModal"><i class="las la-plus"></i></button>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
@@ -398,7 +398,7 @@
                                         <select class="form-select form-control-pro form-select-pro" id="subcategory-dropdown" name="sub_category_id">
                                             <option value="">Select...</option>
                                         </select>
-                                        <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#subcategoryModal"><i class="las la-plus"></i></button>
+                                        <button type="button" class="btn btn-light border" data-toggle="modal" data-target="#subcategoryModal"><i class="las la-plus"></i></button>
                                     </div>
                                 </div>
                                 <div class="col-md-4">
@@ -408,7 +408,7 @@
                                             <option value="">Select...</option>
                                             @foreach ($brands as $brand) <option value="{{ $brand->id }}">{{ $brand->name }}</option> @endforeach
                                         </select>
-                                        <button type="button" class="btn btn-light border" data-bs-toggle="modal" data-bs-target="#brandModal"><i class="las la-plus"></i></button>
+                                        <button type="button" class="btn btn-light border" data-toggle="modal" data-target="#brandModal"><i class="las la-plus"></i></button>
                                     </div>
                                 </div>
 
@@ -537,6 +537,29 @@
                                     placeholder="e.g. Floor Tiles">
                             </div>
                             <button type="submit" class="btn btn-primary w-100 rounded-pill">Create Subcategory</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div id="brandModal" class="modal fade" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-sm">
+                <div class="modal-content border-0 shadow-lg" style="border-radius: var(--radius-md);">
+                    <form action="{{ route('store.Brand') }}" method="POST">
+                        @csrf
+                        <div class="modal-header border-0 pb-0">
+                            <h6 class="modal-title fw-bold">New Brand</h6>
+                            <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <input type="hidden" name="page" value="product_page">
+                            <div class="mb-3">
+                                <label class="form-label-pro">Brand Name</label>
+                                <input type="text" name="name" class="form-control-pro" required
+                                    placeholder="e.g. Abbott">
+                            </div>
+                            <button type="submit" class="btn btn-primary w-100 rounded-pill">Create Brand</button>
                         </div>
                     </form>
                 </div>

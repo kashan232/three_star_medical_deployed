@@ -135,8 +135,7 @@
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-                <form id="departmentForm" action="{{ route('hr.departments.store') }}" method="POST"
-                    data-ajax-validate="true">
+                <form id="departmentForm" action="{{ route('hr.departments.store') }}" method="POST">
                     @csrf
                     <input type="hidden" name="edit_id" id="edit_id">
                     <div class="modal-body">
@@ -232,7 +231,59 @@
             // Refresh
             $('#refreshBtn').click(() => location.reload());
 
-            // Manual Form Submit Removed - using data-ajax-validate
+            // Submit Form with SweetAlert success alert
+            $('#departmentForm').submit(function(e) {
+                e.preventDefault();
+                
+                // Clear any previous error styling
+                $('.is-invalid').removeClass('is-invalid');
+                $('.invalid-feedback').remove();
+                
+                const form = $(this);
+                const submitBtn = form.find('.btn-save');
+                const originalBtnText = submitBtn.html();
+                
+                // Set loading state
+                submitBtn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Saving...');
+                
+                $.ajax({
+                    url: form.attr('action'),
+                    type: 'POST',
+                    data: form.serialize(),
+                    success: function(response) {
+                        submitBtn.prop('disabled', false).html(originalBtnText);
+                        if (response.success) {
+                            $('#departmentModal').modal('hide');
+                            
+                            // Check if it is a new registration or edit
+                            const isEdit = $('#edit_id').val() !== '';
+                            const msg = isEdit ? 'Department updated successfully!' : 'department registered successfully';
+                            
+                            Swal.fire({
+                                title: 'Success!',
+                                text: msg,
+                                icon: 'success',
+                                confirmButtonText: 'OK'
+                            }).then(() => {
+                                location.reload();
+                            });
+                        }
+                    },
+                    error: function(xhr) {
+                        submitBtn.prop('disabled', false).html(originalBtnText);
+                        if (xhr.status === 422) {
+                            const errors = xhr.responseJSON.errors;
+                            Object.keys(errors).forEach(key => {
+                                const input = $('#' + key);
+                                input.addClass('is-invalid');
+                                input.parent().append('<div class="invalid-feedback">' + errors[key][0] + '</div>');
+                            });
+                        } else {
+                            Swal.fire('Error', 'An error occurred. Please try again.', 'error');
+                        }
+                    }
+                });
+            });
         });
     </script>
 @endsection
