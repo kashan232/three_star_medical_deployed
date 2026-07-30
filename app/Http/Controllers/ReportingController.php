@@ -2888,7 +2888,14 @@ class ReportingController extends Controller
                 );
 
             if ($productId && $productId !== 'all') {
-                $prodQuery->where('products.id', $productId);
+                if (is_array($productId)) {
+                    $prodQuery->whereIn('products.id', $productId);
+                } elseif (is_string($productId) && strpos($productId, ',') !== false) {
+                    $ids = array_filter(array_map('intval', explode(',', $productId)));
+                    $prodQuery->whereIn('products.id', $ids);
+                } else {
+                    $prodQuery->where('products.id', $productId);
+                }
             }
             if ($categoryId && $categoryId !== 'all') {
                 $prodQuery->where('products.category_id', $categoryId);

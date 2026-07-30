@@ -585,8 +585,8 @@
                 </div>
                 <div class="filter-group" style="flex: 2; min-width: 250px;">
                     <label>Product</label>
-                    <select id="sel_product" class="form-control select2-product">
-                        <option value="">— All Products (Consolidated) —</option>
+                    <select id="sel_product" class="form-control select2-product" multiple="multiple">
+                        <option value=""></option>
                         @foreach($products as $p)
                             <option value="{{ $p->id }}"
                                 data-cat="{{ $p->category_id }}"
@@ -910,7 +910,7 @@
 
         // ── Generate ────────────────────────────────────────────────────────────
     document.getElementById('btnGenerate').addEventListener('click', function(){
-        const pid   = document.getElementById('sel_product').value;
+        const pids  = $('#sel_product').val();
         const catId = document.getElementById('filterCategory').value;
         const subId = document.getElementById('filterSubCategory').value;
         const bndId = document.getElementById('filterBrand').value;
@@ -924,7 +924,13 @@
         document.getElementById('pledResult').style.display  = 'none';
 
         const qs = new URLSearchParams({ start_date: sd, end_date: ed });
-        if (pid)                      qs.set('product_id', pid);
+        if (pids && pids.length > 0) {
+            if (Array.isArray(pids)) {
+                qs.set('product_id', pids.join(','));
+            } else {
+                qs.set('product_id', pids);
+            }
+        }
         if (catId && catId !== 'all') qs.set('category_id', catId);
         if (subId && subId !== 'all') qs.set('sub_category_id', subId);
         if (bndId && bndId !== 'all') qs.set('brand_id', bndId);
