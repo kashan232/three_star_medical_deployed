@@ -1562,7 +1562,7 @@
                 $('#detailsModal').modal('show');
 
                 $.ajax({
-                    url: '/hr/payroll/' + id + '/details',
+                    url: '{{ url("/hr/payroll") }}/' + id + '/details',
                     type: 'GET',
                     success: function(response) {
                         renderDetails(response);
@@ -2013,7 +2013,7 @@
                         });
 
                         $.ajax({
-                            url: '/hr/payroll/' + id + '/mark-reviewed',
+                            url: '{{ url("/hr/payroll") }}/' + id + '/mark-reviewed',
                             type: 'PATCH',
                             data: {
                                 _token: '{{ csrf_token() }}'
@@ -2063,7 +2063,7 @@
                 $('#erp_commission_metrics_box').addClass('d-none').hide();
 
                 // Load detailed stats via AJAX
-                $.get(`/hr/payroll/${id}/details`, function(data) {
+                $.get('{{ url("/hr/payroll") }}/' + id + '/details', function(data) {
                     activePayrollData = data;
                     const p = data.payroll;
                     const stats = data.stats;
@@ -2351,7 +2351,7 @@
                         });
 
                         $.ajax({
-                            url: '/hr/payroll/' + id,
+                            url: '{{ url("/hr/payroll") }}/' + id,
                             type: 'DELETE',
                             data: {
                                 _token: '{{ csrf_token() }}'
