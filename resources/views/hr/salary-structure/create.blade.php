@@ -39,7 +39,7 @@
                         <div class="border mt-1 shadow rounded p-4" style="background-color: white;">
                             <form id="salaryForm"
                                 action="{{ isset($salaryStructure->id) ? route('hr.salary-structure.update-template', $salaryStructure->id) : route('hr.salary-structure.store') }}"
-                                method="POST" data-ajax-validate="true">
+                                method="POST" >
                                 @csrf
                                 @if (isset($salaryStructure->id))
                                     @method('PUT')
@@ -1429,33 +1429,75 @@
             // Initial Recalc
             recalculate();
 
-            // Form Submit with validation
+                        // Form Submit with validation
             $('#salaryForm').submit(function(e) {
+                e.preventDefault();
+
                 // Validate tiers before submitting
                 if (!validateTiers()) {
-                    e.preventDefault();
-                    e.stopImmediatePropagation();
-                    Swal.fire('Validation Error', 'Please fix commission tier errors before saving.',
-                        'error');
+                    Swal.fire('Validation Error', 'Please fix commission tier errors before saving.', 'error');
                     return;
                 }
 
                 // Validate attendance rules if daily wages is enabled
                 if ($('#use_daily_wages').is(':checked')) {
-                    var lateValid = recalculateRuleRanges('#late_rules_container', '#late_rules_validation',
-                        '#late_rules_headers');
-                    var earlyValid = recalculateRuleRanges('#early_rules_container',
-                        '#early_rules_validation', '#early_rules_headers');
+                    var lateValid = recalculateRuleRanges('#late_rules_container', '#late_rules_validation', '#late_rules_headers');
+                    var earlyValid = recalculateRuleRanges('#early_rules_container', '#early_rules_validation', '#early_rules_headers');
 
                     if (!lateValid || !earlyValid) {
-                        e.preventDefault();
-                        e.stopImmediatePropagation();
-                        Swal.fire('Validation Error',
-                            'Please fix attendance deduction rule errors before saving.', 'error');
+                        Swal.fire('Validation Error', 'Please fix attendance deduction rule errors before saving.', 'error');
                         return;
                     }
                 }
-                // Custom AJAX removed - global validation handles it
+
+                var submitBtn = $(this).find('button[type="submit"]');
+                var originalHtml = submitBtn.html();
+                submitBtn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i> Processing...');
+
+                $('.is-invalid').removeClass('is-invalid');
+                $('.invalid-feedback').remove();
+
+                var form = this;
+                $.ajax({
+                    url: $(form).attr('action'),
+                    method: $(form).attr('method') || 'POST',
+                    data: $(form).serialize(),
+                    success: function(response) {
+                        Swal.fire({
+                            title: 'Success!',
+                            text: response.success || 'Salary Structure saved successfully.',
+                            icon: 'success',
+                            confirmButtonText: 'OK'
+                        }).then((result) => {
+                            if (response.redirect) {
+                                window.location.href = response.redirect;
+                            } else {
+                                window.location.reload();
+                            }
+                        });
+                    },
+                    error: function(xhr) {
+                        submitBtn.prop('disabled', false).html(originalHtml);
+                        if (xhr.status === 422) {
+                            var errors = xhr.responseJSON.errors;
+                            var errorMsg = 'Please correct the following errors:\n';
+                            Object.keys(errors).forEach(function(key) {
+                                errorMsg += '- ' + errors[key][0] + '\n';
+                                var field = $('[name="' + key + '"]');
+                                if (field.length) {
+                                    field.addClass('is-invalid');
+                                    if (!field.next('.invalid-feedback').length) {
+                                        field.after('<div class="invalid-feedback">' + errors[key][0] + '</div>');
+                                    }
+                                }
+                            });
+                            Swal.fire('Validation Error', errorMsg, 'error');
+                        } else {
+                            var msg = xhr.responseJSON && xhr.responseJSON.message ? xhr.responseJSON.message : 'An unexpected error occurred.';
+                            Swal.fire('Error', msg, 'error');
+                        }
+                    }
+                });
             });
         });
     </script>
