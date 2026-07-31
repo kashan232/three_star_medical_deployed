@@ -1153,14 +1153,15 @@ class SaleController extends Controller
 
             // 2. Prepare Header Data
             $isNew = ! $sale->exists;
-            $sale->customer_id    = $request->customer;
-            $sale->employee_id    = $request->sales_officer_id;
-            $sale->reference      = $request->reference;
-            $sale->sale_date      = $request->purchase_date;
-            $sale->vendor_bill_no = $request->vendor_bill_no;
-            $sale->order_no       = $request->order_no;
-            $sale->sale_order_no  = $request->sale_order_no;
-            $sale->so_date        = $request->so_date;
+            $sale->customer_id           = $request->customer;
+            $sale->employee_id           = $request->sales_officer_id;
+            $sale->commission_percentage = $request->filled('commission_percentage') ? floatval($request->commission_percentage) : null;
+            $sale->reference             = $request->reference;
+            $sale->sale_date             = $request->purchase_date;
+            $sale->vendor_bill_no        = $request->vendor_bill_no;
+            $sale->order_no              = $request->order_no;
+            $sale->sale_order_no         = $request->sale_order_no;
+            $sale->so_date               = $request->so_date;
             
             $sale->total_amount_Words = $request->total_amount_Words;
             $sale->sale_status = $status;
@@ -1501,6 +1502,14 @@ class SaleController extends Controller
                 }
             }
             $sale->payment_details = $paymentData;
+
+            // Calculate total_commission on tax-exclusive base (net amount minus GST & Sale Tax)
+            if ($sale->commission_percentage !== null && floatval($sale->commission_percentage) > 0) {
+                $gst = floatval($sale->total_gst ?? 0);
+                $advTax = floatval($sale->total_adv_tax ?? 0);
+                $taxExclusiveBase = max(0, floatval($sale->total_net) - $gst - $advTax);
+                $sale->total_commission = round($taxExclusiveBase * (floatval($sale->commission_percentage) / 100), 2);
+            }
 
             $sale->save();
 

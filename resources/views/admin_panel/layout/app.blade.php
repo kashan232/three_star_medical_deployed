@@ -879,6 +879,8 @@
                                             <li><a href="{{ route('hr.payroll.index') }}"><i
                                                         class="fa-solid fa-money-check-alt"></i> Payroll</a></li>
                                         @endcan
+                                        <li><a href="{{ route('hr.payroll.my-commission') }}"><i
+                                                    class="fa-solid fa-percent text-warning"></i> My Commission</a></li>
                                         @can('hr.leaves.view')
                                             <li><a href="{{ route('hr.leaves.index') }}"><i
                                                         class="fa-solid fa-calendar-minus"></i> Leaves</a></li>

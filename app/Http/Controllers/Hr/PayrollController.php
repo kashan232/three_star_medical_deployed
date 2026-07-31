@@ -1303,4 +1303,137 @@ class PayrollController extends Controller
             Log::error('Auto-generate daily payroll failed: '.$e->getMessage());
         }
     }
+
+    /**
+     * Display Employee Self-Service Commission Portal
+     */
+    public function myCommission(Request $request)
+    {
+        $user = auth()->user();
+        
+        // Find employee associated with logged in user or selected filter
+        $employee = null;
+        if ($request->filled('employee_id') && ($user->isSuperAdmin() || $user->can('hr.payroll.view'))) {
+            $employee = Employee::find($request->employee_id);
+        }
+
+        if (!$employee) {
+            $employee = Employee::where('user_id', $user->id)
+                ->orWhere('email', $user->email)
+                ->first();
+        }
+
+        if (!$employee && ($user->isSuperAdmin() || $user->can('hr.payroll.view'))) {
+            $employee = Employee::active()->first();
+        }
+
+        if (!$employee) {
+            return view('hr.payroll.my-commission', [
+                'employee' => null,
+                'sales' => collect(),
+                'summary' => [
+                    'total_sales_count' => 0,
+                    'total_sales_net' => 0,
+                    'total_commission_earned' => 0,
+                    'total_commission_paid' => 0,
+                    'total_commission_pending' => 0,
+                ],
+                'employees' => Employee::active()->orderBy('first_name')->get(),
+            ]);
+        }
+
+        // Fetch all sales for this employee
+        $salesRaw = \App\Models\Sale::with(['customer_relation', 'payments'])
+            ->where('employee_id', $employee->id)
+            ->latest()
+            ->get();
+
+        $processedSales = [];
+        $totalNetSum = 0;
+        $totalCommissionEarned = 0;
+        $totalCommissionPaid = 0;
+        $totalCommissionPending = 0;
+
+        foreach ($salesRaw as $sale) {
+            $saleTotal = floatval($sale->total_net);
+            $gst       = floatval($sale->total_gst ?? 0);
+            $advTax    = floatval($sale->total_adv_tax ?? 0);
+            
+            // Tax-exclusive base: Net Amount minus GST (18%) and Sale Tax (5%)
+            $taxExclusiveBase = max(0, $saleTotal - $gst - $advTax);
+            
+            $commPct = $sale->commission_percentage !== null ? floatval($sale->commission_percentage) : 1.0;
+            $maxComm = round($taxExclusiveBase * ($commPct / 100), 2);
+
+            $posPaid = max(0, floatval($sale->cash) + floatval($sale->card) - max(0, floatval($sale->change)));
+            $customerPaymentsSum = $sale->payments->sum('amount');
+            $totalReceived = $posPaid + $customerPaymentsSum;
+            
+            $isFullyPaid = ($totalReceived >= ($saleTotal - 0.01)) && ($saleTotal > 0);
+            $commPaid = floatval($sale->commission_paid);
+
+            // Status determination
+            if ($commPaid >= $maxComm && $maxComm > 0) {
+                $status = 'PAID';
+                $statusLabel = 'Salary Mein Add Ho Gaya';
+                $statusBadge = 'bg-success';
+            } elseif ($isFullyPaid && $maxComm > 0) {
+                $status = 'READY';
+                $statusLabel = 'Payment Recv - Agli Salary Mein Add Hoga';
+                $statusBadge = 'bg-primary';
+            } elseif ($sale->sale_status !== 'post') {
+                $status = 'DC_ONLY';
+                $statusLabel = 'DC Note (Invoice Pending)';
+                $statusBadge = 'bg-secondary';
+            } else {
+                $status = 'AWAITING_PAYMENT';
+                $statusLabel = 'Customer Payment Pending';
+                $statusBadge = 'bg-warning text-dark';
+            }
+
+            $commPending = max(0, $maxComm - $commPaid);
+
+            $totalNetSum += $saleTotal;
+            $totalCommissionEarned += $maxComm;
+            $totalCommissionPaid += $commPaid;
+            $totalCommissionPending += $commPending;
+
+            $processedSales[] = [
+                'sale' => $sale,
+                'invoice_no' => $sale->invoice_no,
+                'date' => $sale->sale_date ?? $sale->created_at->format('Y-m-d'),
+                'customer' => $sale->customer_relation->customer_name ?? 'N/A',
+                'total_net' => $saleTotal,
+                'total_gst' => $gst,
+                'total_adv_tax' => $advTax,
+                'tax_base' => $taxExclusiveBase,
+                'comm_pct' => $commPct,
+                'max_comm' => $maxComm,
+                'received' => $totalReceived,
+                'is_fully_paid' => $isFullyPaid,
+                'comm_paid' => $commPaid,
+                'comm_pending' => $commPending,
+                'status' => $status,
+                'status_label' => $statusLabel,
+                'status_badge' => $statusBadge,
+            ];
+        }
+
+        $allEmployees = (auth()->user()->isSuperAdmin() || auth()->user()->can('hr.payroll.view'))
+            ? Employee::active()->orderBy('first_name')->get()
+            : collect();
+
+        return view('hr.payroll.my-commission', [
+            'employee' => $employee,
+            'sales' => collect($processedSales),
+            'summary' => [
+                'total_sales_count' => count($processedSales),
+                'total_sales_net' => $totalNetSum,
+                'total_commission_earned' => $totalCommissionEarned,
+                'total_commission_paid' => $totalCommissionPaid,
+                'total_commission_pending' => $totalCommissionPending,
+            ],
+            'employees' => $allEmployees,
+        ]);
+    }
 }

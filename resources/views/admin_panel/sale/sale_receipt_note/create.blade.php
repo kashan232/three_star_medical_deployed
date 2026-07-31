@@ -643,6 +643,18 @@
                                             </div>
                                         </div>
 
+                                        <div class="form-group mb-3">
+                                            <label class="form-label" style="font-size: 11px;">COMMISSION %</label>
+                                            <div class="input-group shadow-sm">
+                                                <span class="input-group-text bg-light border-end-0">
+                                                    <i class="bi bi-percent text-success fs-6"></i>
+                                                </span>
+                                                <input type="number" step="0.01" min="0" max="100" name="commission_percentage" id="commission_percentage"
+                                                    class="form-control border-start-0 ps-2 fw-bold text-dark" placeholder="Enter % (e.g. 1.00)" value="">
+                                            </div>
+                                            <small class="text-muted" style="font-size: 10px;">Applied on amount net of GST (18%) & Sale Tax (5%)</small>
+                                        </div>
+
                                         <div class="mt-auto bg-light p-3 rounded border">
                                             <div class="form-check form-switch d-flex align-items-center gap-2 mb-0">
                                                 <input class="form-check-input mt-0" type="checkbox" id="gst_invoice"

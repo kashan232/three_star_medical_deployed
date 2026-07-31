@@ -713,11 +713,11 @@ class PayrollCalculationService
     /**
      * Calculate sales commission for an employee for a given month.
      *
-     * Commission Logic:
-     * - Commission is ONLY earned when the customer makes a payment against a sale.
-     * - If the customer pays 40% of the total sale → employee earns 40% × commission_rate × share_ratio (50%).
-     * - This continues until the full commission is earned.
-     * - Double-counting is prevented by tracking commission_paid on the sale record.
+     * Commission Logic (International ERP Standard):
+     * - Base Amount = Tax-Exclusive Amount (total_net - GST 18% - Sale Tax 5%)
+     * - Rate = Manual commission_percentage set on Sale (or fallback to structure)
+     * - Trigger = FULL payment received on Sale Invoice (SIN- / posted)
+     * - DC-only or partial payment does not trigger commission until fully paid.
      *
      * @param Employee        $employee
      * @param string          $month    Format: 'Y-m'
@@ -726,10 +726,10 @@ class PayrollCalculationService
      */
     public function calculateSalesCommission(Employee $employee, string $month, SalaryStructure $structure): array
     {
-        // Get all sales assigned to this employee (all time, not just this month)
-        // because payments for old sales may arrive later.
+        // Get all posted sales assigned to this employee
         $sales = \App\Models\Sale::where('employee_id', $employee->id)
             ->where('total_net', '>', 0)
+            ->where('sale_status', 'post')
             ->get();
 
         if ($sales->isEmpty()) {
@@ -742,64 +742,73 @@ class PayrollCalculationService
 
         $totalNewCommission = 0;
         $commissionDetails  = [];
-        $salesUpdates       = []; // Store updates to apply after payroll save
+        $salesUpdates       = [];
 
         foreach ($sales as $sale) {
-            $saleTotal            = floatval($sale->total_net);
-            $maxCommission        = floatval($sale->total_commission);
-            $alreadyPaid          = floatval($sale->commission_paid);
+            $saleTotal = floatval($sale->total_net);
+            $gst       = floatval($sale->total_gst ?? 0);
+            $advTax    = floatval($sale->total_adv_tax ?? 0);
+            
+            // Tax-exclusive base: Net Amount minus GST & Sale Tax
+            $taxExclusiveBase = max(0, $saleTotal - $gst - $advTax);
+            $alreadyPaid      = floatval($sale->commission_paid);
 
-            // If no commission is set on sale, calculate it from the salary structure
-            if ($maxCommission <= 0) {
-                if ($structure->commission_tiers && count($structure->commission_tiers) > 0) {
-                    $maxCommission = $structure->calculateTieredCommission($saleTotal);
-                } elseif ($structure->commission_percentage > 0) {
-                    $maxCommission = ($saleTotal * $structure->commission_percentage) / 100;
-                }
+            // Determine maximum commission amount for this sale
+            $maxCommission = 0;
+            if ($sale->commission_percentage !== null && floatval($sale->commission_percentage) > 0) {
+                $maxCommission = round($taxExclusiveBase * (floatval($sale->commission_percentage) / 100), 2);
+            } elseif (floatval($sale->total_commission) > 0) {
+                $maxCommission = floatval($sale->total_commission);
+            } elseif ($structure->commission_tiers && count($structure->commission_tiers) > 0) {
+                $maxCommission = $structure->calculateTieredCommission($taxExclusiveBase);
+            } elseif ($structure->commission_percentage > 0) {
+                $maxCommission = ($taxExclusiveBase * $structure->commission_percentage) / 100;
             }
 
-            // If still no commission or fully paid — skip
+            // If no commission or already fully paid — skip
             if ($maxCommission <= 0 || $alreadyPaid >= $maxCommission) {
                 continue;
             }
 
-            // Sum of all payments linked to this specific sale (made up to end of the given month)
+            // Sum of all payments linked to this sale
             $endOfMonth = \Carbon\Carbon::parse($month . '-01')->endOfMonth()->format('Y-m-d');
-            
             $posPaid = max(0, floatval($sale->cash) + floatval($sale->card) - max(0, floatval($sale->change)));
             
             $totalPaymentsOnSale = $posPaid + \App\Models\CustomerPayment::where('sale_id', $sale->id)
                 ->where('payment_date', '<=', $endOfMonth)
                 ->sum('amount');
 
-            if ($totalPaymentsOnSale <= 0) {
-                continue; // No payment yet — no commission
+            // Trigger rule: Full payment required (customer must pay 100% of invoice amount)
+            if ($totalPaymentsOnSale < ($saleTotal - 0.01)) {
+                continue; // Partial or zero payment — commission not eligible yet
             }
 
-            // Earned commission = (total payments / sale total) × max commission
-            $paymentRatio    = min(1, $totalPaymentsOnSale / $saleTotal); // cap at 100%
-            $earnedSoFar     = round($paymentRatio * $maxCommission, 2);
-
-            // New commission = earned so far minus what was already paid
-            $newCommission = max(0, $earnedSoFar - $alreadyPaid);
+            // Full payment received -> Entire remaining commission is earned
+            $newCommission = max(0, $maxCommission - $alreadyPaid);
 
             if ($newCommission > 0) {
                 $totalNewCommission += $newCommission;
+                $commPctStr = ($sale->commission_percentage !== null) ? floatval($sale->commission_percentage) . '%' : 'Calculated';
+
                 $commissionDetails[] = [
                     'sale_id'        => $sale->id,
                     'invoice_no'     => $sale->invoice_no,
                     'sale_total'     => $saleTotal,
-                    'payment_ratio'  => round($paymentRatio * 100, 1) . '%',
+                    'tax_base'       => $taxExclusiveBase,
+                    'comm_rate'      => $commPctStr,
+                    'payment_ratio'  => '100%',
                     'commission'     => $newCommission,
-                    'description'    => "Sale #{$sale->invoice_no}: {$saleTotal} total, " . round($paymentRatio * 100, 1) . "% paid → Rs. " . number_format($newCommission, 2) . " commission",
+                    'description'    => "Sale #{$sale->invoice_no}: Tax Base Rs. " . number_format($taxExclusiveBase, 2) . " @ {$commPctStr} → Rs. " . number_format($newCommission, 2) . " commission (Fully Paid)",
                     'json_meta'      => json_encode([
                         'sale_total' => $saleTotal,
+                        'tax_exclusive_base' => $taxExclusiveBase,
+                        'comm_percentage' => $commPctStr,
                         'max_commission' => $maxCommission,
                         'customer_paid_total' => $totalPaymentsOnSale,
                         'paid_so_far' => $alreadyPaid,
                         'current_commission' => $newCommission,
                         'remaining_commission' => max(0, $maxCommission - ($alreadyPaid + $newCommission)),
-                        'text_desc' => "Sale #{$sale->invoice_no}: {$saleTotal} total, " . round($paymentRatio * 100, 1) . "% paid → Rs. " . number_format($newCommission, 2) . " commission",
+                        'text_desc' => "Sale #{$sale->invoice_no}: Tax Base Rs. " . number_format($taxExclusiveBase, 2) . " @ {$commPctStr} → Rs. " . number_format($newCommission, 2) . " commission",
                     ]),
                 ];
                 $salesUpdates[] = [
@@ -809,13 +818,11 @@ class PayrollCalculationService
             }
         }
 
-        // IMPORTANT: Update commission_paid on sales ONLY after payroll is confirmed to be saved.
-        // Store in a static cache so PayrollController can call commitCommission() after saving.
         static::$pendingCommissionUpdates[$employee->id] = $salesUpdates;
 
         $description = count($commissionDetails) > 0
             ? 'Commission from ' . count($commissionDetails) . ' sale(s): ' . implode('; ', array_column($commissionDetails, 'description'))
-            : 'No eligible commission payments this period';
+            : 'No eligible fully-paid commission sales this period';
 
         return [
             'total'              => $totalNewCommission,
@@ -841,6 +848,7 @@ class PayrollCalculationService
         }
         unset(static::$pendingCommissionUpdates[$employeeId]);
     }
+
     /**
      * Generate an instant commission payroll record triggered by a customer payment.
      */
@@ -851,53 +859,69 @@ class PayrollCalculationService
         $sale = \App\Models\Sale::find($payment->sale_id);
         if (!$sale || !$sale->employee_id) return;
 
+        // Must be a posted sale invoice (not DC draft or unposted)
+        if ($sale->sale_status !== 'post') return;
+
         $employee = \App\Models\Hr\Employee::find($sale->employee_id);
         if (!$employee || strtolower($employee->status) !== 'active') return;
 
         $structure = $this->getEffectiveSalaryStructure($employee);
         if (!$structure) return;
         
-        // Ensure this employee is set up to receive commission
-        if (!in_array($structure->salary_type, ['commission', 'both'])) {
+        // Ensure employee structure or sale permits commission
+        if (!in_array($structure->salary_type, ['commission', 'both']) && empty($sale->commission_percentage)) {
             return;
         }
 
         $saleTotal = floatval($sale->total_net);
-        if ($saleTotal <= 0) return; // Avoid division by zero
+        if ($saleTotal <= 0) return;
 
-        $maxCommission = floatval($sale->total_commission);
-        $alreadyPaid   = floatval($sale->commission_paid);
+        $gst     = floatval($sale->total_gst ?? 0);
+        $advTax  = floatval($sale->total_adv_tax ?? 0);
+        
+        // Tax-exclusive base: Net Amount minus GST & Sale Tax
+        $taxExclusiveBase = max(0, $saleTotal - $gst - $advTax);
+        $alreadyPaid      = floatval($sale->commission_paid);
 
-        // If no commission set on the sale, calculate it based on structure
-        if ($maxCommission <= 0) {
-            if ($structure->commission_tiers && count($structure->commission_tiers) > 0) {
-                $maxCommission = $structure->calculateTieredCommission($saleTotal);
-            } elseif ($structure->commission_percentage > 0) {
-                $maxCommission = ($saleTotal * $structure->commission_percentage) / 100;
-            }
-            
-            // Save it on sale so it doesn't calculate differently later
-            $sale->total_commission = $maxCommission;
+        // Determine max commission
+        $maxCommission = 0;
+        if ($sale->commission_percentage !== null && floatval($sale->commission_percentage) > 0) {
+            $maxCommission = round($taxExclusiveBase * (floatval($sale->commission_percentage) / 100), 2);
+        } elseif (floatval($sale->total_commission) > 0) {
+            $maxCommission = floatval($sale->total_commission);
+        } elseif ($structure->commission_tiers && count($structure->commission_tiers) > 0) {
+            $maxCommission = $structure->calculateTieredCommission($taxExclusiveBase);
+        } elseif ($structure->commission_percentage > 0) {
+            $maxCommission = ($taxExclusiveBase * $structure->commission_percentage) / 100;
         }
 
-        // If the max commission is zero or already fully paid, skip
-        if ($maxCommission <= 0 || $alreadyPaid >= $maxCommission) {
+        if ($maxCommission <= 0) {
             return;
         }
 
-        // Calculate earned value based on total payments
-        $totalPaymentsOnSale = \App\Models\CustomerPayment::where('sale_id', $sale->id)->sum('amount');
+        // Update total_commission on sale record for tracking
+        $sale->total_commission = $maxCommission;
+
+        if ($alreadyPaid >= $maxCommission) {
+            return;
+        }
+
+        // Calculate total payments received on sale
+        $posPaid = max(0, floatval($sale->cash) + floatval($sale->card) - max(0, floatval($sale->change)));
+        $totalPaymentsOnSale = $posPaid + \App\Models\CustomerPayment::where('sale_id', $sale->id)->sum('amount');
         
-        $paymentRatio = min(1, $totalPaymentsOnSale / $saleTotal);
-        $earnedSoFar  = round($paymentRatio * $maxCommission, 2);
+        // Trigger condition: FULL PAYMENT REQUIRED (Customer must pay 100% of invoice amount)
+        if ($totalPaymentsOnSale < ($saleTotal - 0.01)) {
+            return; // Not fully paid yet
+        }
         
-        // The new commission is whatever was earned minus what's already paid
-        $newCommission = max(0, $earnedSoFar - $alreadyPaid);
+        // Full payment confirmed -> Entire remaining commission is earned
+        $newCommission = max(0, $maxCommission - $alreadyPaid);
 
         if ($newCommission > 0) {
             $month = \Carbon\Carbon::parse($payment->payment_date)->format('Y-m');
             
-            // 🔍 Find existing UNPAID payroll for this specific sale/employee
+            // Find existing UNPAID payroll for this specific sale/employee
             $payroll = \App\Models\Hr\Payroll::where('employee_id', $employee->id)
                 ->where('sale_id', $sale->id)
                 ->where('payroll_type', 'commission')
@@ -905,14 +929,12 @@ class PayrollCalculationService
                 ->first();
 
             if ($payroll) {
-                // 🛠️ Update existing unpaid payroll
                 $payroll->gross_salary += $newCommission;
                 $payroll->commission   += $newCommission;
                 $payroll->net_salary   += $newCommission;
                 $payroll->notes        .= " | Add. Payment {$payment->amount} -> {$newCommission} Comm.";
                 $payroll->save();
             } else {
-                // ✨ Generate a NEW payroll record
                 $payroll = \App\Models\Hr\Payroll::create([
                     'employee_id' => $employee->id,
                     'sale_id' => $sale->id,
@@ -931,22 +953,20 @@ class PayrollCalculationService
                     'net_salary' => $newCommission,
                     'status' => 'generated',
                     'auto_generated' => true,
-                    'notes' => "Instant Commission for Sale #{$sale->invoice_no} (Triggered by Payment of {$payment->amount})",
+                    'notes' => "Instant Commission for Sale #{$sale->invoice_no} (Triggered by Full Payment)",
                     'payment_date' => null,
                 ]);
             }
 
-            // Always create a Detail record to maintain full audit history of payments
             \App\Models\Hr\PayrollDetail::create([
                 'payroll_id' => $payroll->id,
                 'type' => 'commission',
                 'name' => "Sales Commission (Sale #{$sale->invoice_no})",
                 'amount' => $newCommission,
-                'description' => "Invoice #{$sale->invoice_no}: Payment {$payment->amount} -> {$newCommission} Commission",
+                'description' => "Invoice #{$sale->invoice_no}: Tax Base Rs. {$taxExclusiveBase} -> {$newCommission} Commission (Fully Paid)",
             ]);
 
             // Track paid commission on the sale
-            // Force save using DB to prevent any stale eloquent model overwriting the values
             \Illuminate\Support\Facades\DB::table('sales')
                 ->where('id', $sale->id)
                 ->update([
@@ -954,7 +974,6 @@ class PayrollCalculationService
                     'commission_paid' => $alreadyPaid + $newCommission
                 ]);
         }
-
     }
 
     /**
