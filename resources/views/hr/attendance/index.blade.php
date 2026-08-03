@@ -240,6 +240,12 @@
                             <i class="fa fa-question-circle text-primary me-1"></i> System Guide
                         </button>
                         @can('hr.attendance.create')
+                            <button type="button" class="btn btn-primary" id="openRangeModalBtn" data-toggle="modal" data-target="#rangeAttendanceModal" data-bs-toggle="modal" data-bs-target="#rangeAttendanceModal">
+                                <i class="fa fa-calendar-alt me-1"></i> Range Attendance (Multi-Days)
+                            </button>
+                            <button type="button" class="btn btn-success" id="openMonthlyReportModalBtn" data-toggle="modal" data-target="#monthlyReportModal" data-bs-toggle="modal" data-bs-target="#monthlyReportModal">
+                                <i class="fa fa-file-alt me-1"></i> Monthly Sheet
+                            </button>
                             <button type="button" class="btn btn-warning" id="markAbsentBtn">
                                 <i class="fa fa-user-times me-1"></i> Mark Absent
                             </button>
@@ -941,6 +947,335 @@
                     }
                 });
             });
+
+            // Open Range Attendance Modal
+            $(document).on('click', '#openRangeModalBtn', function(e) {
+                e.preventDefault();
+                $('#rangeAttendanceModal').modal('show');
+            });
+
+            // Range Attendance Form Submit
+            $('#rangeAttendanceForm').on('submit', function(e) {
+                e.preventDefault();
+                let btn = $('#saveRangeAttendanceBtn');
+                let originalHtml = btn.html();
+                btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin me-1"></i> Processing...');
+
+                $.ajax({
+                    url: "{{ route('hr.attendance.mark-range') }}",
+                    method: 'POST',
+                    data: $(this).serialize(),
+                    success: function(res) {
+                        $('#rangeAttendanceModal').modal('hide');
+                        Swal.fire('Success!', res.success || 'Range Attendance saved successfully', 'success')
+                            .then(() => location.reload());
+                    },
+                    error: function(xhr) {
+                        let msg = xhr.responseJSON?.error || 'Failed to save range attendance.';
+                        if (xhr.responseJSON?.errors) {
+                            msg = Object.values(xhr.responseJSON.errors).flat().join('<br>');
+                        }
+                        Swal.fire('Error', msg, 'error');
+                        btn.prop('disabled', false).html(originalHtml);
+                    }
+                });
+            });
+
+            // Open Monthly Report Modal
+            $(document).on('click', '#openMonthlyReportModalBtn', function(e) {
+                e.preventDefault();
+                $('#monthlyReportModal').modal('show');
+            });
+
+            // Prevent default form submit if Enter pressed inside monthly report form
+            $(document).on('submit', '#fetchMonthlyReportForm', function(e) {
+                e.preventDefault();
+                $('#btnFetchMonthlyReport').trigger('click');
+            });
+
+            // Fetch Monthly Attendance Report Click Handler
+            $(document).on('click', '#btnFetchMonthlyReport', function(e) {
+                e.preventDefault();
+                let empId = $('#report_employee_id').val();
+                let month = $('#report_month').val();
+                let btn = $(this);
+                let origHtml = btn.html();
+
+                if (!empId) {
+                    Swal.fire('Error', 'Please select an employee.', 'error');
+                    return;
+                }
+
+                btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin me-1"></i> Fetching...');
+
+                $.ajax({
+                    url: "{{ route('hr.attendance.monthly-report') }}",
+                    method: 'GET',
+                    data: { employee_id: empId, month: month },
+                    success: function(res) {
+                        btn.prop('disabled', false).html(origHtml);
+
+                        if (!res.success) {
+                            Swal.fire('Error', res.error || 'Failed to fetch report.', 'error');
+                            return;
+                        }
+
+                        // Update Employee Details & Month
+                        $('#rptEmpName').text(res.employee.name + ' (' + res.employee.code + ')');
+                        $('#rptEmpMeta').text(res.employee.department + ' | ' + res.employee.designation + ' | Shift: ' + res.employee.shift);
+                        $('#rptMonthLabel').text(res.month_label);
+
+                        // Update KPI Counters
+                        $('#kpiPresent').text(res.summary.present);
+                        $('#kpiLate').text(res.summary.late);
+                        $('#kpiAbsent').text(res.summary.absent);
+                        $('#kpiLeave').text(res.summary.leave);
+                        $('#kpiOff').text(res.summary.off_day + res.summary.holiday);
+                        $('#kpiHours').text(res.summary.total_hours + ' hrs');
+
+                        // Render Rows
+                        let rowsHtml = '';
+                        res.days.forEach(function(d) {
+                            rowsHtml += '<tr>' +
+                                '<td>' + d.date + '</td>' +
+                                '<td>' + d.day_name + '</td>' +
+                                '<td><span class="badge ' + d.badge_class + ' px-3 py-1">' + d.status + '</span></td>' +
+                                '<td>' + d.clock_in + '</td>' +
+                                '<td>' + d.clock_out + '</td>' +
+                                '<td class="fw-bold">' + d.hours + '</td>' +
+                                '<td class="' + (d.late_mins > 0 ? 'text-danger fw-bold' : 'text-muted') + '">' + (d.late_mins > 0 ? d.late_mins + ' m' : '-') + '</td>' +
+                                '<td class="text-start">' + (d.remarks || '-') + '</td>' +
+                                '</tr>';
+                        });
+
+                        $('#rptTableBody').html(rowsHtml);
+                        $('#monthlyReportEmptyState').hide();
+                        $('#monthlyReportContainer').show();
+                    },
+                    error: function(xhr) {
+                        btn.prop('disabled', false).html(origHtml);
+                        Swal.fire('Error', xhr.responseJSON?.error || 'Failed to fetch report.', 'error');
+                    }
+                });
+            });
+
+            // Universal Modal Close Handler for Bootstrap 4 / 5 compatibility
+            $(document).on('click', '[data-dismiss="modal"], [data-bs-dismiss="modal"], .btn-close-modal, .btn-close', function(e) {
+                e.preventDefault();
+                $(this).closest('.modal').modal('hide');
+            });
         });
     </script>
+
+    <!-- Multi-Date Range Attendance Modal -->
+    <div class="modal fade" id="rangeAttendanceModal" tabindex="-1" aria-labelledby="rangeAttendanceModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title font-weight-bold" id="rangeAttendanceModalLabel">
+                        <i class="fa fa-calendar-alt me-2"></i> Range Attendance (Multi-Days)
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form id="rangeAttendanceForm">
+                    @csrf
+                    <div class="modal-body p-4 bg-light">
+                        <div class="alert alert-info py-2 small mb-3">
+                            <i class="fa fa-info-circle me-1"></i> Select Date Range & Employee to mark attendance across multiple consecutive days at once.
+                        </div>
+
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-secondary">Start Date (From)</label>
+                                <input type="date" name="start_date" class="form-control" value="{{ $selectedDate }}" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-secondary">End Date (To)</label>
+                                <input type="date" name="end_date" class="form-control" value="{{ $selectedDate }}" required>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-secondary">Select Employee</label>
+                                <select name="employee_id" class="form-select">
+                                    <option value="all">-- All Active Employees --</option>
+                                    @foreach($employees as $emp)
+                                        <option value="{{ $emp->id }}">{{ $emp->full_name }} ({{ $emp->employee_id_code ?? $emp->id }})</option>
+                                    @endforeach
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-secondary">Attendance Status</label>
+                                <select name="status" class="form-select" required>
+                                    <option value="present">Present</option>
+                                    <option value="absent">Absent</option>
+                                    <option value="late">Late</option>
+                                    <option value="leave">Leave</option>
+                                </select>
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-secondary">Clock In Time (Optional)</label>
+                                <input type="time" name="clock_in" class="form-control" value="09:00">
+                            </div>
+
+                            <div class="col-md-6">
+                                <label class="form-label fw-bold small text-secondary">Clock Out Time (Optional)</label>
+                                <input type="time" name="clock_out" class="form-control" value="18:00">
+                            </div>
+
+                            <div class="col-12 border-top pt-3">
+                                <div class="form-check form-switch mb-2">
+                                    <input class="form-check-input" type="checkbox" name="skip_off_days" value="1" id="skipOffDaysCheck" checked>
+                                    <label class="form-check-label small fw-bold text-dark" for="skipOffDaysCheck">
+                                        Skip Weekly Off Days (Do not mark attendance on Sunday/Off days)
+                                    </label>
+                                </div>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input" type="checkbox" name="skip_holidays" value="1" id="skipHolidaysCheck" checked>
+                                    <label class="form-check-label small fw-bold text-dark" for="skipHolidaysCheck">
+                                        Skip Official Holidays (Do not mark attendance on holidays)
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-white">
+                        <button type="button" class="btn btn-secondary btn-close-modal" data-dismiss="modal" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary px-4" id="saveRangeAttendanceBtn">
+                            <i class="fa fa-check-circle me-1"></i> Save Range Attendance
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monthly Attendance Sheet Modal -->
+    <div class="modal fade" id="monthlyReportModal" tabindex="-1" aria-labelledby="monthlyReportModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content border-0 shadow">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title font-weight-bold" id="monthlyReportModalLabel">
+                        <i class="fa fa-calendar-check me-2"></i> Employee Monthly Attendance Sheet
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white btn-close-modal" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-4 bg-light">
+                    <!-- Filter Bar -->
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-body p-3 bg-white rounded-3">
+                            <form id="fetchMonthlyReportForm" class="row g-3 align-items-end">
+                                <div class="col-md-5">
+                                    <label class="form-label fw-bold small text-secondary">Select Employee</label>
+                                    <select name="report_employee_id" id="report_employee_id" class="form-select" required>
+                                        <option value="">-- Choose Employee --</option>
+                                        @foreach($employees as $emp)
+                                            <option value="{{ $emp->id }}">{{ $emp->full_name }} ({{ $emp->employee_id_code ?? $emp->id }}) - {{ $emp->department->name ?? 'N/A' }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label class="form-label fw-bold small text-secondary">Select Month</label>
+                                    <input type="month" name="report_month" id="report_month" class="form-control" value="{{ date('Y-m') }}" required>
+                                </div>
+                                <div class="col-md-3">
+                                    <button type="button" class="btn btn-success w-100 fw-bold" id="btnFetchMonthlyReport">
+                                        <i class="fa fa-search me-1"></i> Fetch Attendance Sheet
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Report Container (Hidden until fetched) -->
+                    <div id="monthlyReportContainer" style="display: none;">
+                        <!-- Employee Profile Header & KPI Cards -->
+                        <div class="card border-0 shadow-sm mb-3">
+                            <div class="card-body p-3">
+                                <div class="d-flex justify-content-between align-items-center mb-3">
+                                    <div>
+                                        <h5 class="fw-bold text-dark mb-0" id="rptEmpName">-</h5>
+                                        <span class="text-muted small" id="rptEmpMeta">-</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <span class="badge bg-success-subtle text-success fs-6 border border-success px-3 py-2" id="rptMonthLabel">-</span>
+                                    </div>
+                                </div>
+
+                                <!-- KPI Counters Grid -->
+                                <div class="row g-2 text-center" id="rptKpiContainer">
+                                    <div class="col-md">
+                                        <div class="p-2 rounded bg-success-subtle border border-success-subtle">
+                                            <div class="small text-success fw-bold">PRESENT</div>
+                                            <div class="fs-4 fw-bold text-success" id="kpiPresent">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md">
+                                        <div class="p-2 rounded bg-warning-subtle border border-warning-subtle">
+                                            <div class="small text-warning fw-bold">LATE</div>
+                                            <div class="fs-4 fw-bold text-warning" id="kpiLate">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md">
+                                        <div class="p-2 rounded bg-danger-subtle border border-danger-subtle">
+                                            <div class="small text-danger fw-bold">ABSENT</div>
+                                            <div class="fs-4 fw-bold text-danger" id="kpiAbsent">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md">
+                                        <div class="p-2 rounded bg-info-subtle border border-info-subtle">
+                                            <div class="small text-info fw-bold">LEAVE</div>
+                                            <div class="fs-4 fw-bold text-info" id="kpiLeave">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md">
+                                        <div class="p-2 rounded bg-secondary-subtle border border-secondary-subtle">
+                                            <div class="small text-secondary fw-bold">OFF / HOLIDAY</div>
+                                            <div class="fs-4 fw-bold text-secondary" id="kpiOff">0</div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md">
+                                        <div class="p-2 rounded bg-primary-subtle border border-primary-subtle">
+                                            <div class="small text-primary fw-bold">WORKED HOURS</div>
+                                            <div class="fs-4 fw-bold text-primary" id="kpiHours">0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Day-by-Day Attendance Table -->
+                        <div class="table-responsive bg-white rounded-3 shadow-sm" style="max-height: 450px; overflow-y: auto;">
+                            <table class="table table-hover table-bordered align-middle mb-0 text-center small">
+                                <thead class="sticky-top bg-light">
+                                    <tr>
+                                        <th style="width: 12%;">Date</th>
+                                        <th style="width: 12%;">Day</th>
+                                        <th style="width: 12%;">Status</th>
+                                        <th style="width: 15%;">Clock In</th>
+                                        <th style="width: 15%;">Clock Out</th>
+                                        <th style="width: 12%;">Worked Hours</th>
+                                        <th style="width: 10%;">Late Mins</th>
+                                        <th>Remarks / Location</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="rptTableBody">
+                                    <!-- Dynamic rows via JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div id="monthlyReportEmptyState" class="text-center py-5 text-muted">
+                        <i class="fa fa-calendar-alt fs-1 d-block mb-3 opacity-50"></i>
+                        Please select an Employee & Month above and click <strong>Fetch Attendance Sheet</strong> to view complete records.
+                    </div>
+                </div>
+                <div class="modal-footer bg-white">
+                    <button type="button" class="btn btn-secondary btn-close-modal" data-dismiss="modal" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 @endsection

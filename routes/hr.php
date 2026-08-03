@@ -68,6 +68,8 @@ Route::middleware(['auth'])->prefix('hr')->name('hr.')->group(function () {
     Route::post('attendance/mark', [AttendanceController::class, 'markAttendance'])->name('attendance.mark')->middleware('permission:hr.attendance.create');
     Route::post('attendance/pull', [AttendanceController::class, 'pullFromDevices'])->name('attendance.pull')->middleware('permission:hr.biometric.devices.edit');
     Route::post('attendance/mark-absent', [AttendanceController::class, 'markAbsent'])->name('attendance.mark-absent')->middleware('permission:hr.attendance.create');
+    Route::post('attendance/mark-range', [AttendanceController::class, 'markRange'])->name('attendance.mark-range')->middleware('permission:hr.attendance.create');
+    Route::get('attendance/monthly-report', [AttendanceController::class, 'monthlyReport'])->name('attendance.monthly-report')->middleware('permission:hr.attendance.view');
 
     // Payroll
     Route::get('payroll', [PayrollController::class, 'index'])->name('payroll.index')->middleware('permission:hr.payroll.view');

@@ -1102,4 +1102,333 @@ class AttendanceController extends Controller
             return response()->json(['error' => $e->getMessage()], 500);
         }
     }
+
+    /**
+     * Mark attendance across a date range for one or all employees
+     */
+    public function markRange(Request $request)
+    {
+        if (! auth()->user()->can('hr.attendance.create')) {
+            return response()->json(['error' => 'Unauthorized action.'], 403);
+        }
+
+        $validator = \Illuminate\Support\Facades\Validator::make($request->all(), [
+            'start_date'   => 'required|date',
+            'end_date'     => 'required|date|after_or_equal:start_date',
+            'employee_id'  => 'nullable',
+            'status'       => 'required|in:present,absent,late,leave',
+            'clock_in'     => 'nullable|date_format:H:i',
+            'clock_out'    => 'nullable|date_format:H:i',
+            'skip_off_days' => 'nullable|boolean',
+            'skip_holidays' => 'nullable|boolean',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        try {
+            $startDate = Carbon::parse($request->start_date);
+            $endDate   = Carbon::parse($request->end_date);
+
+            if ($startDate->diffInDays($endDate) > 62) {
+                return response()->json(['error' => 'Date range cannot exceed 62 days at once.'], 422);
+            }
+
+            $empId = $request->employee_id;
+            if ($empId && $empId !== 'all') {
+                $employees = Employee::with('shift')->where('id', $empId)->where('status', 'active')->get();
+            } else {
+                $employees = Employee::with('shift')->where('status', 'active')->get();
+            }
+
+            if ($employees->isEmpty()) {
+                return response()->json(['error' => 'No active employees found for the selection.'], 404);
+            }
+
+            $status       = $request->status;
+            $clockIn      = $request->clock_in ?? null;
+            $clockOut     = $request->clock_out ?? null;
+            $skipOffDays  = $request->boolean('skip_off_days', true);
+            $skipHolidays = $request->boolean('skip_holidays', true);
+
+            $processedCount = 0;
+
+            \Illuminate\Support\Facades\DB::beginTransaction();
+
+            $current = $startDate->copy();
+            while ($current->lte($endDate)) {
+                $dateStr = $current->format('Y-m-d');
+
+                foreach ($employees as $employee) {
+                    if ($skipOffDays) {
+                        $offDays = $employee->weekly_off ? array_map('trim', explode(',', strtolower($employee->weekly_off))) : ['sunday'];
+                        if (in_array(strtolower($current->format('l')), $offDays)) {
+                            continue;
+                        }
+                    }
+
+                    if ($skipHolidays && Holiday::isHoliday($dateStr, $employee->id)) {
+                        continue;
+                    }
+
+                    if ($status !== 'leave' && Leave::hasApprovedLeave($employee->id, $dateStr)) {
+                        continue;
+                    }
+
+                    $updateData = [
+                        'status'   => $status,
+                        'clock_in' => $clockIn,
+                        'clock_out'=> $clockOut,
+                    ];
+
+                    if ($clockIn) {
+                        $updateData['check_in_time'] = Carbon::parse($dateStr . ' ' . $clockIn)->toDateTimeString();
+                        $updateData['check_in_location'] = 'Range Mark (HR)';
+                    } else {
+                        $updateData['check_in_time'] = null;
+                    }
+
+                    if ($clockOut) {
+                        $updateData['check_out_time'] = Carbon::parse($dateStr . ' ' . $clockOut)->toDateTimeString();
+                        $updateData['check_out_location'] = 'Range Mark (HR)';
+                    } else {
+                        $updateData['check_out_time'] = null;
+                    }
+
+                    $isLate = false;
+                    $lateMinutes = 0;
+                    $isEarlyLeave = false;
+                    $earlyLeaveMinutes = 0;
+                    $totalHours = 0;
+
+                    if ($clockIn && $status !== 'absent') {
+                        $shiftStart   = $employee->getStartTime();
+                        $graceMinutes = $employee->getGraceMinutes();
+                        $shiftStartDt = Carbon::parse($dateStr . ' ' . Carbon::parse($shiftStart)->format('H:i:s'));
+                        $checkInDt    = Carbon::parse($dateStr . ' ' . $clockIn);
+                        $graceTime    = $shiftStartDt->copy()->addMinutes($graceMinutes);
+
+                        if ($checkInDt->gt($graceTime)) {
+                            $isLate = true;
+                            $lateMinutes = $checkInDt->diffInMinutes($shiftStartDt);
+                            $updateData['status'] = 'late';
+                        }
+                    }
+
+                    if ($clockOut && $status !== 'absent') {
+                        $shiftEnd   = $employee->getEndTime();
+                        $shiftEndDt = Carbon::parse($dateStr . ' ' . Carbon::parse($shiftEnd)->format('H:i:s'));
+                        $checkOutDt = Carbon::parse($dateStr . ' ' . $clockOut);
+
+                        if ($checkOutDt->lt($shiftEndDt)) {
+                            $isEarlyLeave = true;
+                            $earlyLeaveMinutes = $shiftEndDt->diffInMinutes($checkOutDt);
+                        }
+                    }
+
+                    if ($clockIn && $clockOut && $status !== 'absent') {
+                        $in  = Carbon::parse($clockIn);
+                        $out = Carbon::parse($clockOut);
+                        if ($out->gt($in)) {
+                            $totalHours = round($out->diffInMinutes($in) / 60, 2);
+                        }
+                    }
+
+                    if ($status === 'absent') {
+                        $updateData['clock_in'] = null;
+                        $updateData['clock_out'] = null;
+                        $updateData['check_in_time'] = null;
+                        $updateData['check_out_time'] = null;
+                        $isLate = false;
+                        $lateMinutes = 0;
+                        $isEarlyLeave = false;
+                        $earlyLeaveMinutes = 0;
+                        $totalHours = 0;
+                    }
+
+                    $updateData['is_late'] = $isLate;
+                    $updateData['late_minutes'] = $lateMinutes;
+                    $updateData['is_early_leave'] = $isEarlyLeave;
+                    $updateData['early_leave_minutes'] = $earlyLeaveMinutes;
+                    $updateData['total_hours'] = $totalHours;
+
+                    $attendanceRecord = Attendance::updateOrCreate(
+                        ['employee_id' => $employee->id, 'date' => $dateStr],
+                        $updateData
+                    );
+
+                    $processedCount++;
+
+                    if (! empty($clockOut) && $attendanceRecord) {
+                        $this->autoGenerateDailyPayroll($employee, $attendanceRecord);
+                    }
+                }
+
+                $current->addDay();
+            }
+
+            \Illuminate\Support\Facades\DB::commit();
+
+            return response()->json([
+                'success' => "Range Attendance updated successfully ({$processedCount} records processed).",
+                'reload' => true,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\DB::rollBack();
+            return response()->json(['error' => $e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * Get monthly attendance report for an employee
+     */
+    public function monthlyReport(Request $request)
+    {
+        if (! auth()->user()->can('hr.attendance.view')) {
+            return response()->json(['error' => 'Unauthorized action.'], 403);
+        }
+
+        $employeeId = $request->get('employee_id');
+        $month = $request->get('month', Carbon::today()->format('Y-m'));
+
+        if (! $employeeId) {
+            return response()->json(['error' => 'Please select an employee.'], 422);
+        }
+
+        $employee = Employee::with(['department', 'designation', 'shift'])->find($employeeId);
+        if (! $employee) {
+            return response()->json(['error' => 'Employee not found.'], 404);
+        }
+
+        $startDate = Carbon::parse($month . '-01')->startOfMonth();
+        $endDate   = Carbon::parse($month . '-01')->endOfMonth();
+
+        $attendances = Attendance::where('employee_id', $employee->id)
+            ->whereBetween('date', [$startDate->format('Y-m-d'), $endDate->format('Y-m-d')])
+            ->get()
+            ->keyBy('date');
+
+        $offDays = $employee->weekly_off ? array_map('trim', explode(',', strtolower($employee->weekly_off))) : ['sunday'];
+
+        $days = [];
+        $summary = [
+            'total_days' => $startDate->daysInMonth,
+            'present' => 0,
+            'late' => 0,
+            'absent' => 0,
+            'leave' => 0,
+            'off_day' => 0,
+            'holiday' => 0,
+            'total_hours' => 0,
+            'total_late_minutes' => 0,
+        ];
+
+        $current = $startDate->copy();
+        while ($current->lte($endDate)) {
+            $dateStr = $current->format('Y-m-d');
+            $dayName = strtolower($current->format('l'));
+            $isWeeklyOff = in_array($dayName, $offDays);
+            $isHoliday = Holiday::isHoliday($dateStr, $employee->id);
+            $holidayInfo = $isHoliday ? Holiday::getHoliday($dateStr, $employee->id) : null;
+            $approvedLeave = Leave::getApprovedLeave($employee->id, $dateStr);
+
+            $att = $attendances->get($dateStr);
+
+            $dayStatus = 'absent';
+            $badgeClass = 'bg-danger';
+            $clockIn = '-';
+            $clockOut = '-';
+            $hours = 0;
+            $lateMins = 0;
+            $remarks = '';
+
+            if ($att) {
+                $clockIn  = $att->clock_in ? Carbon::parse($att->clock_in)->format('h:i A') : ($att->check_in_time ? Carbon::parse($att->check_in_time)->format('h:i A') : '-');
+                $clockOut = $att->clock_out ? Carbon::parse($att->clock_out)->format('h:i A') : ($att->check_out_time ? Carbon::parse($att->check_out_time)->format('h:i A') : '-');
+                $hours    = $att->total_hours ?? 0;
+                $lateMins = $att->late_minutes ?? 0;
+                $remarks  = $att->check_in_location ?? '';
+
+                if ($att->status == 'late' || ($att->status == 'present' && $att->is_late)) {
+                    $dayStatus = 'late';
+                    $badgeClass = 'bg-warning text-dark';
+                    $summary['late']++;
+                    $summary['present']++;
+                } elseif ($att->status == 'present') {
+                    $dayStatus = 'present';
+                    $badgeClass = 'bg-success';
+                    $summary['present']++;
+                } elseif ($att->status == 'leave') {
+                    $dayStatus = 'leave';
+                    $badgeClass = 'bg-info text-dark';
+                    $summary['leave']++;
+                } else {
+                    $dayStatus = 'absent';
+                    $badgeClass = 'bg-danger';
+                    $summary['absent']++;
+                }
+            } else {
+                if ($isHoliday) {
+                    $dayStatus = 'holiday';
+                    $badgeClass = 'bg-secondary';
+                    $remarks = $holidayInfo ? $holidayInfo->name : 'Holiday';
+                    $summary['holiday']++;
+                } elseif ($approvedLeave) {
+                    $dayStatus = 'leave';
+                    $badgeClass = 'bg-info text-dark';
+                    $remarks = $approvedLeave->leave_type . ' Leave';
+                    $summary['leave']++;
+                } elseif ($isWeeklyOff) {
+                    $dayStatus = 'off_day';
+                    $badgeClass = 'bg-dark';
+                    $remarks = 'Weekly Off';
+                    $summary['off_day']++;
+                } else {
+                    if ($current->isPast() && !$current->isToday()) {
+                        $dayStatus = 'absent';
+                        $badgeClass = 'bg-danger';
+                        $summary['absent']++;
+                    } else {
+                        $dayStatus = 'upcoming';
+                        $badgeClass = 'bg-light text-muted border';
+                    }
+                }
+            }
+
+            $summary['total_hours'] += $hours;
+            $summary['total_late_minutes'] += $lateMins;
+
+            $days[] = [
+                'date' => $current->format('d M, Y'),
+                'day_name' => $current->format('l'),
+                'status' => ucfirst($dayStatus),
+                'badge_class' => $badgeClass,
+                'clock_in' => $clockIn,
+                'clock_out' => $clockOut,
+                'hours' => number_format($hours, 2),
+                'late_mins' => $lateMins,
+                'remarks' => $remarks,
+            ];
+
+            $current->addDay();
+        }
+
+        $summary['total_hours'] = number_format($summary['total_hours'], 2);
+
+        return response()->json([
+            'success' => true,
+            'employee' => [
+                'id' => $employee->id,
+                'name' => $employee->full_name,
+                'code' => $employee->employee_id_code ?? $employee->id,
+                'department' => $employee->department->name ?? 'N/A',
+                'designation' => $employee->designation->name ?? 'N/A',
+                'shift' => $employee->shift->name ?? 'Standard Shift',
+            ],
+            'month_label' => $startDate->format('F Y'),
+            'summary' => $summary,
+            'days' => $days,
+        ]);
+    }
 }
