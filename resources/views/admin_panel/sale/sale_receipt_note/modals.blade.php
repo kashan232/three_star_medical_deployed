@@ -75,6 +75,7 @@
                                                     'ppb' => $i->product->pieces_per_box ?? 1,
                                                     'total_pieces' => $i->total_pieces,
                                                     'price' => $i->price,
+                                                    'discount_amount' => $i->discount_amount ?? 0,
                                                     'unit_discount' => $i->total_pieces > 0 ? $i->discount_amount / $i->total_pieces : 0,
                                                 ])) }}">
                                                 Import
@@ -97,14 +98,21 @@
                                         <td class="text-end">
                                             <button type="button" class="btn btn-success btn-sm rounded-pill px-4 btn-import-single"
                                                 data-dc-id="{{ $dc->id }}"
-                                                data-items="{{ json_encode($dc->items->map(fn($i) => [
-                                                    'product_id' => $i->product_id,
-                                                    'product_name' => $i->product->item_name ?? '',
-                                                    'item_code' => $i->product->item_code ?? '',
-                                                    'ppb' => $i->product->pieces_per_box ?? 1,
-                                                    'total_pieces' => $i->total_pieces,
-                                                    'price' => $i->price,
-                                                ])) }}">
+                                                data-items="{{ json_encode($dc->items->map(function($i) use ($dc) {
+                                                    $sItem = $i->saleItem ?? ($dc->sale ? $dc->sale->items->where('product_id', $i->product_id)->first() : null);
+                                                    $discAmt = $sItem->discount_amount ?? 0;
+                                                    $totPcs = $i->total_pieces > 0 ? $i->total_pieces : ($sItem->total_pieces ?? 1);
+                                                    return [
+                                                        'product_id' => $i->product_id,
+                                                        'product_name' => $i->product->item_name ?? '',
+                                                        'item_code' => $i->product->item_code ?? '',
+                                                        'ppb' => $i->product->pieces_per_box ?? 1,
+                                                        'total_pieces' => $i->total_pieces,
+                                                        'price' => $i->price > 0 ? $i->price : ($sItem->price ?? 0),
+                                                        'discount_amount' => $discAmt,
+                                                        'unit_discount' => $totPcs > 0 ? $discAmt / $totPcs : 0,
+                                                    ];
+                                                })) }}">
                                                 Import
                                             </button>
                                         </td>

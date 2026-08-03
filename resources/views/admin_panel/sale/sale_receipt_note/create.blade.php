@@ -1072,6 +1072,7 @@
                                                                 'ppb' => $i->product->pieces_per_box ?? 1,
                                                                 'total_pieces' => $i->total_pieces,
                                                                 'price' => $i->price,
+                                                                'discount_amount' => $i->discount_amount ?? 0,
                                                                 'unit_discount' => $i->total_pieces > 0 ? $i->discount_amount / $i->total_pieces : 0,
                                                                 'batch_no' => $i->batch_no,
                                                                 'uom_name' => $i->uom_name ?? ($i->product->unit->name ?? 'Piece'),
@@ -1141,15 +1142,19 @@
                                                 data-reference="{{ $dc->sale->reference ?? '' }}"
                                                 data-transport="{{ $dc->sale->transport_name ?? '' }}"
                                                 data-items="{{ json_encode(
-                                                    $dc->items->map(function ($i) {
+                                                    $dc->items->map(function ($i) use ($dc) {
+                                                        $sItem = $i->saleItem ?? ($dc->sale ? $dc->sale->items->where('product_id', $i->product_id)->first() : null);
+                                                        $discAmt = $sItem->discount_amount ?? 0;
+                                                        $totPcs = $i->total_pieces > 0 ? $i->total_pieces : ($sItem->total_pieces ?? 1);
                                                         return [
                                                             'product_id' => $i->product_id,
                                                             'product_name' => $i->product->item_name ?? '',
                                                             'item_code' => $i->product->item_code ?? '',
                                                             'ppb' => $i->product->pieces_per_box ?? 1,
                                                             'total_pieces' => $i->total_pieces,
-                                                            'price' => $i->price,
-                                                            'unit_discount' => $i->saleItem && $i->saleItem->total_pieces > 0 ? $i->saleItem->discount_amount / $i->saleItem->total_pieces : 0,
+                                                            'price' => $i->price > 0 ? $i->price : ($sItem->price ?? 0),
+                                                            'discount_amount' => $discAmt,
+                                                            'unit_discount' => $totPcs > 0 ? $discAmt / $totPcs : 0,
                                                             'batch_id' => $i->batch_id,
                                                             'lot_no' => $i->lot_number,
                                                             'warehouse_id' => $i->warehouse_id,
@@ -2478,7 +2483,11 @@
                     
                     // Override with imported values if they exist
                     if (item.price) $lastRow.find('.price').val(item.price);
-                    if (item.unit_discount) $lastRow.find('.item_disc').val(item.unit_discount);
+                    if (item.discount_amount !== undefined && parseFloat(item.discount_amount) > 0) {
+                        $lastRow.find('.item_disc').val(parseFloat(item.discount_amount));
+                    } else if (item.unit_discount) {
+                        $lastRow.find('.item_disc').val(item.unit_discount);
+                    }
                     if (item.lot_no || item.batch_no) $lastRow.find('.lot-no-display').val(item.lot_no || item.batch_no);
 
                     // Restore warehouse if available from import
