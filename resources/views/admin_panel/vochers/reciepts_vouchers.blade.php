@@ -331,6 +331,78 @@
             gap: 10px;
             margin-bottom: 16px;
         }
+
+        /* Custom Select2 Styling for Receipt Voucher */
+        .select2-container--default .select2-selection--single {
+            border: 1.5px solid #e2e8f0;
+            border-radius: 9px;
+            height: 42px;
+            padding: 5px 8px;
+            font-size: 0.9rem;
+            color: #1a2340;
+            background-color: #fff;
+            display: flex;
+            align-items: center;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .select2-container--default.select2-container--focus .select2-selection--single,
+        .select2-container--default.select2-container--open .select2-selection--single {
+            outline: none;
+            border-color: #4f6ef7;
+            box-shadow: 0 0 0 3px rgba(79, 110, 247, 0.12);
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #1a2340;
+            line-height: 28px;
+            padding-left: 4px;
+            font-weight: 500;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__placeholder {
+            color: #8897b0;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 40px;
+            right: 8px;
+        }
+
+        .select2-dropdown {
+            border: 1.5px solid #4f6ef7;
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(79, 110, 247, 0.15);
+            overflow: hidden;
+            z-index: 9999;
+        }
+
+        .select2-container--default .select2-search--dropdown {
+            padding: 8px;
+            background: #f8fafc;
+        }
+
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+            border: 1.5px solid #cbd5e1;
+            border-radius: 7px;
+            padding: 6px 12px;
+            outline: none;
+            font-size: 0.88rem;
+        }
+
+        .select2-container--default .select2-search--dropdown .select2-search__field:focus {
+            border-color: #4f6ef7;
+        }
+
+        .select2-container--default .select2-results__option {
+            padding: 8px 12px;
+            font-size: 0.88rem;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #4f6ef7;
+            color: #fff;
+        }
     </style>
 
     <div class="vch-create-page">
@@ -595,35 +667,65 @@
             }
         });
 
+        // Initialize Select2 on Party Type, Party ID, and Sale ID
+        $('#partyType').select2({
+            placeholder: '— Select Type —',
+            allowClear: true,
+            width: '100%'
+        });
+
+        $('#partyId').select2({
+            placeholder: '— Select Party / Account —',
+            allowClear: true,
+            width: '100%'
+        });
+
+        $('#saleId').select2({
+            placeholder: 'General Payment',
+            allowClear: true,
+            width: '100%'
+        });
+
         $('#partyType').on('change', function() {
             let type = $(this).val(),
                 $select = $('#partyId');
-            $select.html('<option disabled selected>Loading...</option>');
+            $select.html('<option disabled selected value="">Loading...</option>').trigger('change.select2');
             $('#tel').val('');
             $('#openingBal').val('');
+            $('#saleSection').hide();
+            $('#saleId').html('<option value="">General Payment</option>').trigger('change.select2');
+
             if (type === 'vendor' || type === 'customer' || type === 'walkin') {
                 $.get('{{ route('party.list') }}?type=' + type, function(data) {
-                    $select.empty().append('<option disabled selected>— Select Party —</option>');
+                    $select.empty().append('<option disabled selected value="">— Select Party —</option>');
                     data.forEach(item => $select.append(
                         `<option value="${item.id}" data-phone="${item.mobile||''}" data-bal="${item.closing_balance}">${item.text}</option>`
                     ));
+                    $select.trigger('change.select2');
+                    setTimeout(() => { $select.select2('open'); }, 100);
                 });
             } else if (type) {
                 $.get('{{ url('get-accounts-by-head') }}/' + type, function(data) {
-                    $select.empty().append('<option disabled selected>— Select Account —</option>');
+                    $select.empty().append('<option disabled selected value="">— Select Account —</option>');
                     data.forEach(acc => $select.append(
                         `<option value="${acc.id}" data-phone="${acc.account_code}" data-bal="${acc.opening_balance}">${acc.title}</option>`
                     ));
+                    $select.trigger('change.select2');
+                    setTimeout(() => { $select.select2('open'); }, 100);
                 });
+            } else {
+                $select.empty().append('<option disabled selected value="">— Select Party / Account —</option>').trigger('change.select2');
             }
         });
+
         $('#partyId').on('change', function() {
             let $opt = $(this).find(':selected');
-            $('#tel').val($opt.data('phone'));
-            $('#openingBal').val($opt.data('bal'));
+            $('#tel').val($opt.data('phone') || '');
+            $('#openingBal').val($opt.data('bal') !== undefined ? $opt.data('bal') : '');
             let id = $(this).val(),
                 type = $('#partyType').val();
-            if (type === 'customer' || type === 'walkin') {
+
+            if (id && (type === 'customer' || type === 'walkin')) {
                 $('#saleSection').fadeIn();
                 $.get('{{ route('customer.unpaid.sales') }}?customer_id=' + id, function(res) {
                     let $s = $('#saleId');
@@ -631,15 +733,19 @@
                     if (res.sales && res.sales.length > 0) res.sales.forEach(sale => $s.append(
                         `<option value="${sale.id}">Invoice #${sale.invoice_no} (Total: ${sale.total_net}, Due: ${sale.due_amount})</option>`
                     ));
+                    $s.trigger('change.select2');
                 });
             } else {
                 $('#saleSection').hide();
-                $('#saleId').html('<option value="">General Payment</option>');
+                $('#saleId').html('<option value="">General Payment</option>').trigger('change.select2');
             }
-            $.get('{{ route('salecustomers.show', ['id' => '__ID__']) }}'.replace('__ID__', id) + '?type=' + type,
-                function(d) {
-                    if (d.remarks && !$('#remarks').val()) $('#remarks').val(d.remarks);
-                });
+
+            if (id) {
+                $.get('{{ route('salecustomers.show', ['id' => '__ID__']) }}'.replace('__ID__', id) + '?type=' + type,
+                    function(d) {
+                        if (d && d.remarks && !$('#remarks').val()) $('#remarks').val(d.remarks);
+                    });
+            }
         });
         $(document).on('change', '.rowAccountHead', function() {
             let headId = $(this).val(),

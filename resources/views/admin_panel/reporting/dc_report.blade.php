@@ -334,6 +334,15 @@
                             @endforeach
                         </select>
                     </div>
+                    <div class="filter-group">
+                        <label>Vendor</label>
+                        <select id="filterVendor" class="select2-product" style="width:200px;">
+                            <option value="all">All Vendors</option>
+                            @foreach($vendors ?? App\Models\Vendor::orderBy('name')->get() as $v)
+                                <option value="{{ $v->id }}">{{ $v->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="filter-group" style="flex: 2; min-width:300px;">
                         <label>Product</label>
                         <select id="filterProduct" class="select2-product" style="width:100%;">
@@ -587,6 +596,7 @@
                     category_id: document.getElementById('filterCategory').value,
                     sub_category_id: document.getElementById('filterSubCategory').value,
                     product_id: document.getElementById('filterProduct').value,
+                    vendor_id: document.getElementById('filterVendor') ? document.getElementById('filterVendor').value : 'all',
                 });
 
                 document.getElementById('loader').style.display = '';

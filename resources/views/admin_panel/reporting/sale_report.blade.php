@@ -400,6 +400,15 @@
                     </div>
                 </div>
                 <div class="filter-row">
+                    <div class="filter-group" style="flex: 1; min-width: 150px;">
+                        <label>Vendor</label>
+                        <select id="filterVendor" class="select2-product">
+                            <option value="all">All Vendors</option>
+                            @foreach($vendors ?? App\Models\Vendor::orderBy('name')->get() as $v)
+                                <option value="{{ $v->id }}">{{ $v->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
                     <div class="filter-group" style="flex: 1; min-width: 110px; max-width: 150px;">
                         <label>Start Date</label>
                         <input type="date" id="start_date">
@@ -731,6 +740,7 @@
                 const sub = document.getElementById('filterSubCategory').value;
                 const brand = document.getElementById('filterBrand').value;
                 const product = document.getElementById('filterProduct').value;
+                const vendor = document.getElementById('filterVendor') ? document.getElementById('filterVendor').value : 'all';
 
                 document.getElementById('loader').style.display = '';
                 document.getElementById('tableWrap').style.display = 'none';
@@ -745,7 +755,8 @@
                     category_id: cat,
                     sub_category_id: sub,
                     brand_id: brand,
-                    product_id: product
+                    product_id: product,
+                    vendor_id: vendor
                 });
 
                 fetch(`{{ route('report.sale.fetch') }}?${params}`, {

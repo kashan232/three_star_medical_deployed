@@ -326,6 +326,78 @@
             gap: 10px;
             margin-bottom: 16px;
         }
+
+        /* Custom Select2 Styling for Payment Voucher */
+        .select2-container--default .select2-selection--single {
+            border: 1.5px solid #e2e8f0;
+            border-radius: 9px;
+            height: 42px;
+            padding: 5px 8px;
+            font-size: 0.9rem;
+            color: #1a2340;
+            background-color: #fff;
+            display: flex;
+            align-items: center;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .select2-container--default.select2-container--focus .select2-selection--single,
+        .select2-container--default.select2-container--open .select2-selection--single {
+            outline: none;
+            border-color: #18b870;
+            box-shadow: 0 0 0 3px rgba(24, 184, 112, 0.12);
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #1a2340;
+            line-height: 28px;
+            padding-left: 4px;
+            font-weight: 500;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__placeholder {
+            color: #8897b0;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 40px;
+            right: 8px;
+        }
+
+        .select2-dropdown {
+            border: 1.5px solid #18b870;
+            border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(24, 184, 112, 0.15);
+            overflow: hidden;
+            z-index: 9999;
+        }
+
+        .select2-container--default .select2-search--dropdown {
+            padding: 8px;
+            background: #f8fafc;
+        }
+
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+            border: 1.5px solid #cbd5e1;
+            border-radius: 7px;
+            padding: 6px 12px;
+            outline: none;
+            font-size: 0.88rem;
+        }
+
+        .select2-container--default .select2-search--dropdown .select2-search__field:focus {
+            border-color: #18b870;
+        }
+
+        .select2-container--default .select2-results__option {
+            padding: 8px 12px;
+            font-size: 0.88rem;
+        }
+
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #18b870;
+            color: #fff;
+        }
     </style>
 
     <div class="vch-create-page">
@@ -556,46 +628,59 @@
             }
         });
 
+        // Initialize Select2 on header & table row selects
+        $('#payFromHead, #payFromAccount').select2({ width: '100%' });
+        $('.rowType, .rowParty').select2({ width: '100%' });
+
         $('#payFromHead').on('change', function() {
             let headId = $(this).val(),
                 $acc = $('#payFromAccount');
-            $acc.html('<option disabled selected>Loading...</option>');
+            $acc.html('<option disabled selected value="">Loading...</option>').trigger('change.select2');
             $('#accountBalanceInfo').slideUp();
             if (headId) {
                 $.get('{{ url('get-accounts-by-head') }}/' + headId, function(data) {
-                    $acc.empty().append('<option disabled selected>— Select Account —</option>');
+                    $acc.empty().append('<option disabled selected value="">— Select Account —</option>');
                     data.forEach(acc => $acc.append(`<option value="${acc.id}" data-balance="${acc.opening_balance}">${acc.title}</option>`));
+                    $acc.trigger('change.select2');
+                    setTimeout(() => { $acc.select2('open'); }, 100);
                 });
             } else {
-                $acc.empty().append('<option disabled selected>— Select Account —</option>');
+                $acc.empty().append('<option disabled selected value="">— Select Account —</option>').trigger('change.select2');
             }
         });
 
         $('#payFromAccount').on('change', function() {
             let balance = $(this).find(':selected').data('balance');
-            if (balance !== undefined && balance !== null) {
+            if (balance !== undefined && balance !== null && $(this).val() !== '') {
                 $('#accountBalanceAmount').text(parseFloat(balance).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
                 $('#accountBalanceInfo').slideDown();
             } else {
                 $('#accountBalanceInfo').slideUp();
             }
         });
+
         $(document).on('change', '.rowType', function() {
             let type = $(this).val(),
                 $row = $(this).closest('tr'),
                 $sel = $row.find('.rowParty');
-            $sel.html('<option disabled selected>Loading...</option>');
+            $sel.html('<option disabled selected value="">Loading...</option>').trigger('change.select2');
             $row.find('.row-balance-display').hide();
             if (type === 'vendor' || type === 'customer' || type === 'walkin') {
                 $.get('{{ route('party.list') }}?type=' + type, function(data) {
-                    $sel.empty().append('<option disabled selected>Select</option>');
+                    $sel.empty().append('<option disabled selected value="">— Select Party —</option>');
                     data.forEach(item => $sel.append(`<option value="${item.id}" data-bal="${item.closing_balance}">${item.text}</option>`));
+                    $sel.trigger('change.select2');
+                    setTimeout(() => { $sel.select2('open'); }, 100);
                 });
             } else if (type) {
                 $.get('{{ url('get-accounts-by-head') }}/' + type, function(data) {
-                    $sel.empty().append('<option disabled selected>Select</option>');
+                    $sel.empty().append('<option disabled selected value="">— Select Account —</option>');
                     data.forEach(acc => $sel.append(`<option value="${acc.id}" data-bal="${acc.opening_balance}">${acc.title}</option>`));
+                    $sel.trigger('change.select2');
+                    setTimeout(() => { $sel.select2('open'); }, 100);
                 });
+            } else {
+                $sel.empty().append('<option disabled selected value="">— Select Party / Account —</option>').trigger('change.select2');
             }
         });
 
@@ -699,7 +784,9 @@
             return $row;
         }
         $('#addNewRow').on('click', function() {
-            $('#voucherTable tbody').append(newPayRow());
+            let $row = newPayRow();
+            $('#voucherTable tbody').append($row);
+            $row.find('.rowType, .rowParty').select2({ width: '100%' });
         });
         $(document).on('click', '.removeRow', function() {
             if ($('#voucherTable tbody tr').length > 1) {

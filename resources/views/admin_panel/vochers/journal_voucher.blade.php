@@ -274,6 +274,9 @@
     <script>
         const accountOptionsHtml = @json($accountOptionsHtml);
 
+        $(document).ready(function() {
+            $('.account-select').select2({ width: '100%' });
+        });
 
         let rowIndex = 2;
 
@@ -314,7 +317,7 @@
         $(document).on('input', '.debit-input, .credit-input', recalculate);
 
         $('#addRow').on('click', function() {
-            const newRow = `
+            const newRowHtml = `
         <tr class="journal-row">
             <td>
                 <select name="rows[${rowIndex}][account_id]" class="form-select account-select" required>
@@ -327,7 +330,9 @@
             <td><input type="number" name="rows[${rowIndex}][credit]" class="form-control text-end credit-input" value="0" step="0.01" min="0"></td>
             <td class="text-center"><button type="button" class="btn btn-sm btn-outline-danger remove-row"><i class="bi bi-trash"></i></button></td>
         </tr>`;
-            $('#journalBody').append(newRow);
+            const $newRow = $(newRowHtml);
+            $('#journalBody').append($newRow);
+            $newRow.find('.account-select').select2({ width: '100%' });
             rowIndex++;
             recalculate();
         });
