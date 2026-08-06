@@ -1632,21 +1632,8 @@ class SaleController extends Controller
             }
 
             if ($type === 'out') {
-                // Check if batch deduction was already processed for this sale item by ProductBatchController
-                $batchDeducted = DB::table('sale_item_batches')
-                    ->where('sale_item_id', $item->id)
-                    ->exists();
-
-                if (! $batchDeducted) {
-                    // Validate available stock for this specific UOM
-                    $available = StockService::balance($productId, $uomId, $warehouseId);
-                    if ($available < $qtyPieces) {
-                        throw \Illuminate\Validation\ValidationException::withMessages([
-                            'error' => 'Insufficient stock for '.($item->product->item_name ?? 'product').'. Available: '.$available.' pcs for this packing.'
-                        ]);
-                    }
-                    StockService::debit($productId, $uomId, $warehouseId, $branchId, $qtyPieces);
-                }
+                // Deduct main warehouse inventory via StockService
+                StockService::debit($productId, $uomId, $warehouseId, $branchId, $qtyPieces);
 
                 // Movement log
                 DB::table('stock_movements')->insert([

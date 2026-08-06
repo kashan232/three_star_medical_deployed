@@ -39,17 +39,17 @@
 
         .payroll-card {
             background: #ffffff;
-            border: 1px solid #d1d5db;
-            border-radius: 4px;
-            padding: 12px;
-            transition: all 0.2s ease-in-out;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            transition: all 0.25s ease-in-out;
             position: relative;
             overflow: hidden;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-            min-height: 280px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+            min-height: 240px;
         }
 
         .payroll-card::before {
@@ -57,31 +57,27 @@
             position: absolute;
             top: 0;
             left: 0;
-            width: 4px;
+            width: 5px;
             height: 100%;
             background: #4b5563;
-            /* Default gray for unknown */
         }
 
         .payroll-card.monthly::before {
             background: #2563eb;
         }
 
-        /* Solid Blue */
         .payroll-card.daily::before {
             background: #059669;
         }
 
-        /* Solid Green */
         .payroll-card.commission::before {
             background: #d97706;
         }
 
-        /* Solid Orange */
-
         .payroll-card:hover {
-            border-color: #9ca3af;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            border-color: #cbd5e1;
+            box-shadow: 0 8px 16px -4px rgba(0, 0, 0, 0.08);
+            transform: translateY(-2px);
         }
 
         .payroll-type-badge {
@@ -285,32 +281,26 @@
             --modern-border: #cbd5e1;
         }
 
-        #payrollGrid {
+        #payrollGrid, .payroll-month-grid {
             display: grid;
-            grid-template-columns: repeat(6, 1fr);
-            gap: 15px;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
         }
 
         @media (max-width: 1400px) {
-            #payrollGrid {
-                grid-template-columns: repeat(4, 1fr);
-            }
-        }
-
-        @media (max-width: 992px) {
-            #payrollGrid {
+            #payrollGrid, .payroll-month-grid {
                 grid-template-columns: repeat(3, 1fr);
             }
         }
 
-        @media (max-width: 768px) {
-            #payrollGrid {
+        @media (max-width: 992px) {
+            #payrollGrid, .payroll-month-grid {
                 grid-template-columns: repeat(2, 1fr);
             }
         }
 
         @media (max-width: 576px) {
-            #payrollGrid {
+            #payrollGrid, .payroll-month-grid {
                 grid-template-columns: 1fr;
             }
         }
@@ -869,124 +859,181 @@
                     </a>
                 </div>
 
-                <!-- Payrolls Card -->
-                <div class="hr-card">
-                    <div class="hr-header">
-                        <div class="d-flex align-items-center gap-3 flex-wrap">
-                            <div class="search-box">
-                                <i class="fa fa-search"></i>
-                                <input type="search" id="payrollSearch" placeholder="Search by employee name...">
+                <!-- Payrolls Container (Grouped Month-Wise) -->
+                <div class="hr-card bg-transparent border-0 p-0 shadow-none">
+                    <!-- Filter Header Bar -->
+                    <div class="hr-header bg-white rounded-3 border p-3 mb-3 shadow-xs">
+                        <div class="d-flex align-items-center gap-3 flex-wrap justify-content-between w-100">
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <div class="search-box">
+                                    <i class="fa fa-search"></i>
+                                    <input type="search" id="payrollSearch" placeholder="Search by employee name...">
+                                </div>
+
+                                <!-- Month Filter Dropdown -->
+                                <div class="d-flex align-items-center gap-2 bg-light p-1 px-2 rounded border">
+                                    <label for="monthFilterSelect" class="form-label mb-0 small fw-bold text-muted text-nowrap" style="font-size:0.75rem;"><i class="fa fa-calendar-alt text-primary me-1"></i> Month Filter:</label>
+                                    <select id="monthFilterSelect" class="form-select form-select-sm fw-bold border-0 bg-transparent" style="min-width: 170px; font-size:0.8rem; cursor:pointer;">
+                                        <option value="">All Months (Grouped)</option>
+                                        @if(isset($availableMonths) && count($availableMonths) > 0)
+                                            @foreach($availableMonths as $m)
+                                                @php
+                                                    $formattedM = (strlen($m) === 7 && str_contains($m, '-')) ? \Carbon\Carbon::parse($m.'-01')->format('F Y') : $m;
+                                                @endphp
+                                                <option value="{{ $m }}" {{ ($selectedMonth ?? '') == $m ? 'selected' : '' }}>📅 {{ $formattedM }} ({{ $m }})</option>
+                                            @endforeach
+                                        @endif
+                                    </select>
+                                </div>
+
+                                <div class="btn-group">
+                                    <button class="btn btn-outline-secondary btn-sm active" data-status="all">All</button>
+                                    <button class="btn btn-outline-warning btn-sm" data-status="generated">Generated</button>
+                                    <button class="btn btn-outline-info btn-sm" data-status="reviewed">Reviewed</button>
+                                    <button class="btn btn-outline-success btn-sm" data-status="paid">Paid</button>
+                                </div>
                             </div>
-                            <div class="btn-group">
-                                <button class="btn btn-outline-secondary btn-sm active" data-status="all">All</button>
-                                <button class="btn btn-outline-warning btn-sm" data-status="generated">Generated</button>
-                                <button class="btn btn-outline-info btn-sm" data-status="reviewed">Reviewed</button>
-                                <button class="btn btn-outline-success btn-sm" data-status="paid">Paid</button>
-                            </div>
+                            <span class="text-muted small fw-bold" id="payrollCount">{{ $payrolls->total() }} total payroll records</span>
                         </div>
-                        <span class="text-muted small" id="payrollCount">{{ $payrolls->total() }} payrolls</span>
                     </div>
 
-                    <div class="hr-grid" id="payrollGrid">
-                        @forelse($payrolls as $payroll)
-                            <div class="payroll-card {{ $payroll->payroll_type }}" data-id="{{ $payroll->id }}"
-                                data-name="{{ strtolower($payroll->employee->full_name ?? '') }}"
-                                data-status="{{ $payroll->status }}" data-type="{{ $payroll->payroll_type }}">
+                    <!-- Month-Wise Sections -->
+                    <div id="payrollMonthContainer" class="vstack gap-4">
+                        @php
+                            $groupedPayrolls = $payrolls->getCollection()->groupBy(function($item) {
+                                if (strlen($item->month) === 7 && str_contains($item->month, '-')) {
+                                    return \Carbon\Carbon::parse($item->month.'-01')->format('F Y');
+                                }
+                                return $item->month;
+                            });
+                        @endphp
 
-                                <!-- Header: Avatar + Simple Text -->
-                                <div class="d-flex align-items-start gap-2 mb-2">
-                                    <div class="hr-avatar rounded shrink-0"
-                                        style="width: 32px; height: 32px; min-width: 32px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 600; font-size: 0.8rem; background: {{ $payroll->payroll_type === 'monthly' ? '#2563eb' : ($payroll->payroll_type === 'commission' ? '#d97706' : '#059669') }};">
-                                        {{ strtoupper(substr($payroll->employee->first_name ?? 'U', 0, 1) . substr($payroll->employee->last_name ?? 'N', 0, 1)) }}
+                        @forelse($groupedPayrolls as $monthLabel => $monthItems)
+                            <div class="card border-0 shadow-sm rounded-3 overflow-hidden month-section-card mb-4" data-month-label="{{ strtolower($monthLabel) }}">
+                                <!-- Month Header Banner -->
+                                <div class="card-header bg-white border-bottom p-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                    <div class="d-flex align-items-center gap-3">
+                                        <div class="rounded-circle p-2 text-white shadow-xs d-flex align-items-center justify-content-center" style="width: 40px; height: 40px; background: linear-gradient(135deg, #2563eb, #1d4ed8);">
+                                            <i class="fa fa-calendar-check fs-6"></i>
+                                        </div>
+                                        <div>
+                                            <h5 class="mb-0 fw-bold text-dark" style="font-size:1.1rem;">{{ $monthLabel }} Payroll</h5>
+                                            <span class="text-muted small fw-semibold"><i class="fa fa-users me-1 text-primary"></i>{{ count($monthItems) }} Employees</span>
+                                        </div>
                                     </div>
-                                    <div class="flex-grow-1 overflow-hidden" style="line-height: 1.2;">
-                                        <h6 class="mb-0 text-truncate font-weight-bold"
-                                            style="font-size: 0.85rem; color: #1e293b;">
-                                            {{ $payroll->employee->full_name ?? 'Unknown' }}
-                                        </h6>
-                                        <div class="text-truncate text-muted" style="font-size: 0.7rem;">
-                                            {{ $payroll->employee->designation->name ?? 'N/A' }}
+
+                                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                                        <div class="bg-light border px-3 py-1 rounded text-end">
+                                            <span class="text-muted d-block font-weight-bold" style="font-size: 0.65rem; letter-spacing:0.05em;">TOTAL NET PAYABLE</span>
+                                            <strong class="text-success fs-6">Rs. {{ number_format($monthItems->sum('net_salary'), 0) }}</strong>
+                                        </div>
+
+                                        <div class="hstack gap-1 border-start ps-3 d-none d-md-flex">
+                                            <span class="badge bg-warning-subtle text-warning border border-warning-subtle px-2 py-1">Draft: {{ $monthItems->where('status', 'generated')->count() }}</span>
+                                            <span class="badge bg-info-subtle text-info border border-info-subtle px-2 py-1">Reviewed: {{ $monthItems->where('status', 'reviewed')->count() }}</span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">Paid: {{ $monthItems->where('status', 'paid')->count() }}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <!-- Middle: Money & Month -->
-                                <div class="bg-light rounded p-2 mb-2 border">
-                                    <div class="d-flex justify-content-between align-items-center mb-1">
-                                        <span class="text-uppercase text-muted font-weight-bold"
-                                            style="font-size: 0.65rem; letter-spacing: 0.3px;">Net Payable</span>
-                                        <span class="text-muted font-weight-bold"
-                                            style="font-size: 0.65rem;">{{ $payroll->month }}</span>
+                                <!-- Cards Grid for this Month -->
+                                <div class="card-body p-3 bg-light">
+                                    <div class="payroll-month-grid">
+                                        @foreach($monthItems as $payroll)
+                                            <div class="payroll-card {{ $payroll->payroll_type }}" data-id="{{ $payroll->id }}"
+                                                data-name="{{ strtolower($payroll->employee->full_name ?? '') }}"
+                                                data-status="{{ $payroll->status }}" data-type="{{ $payroll->payroll_type }}">
+
+                                                <!-- Header: Avatar + Employee Info -->
+                                                <div class="d-flex align-items-center gap-2 mb-3">
+                                                    <div class="hr-avatar rounded-circle shrink-0 shadow-xs"
+                                                        style="width: 38px; height: 38px; min-width: 38px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 0.85rem; background: {{ $payroll->payroll_type === 'monthly' ? 'linear-gradient(135deg, #2563eb, #1d4ed8)' : ($payroll->payroll_type === 'commission' ? 'linear-gradient(135deg, #d97706, #b45309)' : 'linear-gradient(135deg, #059669, #047857)') }};">
+                                                        {{ strtoupper(substr($payroll->employee->first_name ?? 'U', 0, 1) . substr($payroll->employee->last_name ?? 'N', 0, 1)) }}
+                                                    </div>
+                                                    <div class="flex-grow-1 overflow-hidden">
+                                                        <h6 class="mb-0 text-truncate font-weight-bold"
+                                                            style="font-size: 0.9rem; color: #0f172a;" title="{{ $payroll->employee->full_name ?? '' }}">
+                                                            {{ $payroll->employee->full_name ?? 'Unknown' }}
+                                                        </h6>
+                                                        <div class="text-truncate text-muted font-weight-bold" style="font-size: 0.72rem;">
+                                                            {{ $payroll->employee->designation->name ?? 'N/A' }}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Middle: Salary Details & Badges -->
+                                                <div class="bg-white rounded-3 p-2.5 mb-3 border">
+                                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                                        <span class="text-uppercase text-muted font-weight-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">Net Payable</span>
+                                                        <span class="badge bg-light text-dark border font-weight-bold" style="font-size: 0.68rem;">{{ (strlen($payroll->month) === 7 && str_contains($payroll->month, '-')) ? \Carbon\Carbon::parse($payroll->month.'-01')->format('M Y') : $payroll->month }}</span>
+                                                    </div>
+                                                    <div class="font-weight-bold text-dark my-1" style="font-size: 1.25rem; line-height: 1.2;">
+                                                        Rs. {{ number_format($payroll->net_salary, 2) }}
+                                                    </div>
+                                                    @if ($payroll->payroll_type === 'monthly' && $payroll->commission > 0)
+                                                        <div class="text-success font-weight-bold mb-1" style="font-size: 0.72rem;">
+                                                            + Rs. {{ number_format($payroll->commission, 2) }} Comm
+                                                        </div>
+                                                    @endif
+                                                    <div class="d-flex align-items-center gap-2 mt-2 pt-2 border-top">
+                                                        <span class="payroll-type-badge {{ $payroll->payroll_type }}" style="font-size: 0.62rem; padding: 2px 6px;">{{ ucfirst($payroll->payroll_type) }}</span>
+                                                        <span class="status-badge {{ $payroll->status }}" style="font-size: 0.62rem; padding: 2px 6px;">{{ ucfirst($payroll->status) }}</span>
+                                                    </div>
+                                                </div>
+
+                                                <!-- Clean Action Buttons Row -->
+                                                <div class="d-flex align-items-center gap-1.5 mt-auto pt-2 border-top payroll-actions">
+                                                    @can('hr.payroll.view')
+                                                        <button class="btn btn-sm btn-light border view-details-btn flex-grow-1" title="View Details" data-id="{{ $payroll->id }}" style="font-size: 0.75rem; font-weight:600; padding: 4px 8px;">
+                                                            <i class="fa fa-eye text-secondary me-1"></i>View
+                                                        </button>
+                                                    @endcan
+
+                                                    @if ($payroll->canEdit() && auth()->user()->can('hr.payroll.edit'))
+                                                        <button class="btn btn-sm btn-outline-primary edit-payroll-btn px-2" title="Edit Payroll" data-id="{{ $payroll->id }}" style="font-size: 0.75rem; padding: 4px 8px;">
+                                                            <i class="fa fa-edit"></i>
+                                                        </button>
+                                                    @endif
+
+                                                    @if ($payroll->canMarkReviewed() && auth()->user()->can('hr.payroll.edit'))
+                                                        <button class="btn btn-sm btn-info text-white mark-reviewed-btn px-2" title="Mark Reviewed" data-id="{{ $payroll->id }}" style="font-size: 0.75rem; padding: 4px 8px;">
+                                                            <i class="fa fa-check"></i>
+                                                        </button>
+                                                    @endif
+
+                                                    @if ($payroll->canMarkPaid() && auth()->user()->can('hr.payroll.edit'))
+                                                        <button class="btn btn-sm btn-success mark-paid-btn px-2.5 fw-bold" title="Process Payment"
+                                                            data-id="{{ $payroll->id }}"
+                                                            data-name="{{ $payroll->employee->full_name }}"
+                                                            data-month="{{ \Carbon\Carbon::parse($payroll->month)->format('F Y') }}"
+                                                            data-net="{{ number_format($payroll->net_salary, 2) }}"
+                                                            data-base="{{ number_format($payroll->basic_salary + $payroll->allowances + $payroll->commission, 2) }}"
+                                                            style="font-size: 0.75rem; padding: 4px 10px;">
+                                                            <i class="fa fa-check-double me-1"></i>Pay
+                                                        </button>
+                                                    @endif
+
+                                                    @if ($payroll->status !== 'paid' && auth()->user()->can('hr.payroll.delete'))
+                                                        <button class="btn btn-sm btn-outline-danger delete-btn px-2" title="Delete Payroll" data-id="{{ $payroll->id }}" style="font-size: 0.75rem; padding: 4px 8px;">
+                                                            <i class="fa fa-trash"></i>
+                                                        </button>
+                                                    @endif
+                                                </div>
+                                            </div>
+                                        @endforeach
                                     </div>
-                                    <div class="font-weight-bold"
-                                        style="font-size: 1.2rem; color: #0f172a; line-height: 1;">
-                                        Rs. {{ number_format($payroll->net_salary, 2) }}
-                                    </div>
-                                    @if ($payroll->payroll_type === 'monthly' && $payroll->commission > 0)
-                                        <div class="text-success font-weight-bold mt-1" style="font-size: 0.70rem; line-height: 1;">
-                                            + Rs. {{ number_format($payroll->commission, 2) }} Comm
-                                        </div>
-                                    @endif
-                                    <div class="d-flex justify-content-between align-items-center mt-2">
-                                        <span class="payroll-type-badge {{ $payroll->payroll_type }}"
-                                            style="font-size: 0.6rem; padding: 1px 4px;">{{ ucfirst($payroll->payroll_type) }}</span>
-                                        <span class="status-badge {{ $payroll->status }}"
-                                            style="font-size: 0.6rem; padding: 1px 4px;">{{ ucfirst($payroll->status) }}</span>
-                                    </div>
-                                </div>
-
-                                <!-- Actions -->
-                                <div class="mt-auto border-top pt-2 payroll-actions mb-0">
-                                    @can('hr.payroll.view')
-                                        <button class="btn btn-outline-secondary view-details-btn" title="Details"
-                                            data-id="{{ $payroll->id }}">
-                                            <i class="fa fa-eye"></i> View
-                                        </button>
-                                    @endcan
-
-                                    @if ($payroll->canEdit() && auth()->user()->can('hr.payroll.edit'))
-                                        <button class="btn btn-outline-primary edit-payroll-btn" title="Edit"
-                                            data-id="{{ $payroll->id }}">
-                                            <i class="fa fa-edit"></i> Edit
-                                        </button>
-                                    @endif
-
-                                    @if ($payroll->canMarkReviewed() && auth()->user()->can('hr.payroll.edit'))
-                                        <button class="btn btn-outline-info mark-reviewed-btn" title="Mark Reviewed"
-                                            data-id="{{ $payroll->id }}">
-                                            <i class="fa fa-check"></i> Review
-                                        </button>
-                                    @endif
-
-                                    @if ($payroll->canMarkPaid() && auth()->user()->can('hr.payroll.edit'))
-                                        <button class="btn btn-outline-success mark-paid-btn" title="Mark Paid"
-                                            data-id="{{ $payroll->id }}"
-                                            data-name="{{ $payroll->employee->full_name }}"
-                                            data-month="{{ \Carbon\Carbon::parse($payroll->month)->format('F Y') }}"
-                                            data-net="{{ number_format($payroll->net_salary, 2) }}"
-                                            data-base="{{ number_format($payroll->basic_salary + $payroll->allowances + $payroll->commission, 2) }}">
-                                            <i class="fa fa-check-double"></i> Pay
-                                        </button>
-                                    @endif
-
-                                    @if ($payroll->status !== 'paid' && auth()->user()->can('hr.payroll.delete'))
-                                        <button class="btn btn-outline-danger delete-btn" title="Delete"
-                                            data-id="{{ $payroll->id }}">
-                                            <i class="fa fa-trash"></i>
-                                        </button>
-                                    @endif
                                 </div>
                             </div>
                         @empty
-                            <div class="empty-state" style="grid-column: 1/-1;">
-                                <i class="fa fa-money-bill-wave"></i>
-                                <p>No payrolls generated yet.</p>
-                                <p class="text-muted small">Click "Generate Payroll" to create payroll entries.</p>
+                            <div class="empty-state bg-white rounded-3 p-5 text-center shadow-xs">
+                                <i class="fa fa-money-bill-wave fs-1 text-muted mb-3"></i>
+                                <h5 class="fw-bold text-dark">No Payroll Records Found</h5>
+                                <p class="text-muted small mb-0">Click "Generate Payroll" above to generate payroll entries.</p>
                             </div>
                         @endforelse
                     </div>
 
-                    <div class="px-4 py-3 border-top">
+                    <div class="px-4 py-3 border-top mt-3 bg-white rounded-3 border">
                         {{ $payrolls->links() }}
                     </div>
                 </div>
@@ -2380,6 +2427,18 @@
                         });
                     }
                 });
+            });
+
+            // Month Filter Change Handler
+            $(document).on('change', '#monthFilterSelect', function() {
+                let selectedMonth = $(this).val();
+                let currentUrl = new URL(window.location.href);
+                if (selectedMonth) {
+                    currentUrl.searchParams.set('month', selectedMonth);
+                } else {
+                    currentUrl.searchParams.delete('month');
+                }
+                window.location.href = currentUrl.toString();
             });
 
             // Generic AJAX form submission - handles JSON responses for generate modals

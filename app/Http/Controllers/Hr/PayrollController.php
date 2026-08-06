@@ -35,6 +35,9 @@ class PayrollController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        $availableMonths = Payroll::select('month')->distinct()->orderBy('month', 'desc')->pluck('month');
+        $selectedMonth = $request->input('month', '');
+
         $query = Payroll::with(['employee.designation', 'employee.department']);
 
         // Apply filters
@@ -54,12 +57,12 @@ class PayrollController extends Controller
             $query->where('employee_id', $request->employee_id);
         }
 
-        $payrolls = $query->latest()->paginate(12);
+        $payrolls = $query->latest()->paginate(50);
         $employees = Employee::all();
         
         $activeTab = $request->type ?? 'all';
 
-        return view('hr.payroll.index', compact('payrolls', 'employees'))->with('activeTab', $activeTab);
+        return view('hr.payroll.index', compact('payrolls', 'employees', 'availableMonths', 'selectedMonth'))->with('activeTab', $activeTab);
     }
 
     /**
@@ -70,6 +73,9 @@ class PayrollController extends Controller
         if (! auth()->user()->can('hr.payroll.view')) {
             abort(403, 'Unauthorized action.');
         }
+
+        $availableMonths = Payroll::monthly()->select('month')->distinct()->orderBy('month', 'desc')->pluck('month');
+        $selectedMonth = $request->input('month', '');
 
         $query = Payroll::with(['employee.designation', 'employee.department'])
             ->monthly();
@@ -82,14 +88,14 @@ class PayrollController extends Controller
             $query->where('month', $request->month);
         }
 
-        $payrolls = $query->latest()->paginate(12);
+        $payrolls = $query->latest()->paginate(50);
 
         // Show employees eligible for monthly payroll using scope
         $employees = Employee::forMonthlyPayroll()
             ->with('activeSalaryStructure', 'designation', 'department')
             ->get();
 
-        return view('hr.payroll.index', compact('payrolls', 'employees'))->with('activeTab', 'monthly');
+        return view('hr.payroll.index', compact('payrolls', 'employees', 'availableMonths', 'selectedMonth'))->with('activeTab', 'monthly');
     }
 
     /**
@@ -100,6 +106,9 @@ class PayrollController extends Controller
         if (! auth()->user()->can('hr.payroll.view')) {
             abort(403, 'Unauthorized action.');
         }
+
+        $availableMonths = Payroll::daily()->select('month')->distinct()->orderBy('month', 'desc')->pluck('month');
+        $selectedMonth = $request->input('month', '');
 
         $query = Payroll::with(['employee.designation', 'employee.department'])
             ->daily();
@@ -112,14 +121,14 @@ class PayrollController extends Controller
             $query->where('month', $request->month);
         }
 
-        $payrolls = $query->latest()->paginate(12);
+        $payrolls = $query->latest()->paginate(50);
 
         // Show employees eligible for daily payroll using scope
         $employees = Employee::forDailyPayroll()
             ->with('activeSalaryStructure', 'designation', 'department')
             ->get();
 
-        return view('hr.payroll.index', compact('payrolls', 'employees'))->with('activeTab', 'daily');
+        return view('hr.payroll.index', compact('payrolls', 'employees', 'availableMonths', 'selectedMonth'))->with('activeTab', 'daily');
     }
 
     /**
@@ -613,18 +622,18 @@ class PayrollController extends Controller
                 ? trim($request->month) 
                 : trim($request->date);
 
-            // Re-check for duplicate inside the transaction to prevent race conditions
+            // Re-check for existing payroll inside the transaction
             $existing = Payroll::where('employee_id', $employee->id)
                 ->where('month', $effectivePeriod)
                 ->where('payroll_type', $request->payroll_type)
-                ->lockForUpdate() // Lock existing record check if it exists
+                ->lockForUpdate()
                 ->first();
 
-            if ($existing) {
+            if ($existing && $existing->status === 'paid') {
                 DB::rollBack();
                 $typeLabel = ucfirst($request->payroll_type);
                 return response()->json([
-                    'error' => "⚠️ <b>Duplicate Entry Detect:</b> A {$typeLabel} payroll record (Ref ID: #{$existing->id}) already exists for <b>{$employee->full_name}</b> for the selected period (<b>{$effectivePeriod}</b>).<br><br>The system has blocked this request to prevent double payments.",
+                    'error' => "🔒 <b>Paid Payroll Protected:</b> A paid {$typeLabel} payroll record (Ref ID: #{$existing->id}) already exists for <b>{$employee->full_name}</b> for the period <b>{$effectivePeriod}</b>. Paid payrolls cannot be overwritten.",
                 ], 422);
             }
 
@@ -647,11 +656,20 @@ class PayrollController extends Controller
                 $payrollData['auto_generated'] = false; // Mark manual generation
             }
 
-            // Create payroll
-            $payroll = Payroll::create(array_merge(
-                ['employee_id' => $employee->id, 'auto_generated' => false],
-                \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'new_pending_deductions', 'auto_generated'])
-            ));
+            if ($existing) {
+                // Remove old details before re-saving fresh ones
+                $existing->details()->delete();
+                $existing->update(array_merge(
+                    ['auto_generated' => false],
+                    \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'new_pending_deductions', 'auto_generated'])
+                ));
+                $payroll = $existing;
+            } else {
+                $payroll = Payroll::create(array_merge(
+                    ['employee_id' => $employee->id, 'auto_generated' => false],
+                    \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'new_pending_deductions', 'auto_generated'])
+                ));
+            }
 
             // Save detailed breakdown
             $this->payrollService->savePayrollDetails(
@@ -789,12 +807,12 @@ class PayrollController extends Controller
             // The extra brace was here, it has been removed.
 
             $generated = 0;
+            $updated = 0;
             $skipped = 0;
             $errors = [];
 
             /** @var Employee $employee */
             foreach ($employees as $employee) {
-                // Skip if already exists
                 try {
                     $customAmount = $request->custom_amounts[$employee->id] ?? null;
                     
@@ -802,14 +820,18 @@ class PayrollController extends Controller
                         continue; // If a preview was loaded and this employee wasn't in the list
                     }
                     
-                    $exists = Payroll::where('employee_id', $employee->id)
+                    $existing = Payroll::where('employee_id', $employee->id)
                         ->where('month', trim($request->month))
                         ->where('payroll_type', 'monthly')
-                        ->exists();
+                        ->first();
 
-                    if ($exists) {
-                        $skipped++;
-                        continue;
+                    if ($existing) {
+                        if ($existing->status === 'paid') {
+                            $skipped++;
+                            continue;
+                        }
+                        // Delete old breakdown details before recalculating fresh
+                        $existing->details()->delete();
                     }
 
                     $payrollData = $this->payrollService->calculateMonthlyPayroll($employee, $request->month);
@@ -832,11 +854,21 @@ class PayrollController extends Controller
                         $payrollData['net_salary'] = max(0, $payrollData['gross_salary'] - $payrollData['deductions'] - $payrollData['attendance_deductions'] - $payrollData['manual_deductions']);
                     }
 
-                    // Create Payroll Record
-                    $payroll = Payroll::create(array_merge(
-                        ['employee_id' => $employee->id],
-                        \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'breakdown', 'attendance_breakdown'])
-                    ));
+                    if ($existing) {
+                        $existing->update(array_merge(
+                            ['auto_generated' => true],
+                            \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'breakdown', 'attendance_breakdown'])
+                        ));
+                        $payroll = $existing;
+                        $updated++;
+                    } else {
+                        // Create Payroll Record
+                        $payroll = Payroll::create(array_merge(
+                            ['employee_id' => $employee->id],
+                            \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'breakdown', 'attendance_breakdown'])
+                        ));
+                        $generated++;
+                    }
 
                     // Save Details
                     $this->payrollService->savePayrollDetails(
@@ -848,7 +880,6 @@ class PayrollController extends Controller
                     // Commit any commission updates for this employee
                     $this->payrollService->commitCommissionUpdates($employee->id);
 
-                    $generated++;
                 } catch (\Exception $e) {
                     $errors[] = $employee->full_name.': '.$e->getMessage();
                 }
@@ -856,8 +887,14 @@ class PayrollController extends Controller
 
             DB::commit();
 
+            $msgParts = [];
+            if ($generated > 0) $msgParts[] = "{$generated} new generated";
+            if ($updated > 0) $msgParts[] = "{$updated} updated/re-calculated";
+            $msg = implode(', ', $msgParts);
+            if (empty($msg)) $msg = "No payrolls modified";
+
             return response()->json([
-                'success' => "✅ Success! {$generated} monthly payroll records generated and saved. " . ($skipped > 0 ? "({$skipped} skipped as they already existed)" : ""),
+                'success' => "✅ Success! Monthly payroll processed: {$msg}. " . ($skipped > 0 ? "({$skipped} paid payrolls protected)" : ""),
                 'errors' => $errors,
                 'reload' => true,
             ]);
@@ -927,21 +964,24 @@ class PayrollController extends Controller
             }
 
             $generated = 0;
+            $updated = 0;
             $skipped = 0;
             $errors = [];
 
             /** @var Employee $employee */
             foreach ($employees as $employee) {
                 // Check if payroll already exists for this attendance date
-                $exists = Payroll::where('employee_id', $employee->id)
+                $existing = Payroll::where('employee_id', $employee->id)
                     ->where('payroll_type', 'daily')
                     ->where('month', $request->date)
-                    ->exists();
+                    ->first();
 
-                if ($exists) {
-                    $skipped++;
-
-                    continue;
+                if ($existing) {
+                    if ($existing->status === 'paid') {
+                        $skipped++;
+                        continue;
+                    }
+                    $existing->details()->delete();
                 }
 
                 // Get attendance for the date
@@ -958,10 +998,20 @@ class PayrollController extends Controller
                 try {
                     $payrollData = $this->payrollService->calculateDailyPayroll($employee, $attendance);
 
-                    $payroll = Payroll::create(array_merge(
-                        ['employee_id' => $employee->id],
-                        Arr::except($payrollData, ['allowance_details', 'deduction_details', 'new_pending_deductions'])
-                    ));
+                    if ($existing) {
+                        $existing->update(array_merge(
+                            ['auto_generated' => true],
+                            Arr::except($payrollData, ['allowance_details', 'deduction_details', 'new_pending_deductions'])
+                        ));
+                        $payroll = $existing;
+                        $updated++;
+                    } else {
+                        $payroll = Payroll::create(array_merge(
+                            ['employee_id' => $employee->id],
+                            Arr::except($payrollData, ['allowance_details', 'deduction_details', 'new_pending_deductions'])
+                        ));
+                        $generated++;
+                    }
 
                     $this->payrollService->savePayrollDetails(
                         $payroll,
@@ -974,7 +1024,6 @@ class PayrollController extends Controller
                         $payrollData['new_pending_deductions'] ?? 0
                     );
 
-                    $generated++;
                 } catch (\Exception $e) {
                     $errors[] = $employee->full_name.': '.$e->getMessage();
                 }
@@ -982,8 +1031,14 @@ class PayrollController extends Controller
 
             DB::commit();
 
+            $msgParts = [];
+            if ($generated > 0) $msgParts[] = "{$generated} new generated";
+            if ($updated > 0) $msgParts[] = "{$updated} updated/re-calculated";
+            $msg = implode(', ', $msgParts);
+            if (empty($msg)) $msg = "No daily payrolls modified";
+
             return response()->json([
-                'success' => "✅ Daily payroll successfully documented for {$generated} employees. " . ($skipped > 0 ? "({$skipped} already processed)" : ""),
+                'success' => "✅ Daily payroll processed: {$msg}. " . ($skipped > 0 ? "({$skipped} paid payrolls protected)" : ""),
                 'errors' => $errors,
                 'reload' => true,
             ]);

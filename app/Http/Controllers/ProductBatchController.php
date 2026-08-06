@@ -304,19 +304,6 @@ class ProductBatchController extends Controller
                     }
                     $batch->save();
 
-                    // Sync WarehouseStock for this batch's warehouse
-                    $whStock = \App\Models\WarehouseStock::where('warehouse_id', $batch->warehouse_id)
-                        ->where('product_id', $productId)
-                        ->first();
-                    if ($whStock) {
-                        $whStock->total_pieces = max(0, (float)$whStock->total_pieces - $deductQty);
-                        $ppb = $batch->product->pieces_per_box > 0 ? (float)$batch->product->pieces_per_box : 1;
-                        $boxes = intdiv((int)$whStock->total_pieces, (int)$ppb);
-                        $rem = (int)$whStock->total_pieces % (int)$ppb;
-                        $whStock->quantity = (float)($boxes . '.' . $rem);
-                        $whStock->save();
-                    }
-
                     $deductions[] = ['batch_id' => $batch->id, 'qty' => $deductQty, 'warehouse_id' => $batch->warehouse_id];
                     $remaining   -= $deductQty;
                 }
