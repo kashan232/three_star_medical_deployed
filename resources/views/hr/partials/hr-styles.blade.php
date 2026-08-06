@@ -446,6 +446,110 @@
         color: white;
     }
 
+    /* Employee Assignment Modal & Table Styles */
+    .assign-table-container {
+        border-radius: 12px;
+        border: 1px solid var(--hr-border);
+        overflow: hidden;
+        background: #ffffff;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    }
+
+    .assign-emp-table {
+        margin-bottom: 0;
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .assign-emp-table thead th {
+        background: #f1f5f9 !important;
+        color: #475569;
+        font-weight: 700;
+        font-size: 0.82rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 12px 16px;
+        border-bottom: 2px solid #e2e8f0;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+    }
+
+    .assign-emp-table tbody tr.employee-row {
+        cursor: pointer;
+        transition: all 0.15s ease-in-out;
+        border-bottom: 1px solid #f1f5f9;
+        position: relative;
+    }
+
+    .assign-emp-table tbody tr.employee-row:hover {
+        background-color: #f8fafc !important;
+    }
+
+    .assign-emp-table tbody tr.employee-row.selected-row {
+        background-color: #eff6ff !important;
+        border-left: 4px solid #3b82f6 !important;
+    }
+
+    .assign-emp-table tbody td {
+        padding: 12px 16px;
+        vertical-align: middle;
+        font-size: 0.9rem;
+    }
+
+    /* Custom Checkbox Styling to fix Bootstrap 4 positioning bug */
+    .custom-chk-wrapper {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .custom-chk-input {
+        width: 20px !important;
+        height: 20px !important;
+        cursor: pointer !important;
+        margin: 0 !important;
+        position: static !important;
+        accent-color: #3b82f6;
+        border-radius: 5px;
+    }
+
+    .emp-avatar-sm {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #3b82f6, #6366f1);
+        color: white;
+        font-weight: 700;
+        font-size: 0.85rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .badge-soft-info {
+        background-color: #e0f2fe !important;
+        color: #0369a1 !important;
+        font-weight: 600 !important;
+        padding: 5px 12px !important;
+        border-radius: 20px !important;
+        font-size: 0.78rem !important;
+    }
+
+    .badge-soft-secondary {
+        background-color: #f1f5f9 !important;
+        color: #475569 !important;
+        font-weight: 600 !important;
+        padding: 5px 12px !important;
+        border-radius: 20px !important;
+        font-size: 0.78rem !important;
+    }
+
     /* Empty State */
     .empty-state {
         text-align: center;

@@ -265,99 +265,150 @@
     <!-- Assign Modal -->
     <div class="modal fade" id="assignModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg">
-            <div class="modal-content">
-                <div class="modal-header gradient"
-                    style="background: linear-gradient(135deg, #0ea5e9, #3b82f6) !important;">
-                    <h5 class="modal-title text-white fw-bold">
-                        <i class="fa fa-users"></i>
-                        <span>Assign Employees to <span id="assignHolidayName"></span></span>
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header gradient py-3 px-4"
+                    style="background: linear-gradient(135deg, #0ea5e9, #2563eb) !important;">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="bg-white bg-opacity-25 rounded-3 p-2 text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                            <i class="fa fa-user-check fs-5"></i>
+                        </div>
+                        <div>
+                            <h5 class="modal-title text-white fw-bold mb-0">Assign Employees</h5>
+                            <small class="text-white-50 fs-7">Holiday: <span id="assignHolidayName" class="fw-bold text-white"></span></small>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
-                <!-- We do NOT use data-ajax-validate="true" here specifically if we want manual handling or just rely on generic, but let's use standard ajax handling if generic applies -->
                 <form id="assignForm" action="#" method="POST">
                     @csrf
-                    <div class="modal-body bg-light p-4">
-                        <div class="row mb-3 g-3">
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Search Employee</label>
-                                <input type="text" id="employeeSearch" class="form-control"
-                                    placeholder="Name, Email...">
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Department</label>
-                                <select id="filterDepartment" class="form-select">
-                                    <option value="">All Departments</option>
-                                    @foreach ($departments as $dept)
-                                        <option value="{{ strtolower($dept->name) }}">{{ $dept->name }}</option>
-                                    @endforeach
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label fw-bold">Designation</label>
-                                <select id="filterDesignation" class="form-select">
-                                    <option value="">All Designations</option>
-                                    @foreach ($designations as $desig)
-                                        <option value="{{ strtolower($desig->name) }}">{{ $desig->name }}</option>
-                                    @endforeach
-                                </select>
+                    <div class="modal-body p-4" style="background: #f8fafc;">
+                        <!-- Filter Bar -->
+                        <div class="card border-0 shadow-sm p-3 mb-3" style="border-radius: 12px; background: white;">
+                            <div class="row g-2 align-items-center">
+                                <div class="col-md-5">
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-light border-end-0 text-muted" style="border-radius: 8px 0 0 8px;">
+                                            <i class="fa fa-search"></i>
+                                        </span>
+                                        <input type="text" id="employeeSearch" class="form-control bg-light border-start-0 ps-0"
+                                            placeholder="Search by name, email..." style="border-radius: 0 8px 8px 0;">
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <select id="filterDepartment" class="form-select bg-light" style="border-radius: 8px;">
+                                        <option value="">All Departments</option>
+                                        @foreach ($departments as $dept)
+                                            <option value="{{ strtolower($dept->name) }}">{{ $dept->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <select id="filterDesignation" class="form-select bg-light" style="border-radius: 8px;">
+                                        <option value="">All Designations</option>
+                                        @foreach ($designations as $desig)
+                                            <option value="{{ strtolower($desig->name) }}">{{ $desig->name }}</option>
+                                        @endforeach
+                                    </select>
+                                </div>
                             </div>
                         </div>
 
-                        <div class="table-responsive bg-white rounded shadow-sm border"
-                            style="max-height: 400px; overflow-y: auto;">
-                            <table class="table table-hover align-middle mb-0" id="employeeTable">
-                                <thead class="table-light sticky-top">
+                        <!-- Selection Summary & Quick Actions -->
+                        <div class="d-flex justify-content-between align-items-center px-1 mb-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge px-3 py-2 fs-7 fw-bold" id="selectedCounterBadge" style="background: #e0f2fe; color: #0284c7; border-radius: 20px;">
+                                    <i class="fa fa-users me-1"></i> <span id="selectedCountText">0 Selected (Universal - All)</span>
+                                </span>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="button" class="btn btn-sm btn-light border text-secondary fw-semibold" id="btnSelectAllVisible" style="border-radius: 8px;">
+                                    <i class="fa fa-check-square me-1"></i> Select Visible
+                                </button>
+                                <button type="button" class="btn btn-sm btn-light border text-secondary fw-semibold" id="btnDeselectAll" style="border-radius: 8px;">
+                                    <i class="fa fa-square me-1"></i> Clear Selection
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Employee Table Container -->
+                        <div class="assign-table-container shadow-sm" style="max-height: 380px; overflow-y: auto;">
+                            <table class="assign-emp-table align-middle mb-0" id="employeeTable">
+                                <thead>
                                     <tr>
-                                        <th style="width: 50px;" class="text-center">
-                                            <input type="checkbox" id="selectAllEmployees" class="form-check-input">
+                                        <th style="width: 48px;" class="text-center">
+                                            <div class="custom-chk-wrapper">
+                                                <input type="checkbox" id="selectAllEmployees" class="custom-chk-input">
+                                            </div>
                                         </th>
-                                        <th>Employee Name</th>
-                                        <th>Email</th>
+                                        <th>Employee</th>
                                         <th>Department</th>
                                         <th>Designation</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach ($employees as $emp)
+                                        @php
+                                            $firstName = $emp->first_name ?? '';
+                                            $lastName = $emp->last_name ?? '';
+                                            $fullName = trim($firstName . ' ' . $lastName);
+                                            $initials = strtoupper(substr($firstName, 0, 1) . substr($lastName, 0, 1));
+                                            if (empty($initials)) {
+                                                $initials = strtoupper(substr($fullName, 0, 2));
+                                            }
+                                        @endphp
                                         <tr class="employee-row"
-                                            data-name="{{ strtolower($emp->first_name . ' ' . $emp->last_name) }}"
-                                            data-email="{{ strtolower($emp->email) }}"
+                                            data-name="{{ strtolower($fullName) }}"
+                                            data-email="{{ strtolower($emp->email ?? '') }}"
                                             data-department="{{ strtolower($emp->department->name ?? '') }}"
                                             data-designation="{{ strtolower($emp->designation->name ?? '') }}">
                                             <td class="text-center">
-                                                <input type="checkbox" name="employee_ids[]" value="{{ $emp->id }}"
-                                                    class="form-check-input emp-checkbox">
+                                                <div class="custom-chk-wrapper">
+                                                    <input type="checkbox" name="employee_ids[]" value="{{ $emp->id }}"
+                                                        class="custom-chk-input emp-checkbox">
+                                                </div>
                                             </td>
-                                            <td class="fw-bold">{{ $emp->first_name }} {{ $emp->last_name }}</td>
-                                            <td class="text-muted">{{ $emp->email }}</td>
-                                            <td><span
-                                                    class="badge bg-info text-dark rounded-pill">{{ $emp->department->name ?? 'N/A' }}</span>
+                                            <td>
+                                                <div class="d-flex align-items-center gap-3">
+                                                    <div class="emp-avatar-sm">{{ $initials }}</div>
+                                                    <div>
+                                                        <div class="fw-bold text-dark mb-0 fs-6">{{ $fullName }}</div>
+                                                        <div class="text-muted small fs-7">{{ $emp->email ?? 'No email' }}</div>
+                                                    </div>
+                                                </div>
                                             </td>
-                                            <td><span
-                                                    class="badge bg-secondary rounded-pill">{{ $emp->designation->name ?? 'N/A' }}</span>
+                                            <td>
+                                                <span class="badge-soft-info">{{ $emp->department->name ?? 'N/A' }}</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge-soft-secondary">{{ $emp->designation->name ?? 'N/A' }}</span>
                                             </td>
                                         </tr>
                                     @endforeach
                                     <tr id="noEmployeeRow" style="display: none;">
-                                        <td colspan="5" class="text-center text-muted py-4">No employees matching the
-                                            criteria</td>
+                                        <td colspan="4" class="text-center text-muted py-5">
+                                            <i class="fa fa-user-slash fs-2 d-block mb-2 text-secondary opacity-50"></i>
+                                            No employees match the selected filters
+                                        </td>
                                     </tr>
                                 </tbody>
                             </table>
                         </div>
-                        <div class="mt-2 text-muted small">
-                            <i class="fa fa-info-circle me-1"></i> Leave all unchecked to apply universally to all
-                            employees.
+
+                        <!-- Banner Info -->
+                        <div class="alert alert-light border shadow-sm mt-3 mb-0 d-flex align-items-center gap-2 p-2 px-3" style="border-radius: 10px;">
+                            <i class="fa fa-info-circle text-primary fs-5"></i>
+                            <span class="small text-muted mb-0">
+                                <strong>Note:</strong> Leave all unchecked to apply universally to <strong>all employees</strong>. Check specific employees to assign only to selected ones.
+                            </span>
                         </div>
                     </div>
-                    <div class="modal-footer-modern">
+                    <div class="modal-footer-modern bg-white">
                         <button type="button" class="btn btn-cancel" data-bs-dismiss="modal">
                             <i class="fa fa-times me-2"></i>Cancel
                         </button>
-                        <button type="submit" class="btn btn-save" id="saveAssignBtn"
-                            style="background: linear-gradient(135deg, #0ea5e9, #3b82f6);">
-                            <i class="fa fa-check"></i>
+                        <button type="submit" class="btn btn-save shadow-sm" id="saveAssignBtn"
+                            style="background: linear-gradient(135deg, #0ea5e9, #2563eb);">
+                            <i class="fa fa-check me-1"></i>
                             <span>Save Assignments</span>
                         </button>
                     </div>
@@ -457,19 +508,59 @@
             $('#employeeSearch').on('input', filterEmployees);
             $('#filterDepartment, #filterDesignation').on('change', filterEmployees);
 
-            $('#selectAllEmployees').change(function() {
-                var isChecked = $(this).prop('checked');
-                $('.employee-row:visible .emp-checkbox').prop('checked', isChecked);
+            // Row-level Click Selection Handler
+            $(document).on('click', '.employee-row', function(e) {
+                if ($(e.target).is('input[type="checkbox"]') || $(e.target).closest('.custom-chk-wrapper').length) {
+                    // Handled directly by checkbox change
+                    return;
+                }
+                var $chk = $(this).find('.emp-checkbox');
+                $chk.prop('checked', !$chk.prop('checked')).trigger('change');
             });
 
-            $('.emp-checkbox').change(function() {
+            $('#selectAllEmployees').change(function() {
+                var isChecked = $(this).prop('checked');
+                $('.employee-row:visible .emp-checkbox').prop('checked', isChecked).trigger('change');
+            });
+
+            $('#btnSelectAllVisible').click(function() {
+                $('.employee-row:visible .emp-checkbox').prop('checked', true).trigger('change');
+            });
+
+            $('#btnDeselectAll').click(function() {
+                $('.emp-checkbox').prop('checked', false).trigger('change');
+                $('#selectAllEmployees').prop('checked', false);
+            });
+
+            $(document).on('change', '.emp-checkbox', function() {
                 updateSelectAllCheckbox();
             });
 
             function updateSelectAllCheckbox() {
                 var visibleRows = $('.employee-row:visible').length;
                 var checkedVisibleRows = $('.employee-row:visible .emp-checkbox:checked').length;
+                var totalChecked = $('.emp-checkbox:checked').length;
 
+                // Sync Row Selected Class
+                $('.employee-row').each(function() {
+                    var isChecked = $(this).find('.emp-checkbox').prop('checked');
+                    if (isChecked) {
+                        $(this).addClass('selected-row');
+                    } else {
+                        $(this).removeClass('selected-row');
+                    }
+                });
+
+                // Update Counter Badge
+                if (totalChecked === 0) {
+                    $('#selectedCounterBadge').css({'background': '#e0f2fe', 'color': '#0284c7'});
+                    $('#selectedCountText').text('0 Selected (Universal - All Employees)');
+                } else {
+                    $('#selectedCounterBadge').css({'background': '#dbeafe', 'color': '#1e40af'});
+                    $('#selectedCountText').text(totalChecked + ' Employee(s) Selected');
+                }
+
+                // Update Select All Checkbox header state
                 if (visibleRows > 0 && visibleRows === checkedVisibleRows) {
                     $('#selectAllEmployees').prop('checked', true);
                 } else {
