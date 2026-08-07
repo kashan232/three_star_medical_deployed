@@ -9,6 +9,7 @@
 <html class="no-js" lang="zxx">
 
 <head>
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <style>
         /* ERP Mega Menu & Normal Submenu Compact Styling */
         .nav-item .submenu,

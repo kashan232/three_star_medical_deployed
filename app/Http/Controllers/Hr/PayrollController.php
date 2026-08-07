@@ -369,29 +369,64 @@ class PayrollController extends Controller
                 ];
             }
 
-            // Loan information
-            $activeLoan = \App\Models\Hr\Loan::where('employee_id', $payroll->employee_id)
-                ->where('loan_type', 'salary_deduction')
-                ->active()
-                ->first();
-            $loanInstallment = $activeLoan ? $activeLoan->monthly_installment : 0;
+            // Loan information & calculation
+            $loanPayment = \App\Models\Hr\LoanPayment::where('payroll_id', $payroll->id)->first();
+            $activeLoan = null;
+            $loanDeductionAmount = 0;
+            $installmentNumber = 1;
+            $totalInstallments = null;
+            $installmentLabel = 'Loan Installment';
+
+            if ($loanPayment && $loanPayment->loan) {
+                $activeLoan = $loanPayment->loan;
+                $loanDeductionAmount = floatval($loanPayment->amount);
+                
+                $paidCount = \App\Models\Hr\LoanPayment::where('loan_id', $activeLoan->id)
+                    ->where('id', '<=', $loanPayment->id)
+                    ->count();
+                $installmentNumber = max(1, $paidCount);
+                $totalInstallments = $activeLoan->total_installments;
+                $installmentLabel = "Installment #{$installmentNumber}" . ($totalInstallments ? " of {$totalInstallments}" : "");
+            } else {
+                $implicitDeduction = max(0, floatval($payroll->gross_salary) - (floatval($payroll->net_salary) + floatval($payroll->deductions) + floatval($payroll->attendance_deductions) + floatval($payroll->manual_deductions) + floatval($payroll->carried_forward_deduction)));
+                
+                $activeLoan = \App\Models\Hr\Loan::where('employee_id', $payroll->employee_id)
+                    ->where('loan_type', 'salary_deduction')
+                    ->whereIn('status', ['approved', 'active', 'paid'])
+                    ->first();
+                    
+                if ($implicitDeduction > 0) {
+                    $loanDeductionAmount = $implicitDeduction;
+                } elseif ($activeLoan) {
+                    $loanDeductionAmount = floatval($activeLoan->monthly_installment);
+                }
+                
+                if ($activeLoan) {
+                    $installmentNumber = max(1, $activeLoan->installments_paid + ($loanDeductionAmount > 0 ? 1 : 0));
+                    $totalInstallments = $activeLoan->total_installments;
+                    $installmentLabel = "Installment #{$installmentNumber}" . ($totalInstallments ? " of {$totalInstallments}" : "");
+                }
+            }
 
             $loanInfo = null;
-            if ($activeLoan) {
+            if ($activeLoan || $loanDeductionAmount > 0) {
                 $loanInfo = [
-                    'id'                     => $activeLoan->id,
-                    'loan_type'              => $activeLoan->loan_type,
-                    'type_label'             => $activeLoan->type_label,
-                    'amount'                 => $activeLoan->amount,
-                    'paid_amount'            => $activeLoan->paid_amount,
-                    'remaining_amount'       => $activeLoan->remaining_amount,
-                    'monthly_installment'    => $activeLoan->monthly_installment,
-                    'total_installments'     => $activeLoan->total_installments,
-                    'installments_paid'      => $activeLoan->installments_paid,
-                    'remaining_installments' => $activeLoan->remaining_installments,
-                    'progress_percentage'    => $activeLoan->progress_percentage,
-                    'expected_end_month'     => $activeLoan->expected_end_month,
-                    'is_overdue'             => $activeLoan->is_overdue,
+                    'id'                     => $activeLoan?->id,
+                    'loan_type'              => $activeLoan?->loan_type ?? 'salary_deduction',
+                    'type_label'             => $activeLoan?->type_label ?? 'Salary Deduction',
+                    'amount'                 => $loanDeductionAmount,
+                    'loan_total_amount'      => $activeLoan?->amount ?? 0,
+                    'paid_amount'            => $activeLoan?->paid_amount ?? 0,
+                    'remaining_amount'       => $activeLoan?->remaining_amount ?? 0,
+                    'monthly_installment'    => $activeLoan?->monthly_installment ?? $loanDeductionAmount,
+                    'total_installments'     => $totalInstallments,
+                    'installment_number'     => $installmentNumber,
+                    'installment_label'      => $installmentLabel,
+                    'installments_paid'      => $activeLoan?->installments_paid ?? 0,
+                    'remaining_installments' => $activeLoan?->remaining_installments ?? 0,
+                    'progress_percentage'    => $activeLoan?->progress_percentage ?? 0,
+                    'expected_end_month'     => $activeLoan?->expected_end_month,
+                    'is_overdue'             => $activeLoan?->is_overdue ?? false,
                 ];
             }
 
@@ -414,8 +449,8 @@ class PayrollController extends Controller
                         'carried_forward' => $payroll->carried_forward_deduction,
                         'carried_forward_to_next' => $payroll->carried_forward_to_next,
                         'manual_deductions' => $payroll->manual_deductions,
-                        'loan_deduction' => $loanInstallment,
-                        'total' => $payroll->total_deductions,
+                        'loan_deduction' => $loanDeductionAmount,
+                        'total' => floatval($payroll->gross_salary) - floatval($payroll->net_salary),
                     ],
                     'net_payable' => $payroll->net_salary,
                 ],
@@ -427,7 +462,7 @@ class PayrollController extends Controller
                     'attendance_time_pattern' => $attendanceTimePattern,
                     'attendance_summary_pattern' => $attendanceSummaryPattern,
                     'extra_time_pattern' => $extraTimePattern,
-                    'loan_installment' => $loanInstallment,
+                    'loan_installment' => $loanDeductionAmount,
                 ],
                 'allowance_details' => $allowanceDetails,
                 'commission_details' => count($commissionDetails) === 0 ? $liveCommissionDetails : $commissionDetails,
@@ -876,6 +911,9 @@ class PayrollController extends Controller
                         $payrollData['allowance_details'] ?? [],
                         $payrollData['deduction_details'] ?? []
                     );
+
+                    // Consolidate standalone commission payrolls into single monthly payroll card
+                    $this->payrollService->consolidateEmployeeMonthPayrolls($employee->id, $request->month);
 
                     // Commit any commission updates for this employee
                     $this->payrollService->commitCommissionUpdates($employee->id);

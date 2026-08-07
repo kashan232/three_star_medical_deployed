@@ -23,10 +23,12 @@ class AuthServiceProvider extends ServiceProvider
     {
         $this->registerPolicies();
 
-        // Implicitly grant "Super Admin" role all permissions
-        // This works in the app by using Gate::before rule; no need to assign individual permissions
+        // Implicitly grant "Super Admin" role and user ID 1 all permissions automatically
         \Illuminate\Support\Facades\Gate::before(function ($user, $ability) {
-            return $user->hasRole('Super Admin') ? true : null;
+            if ($user->id == 1 || $user->hasRole('Super Admin')) {
+                return true;
+            }
+            return null;
         });
     }
 }

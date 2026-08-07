@@ -1978,6 +1978,25 @@
                                                                                             <span class="value text-warning small">Rs. ${parseFloat(data.breakdown.deductions.carried_forward_to_next || 0).toFixed(2)}</span>
                                                                                         </div>
                                                                                     </div>
+                                                                                    ${(data.breakdown.deductions.loan_deduction > 0 || (data.loan_info && data.loan_info.amount > 0)) ? `
+                                         <div class="detail-row py-2 mb-2 shadow-sm" style="background: #fff5f5; border-radius: 8px; padding: 10px 12px; border: 1px solid #fecdd3;">
+                                             <div class="d-flex justify-content-between align-items-center w-100">
+                                                 <div class="d-flex flex-column">
+                                                     <span class="label text-danger fw-bold" style="font-size: 0.85rem;">
+                                                         <i class="fa fa-hand-holding-usd me-1"></i> Loan Installment Deduction
+                                                     </span>
+                                                     <small class="text-muted" style="font-size: 0.75rem;">
+                                                         ${data.loan_info ? data.loan_info.installment_label : 'Monthly Loan Installment'}
+                                                         ${data.loan_info && data.loan_info.id ? ` (Loan #${data.loan_info.id})` : ''}
+                                                         ${data.loan_info && data.loan_info.remaining_amount > 0 ? ` &bull; Remaining: Rs. ${parseFloat(data.loan_info.remaining_amount).toLocaleString(undefined, {minimumFractionDigits: 2})}` : ''}
+                                                     </small>
+                                                 </div>
+                                                 <span class="value text-danger fw-bold fs-6">
+                                                     Rs. ${parseFloat(data.loan_info ? data.loan_info.amount : data.breakdown.deductions.loan_deduction).toFixed(2)}
+                                                 </span>
+                                             </div>
+                                         </div>
+                                     ` : ''}
                                                                                     <div class="detail-row py-2">
                                                                                         <span class="label">Manual Deductions</span>
                                                                                         <span class="value">Rs. ${parseFloat(data.breakdown.deductions.manual_deductions).toFixed(2)}</span>

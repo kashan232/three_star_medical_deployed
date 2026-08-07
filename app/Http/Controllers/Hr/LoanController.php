@@ -197,22 +197,30 @@ class LoanController extends Controller
 
     public function approve($id)
     {
-        $loan = Loan::findOrFail($id);
-        $loan->update([
-            'status'      => 'approved',
-            'approved_at' => now(),
-            'approved_by' => auth()->id(),
-        ]);
+        try {
+            $loan = Loan::findOrFail($id);
+            $loan->update([
+                'status'      => 'approved',
+                'approved_at' => now(),
+                'approved_by' => auth()->id(),
+            ]);
 
-        return response()->json(['success' => 'Loan approved successfully.', 'reload' => true]);
+            return response()->json(['success' => 'Loan approved successfully.', 'reload' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to approve loan: ' . $e->getMessage()], 500);
+        }
     }
 
     public function reject($id)
     {
-        $loan = Loan::findOrFail($id);
-        $loan->update(['status' => 'rejected']);
+        try {
+            $loan = Loan::findOrFail($id);
+            $loan->update(['status' => 'rejected']);
 
-        return response()->json(['success' => 'Loan rejected.', 'reload' => true]);
+            return response()->json(['success' => 'Loan rejected.', 'reload' => true]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Failed to reject loan: ' . $e->getMessage()], 500);
+        }
     }
 
     // ──────────────────────────────────────────
@@ -302,6 +310,60 @@ class LoanController extends Controller
         ]);
 
         return response()->json(['success' => 'Deduction scheduled for ' . $request->month . '.', 'reload' => true]);
+    }
+
+    // ──────────────────────────────────────────
+    // Skip / Defer Specific Month Deduction
+    // ──────────────────────────────────────────
+
+    public function skipMonthDeduction(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'loan_id' => 'required|exists:hr_loans,id',
+            'month'   => 'required|date_format:Y-m',
+            'reason'  => 'nullable|string',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $loan = Loan::findOrFail($request->loan_id);
+
+        LoanScheduledDeduction::updateOrCreate(
+            [
+                'loan_id'         => $loan->id,
+                'deduction_month' => $request->month,
+            ],
+            [
+                'amount' => 0,
+                'status' => 'skipped',
+                'notes'  => $request->reason ?? 'Deferred upon management/employee request.',
+            ]
+        );
+
+        return response()->json(['success' => 'Loan deduction for ' . $request->month . ' deferred successfully.', 'reload' => true]);
+    }
+
+    // ──────────────────────────────────────────
+    // Pause / Resume Loan
+    // ──────────────────────────────────────────
+
+    public function togglePause($id)
+    {
+        $loan = Loan::findOrFail($id);
+
+        if ($loan->status === 'approved') {
+            $loan->update(['status' => 'paused']);
+            $msg = 'Loan deductions paused.';
+        } elseif ($loan->status === 'paused') {
+            $loan->update(['status' => 'approved']);
+            $msg = 'Loan deductions resumed.';
+        } else {
+            return response()->json(['error' => 'Only approved active loans can be paused or resumed.'], 422);
+        }
+
+        return response()->json(['success' => $msg, 'reload' => true]);
     }
 
     // ──────────────────────────────────────────

@@ -102,7 +102,12 @@ class Loan extends Model
 
     public function scopeActive($query)
     {
-        return $query->where('status', 'approved')->whereRaw('paid_amount < amount');
+        return $query->whereIn('status', ['approved', 'active'])->whereRaw('paid_amount < amount');
+    }
+
+    public function scopePaused($query)
+    {
+        return $query->where('status', 'paused');
     }
 
     public function scopeSalaryDeduction($query)
@@ -118,6 +123,27 @@ class Loan extends Model
     // ──────────────────────────────────────────
     // Helpers
     // ──────────────────────────────────────────
+
+    /**
+     * Check if loan deduction is skipped for a given month (YYYY-MM)
+     */
+    public function isDeductionSkippedForMonth(string $month): bool
+    {
+        return $this->scheduledDeductions()
+            ->where('deduction_month', $month)
+            ->where('status', 'skipped')
+            ->exists();
+    }
+
+    /**
+     * Get custom scheduled deduction for a given month (YYYY-MM) if any
+     */
+    public function getScheduledDeductionForMonth(string $month)
+    {
+        return $this->scheduledDeductions()
+            ->where('deduction_month', $month)
+            ->first();
+    }
 
     /**
      * Calculate installment plan based on amount and number of months.

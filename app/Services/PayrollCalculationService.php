@@ -9,6 +9,8 @@ use App\Models\Hr\PayrollDetail;
 use App\Models\Hr\SalaryStructure;
 use App\Models\Hr\Holiday;
 use App\Models\Hr\Leave;
+use App\Models\Hr\Loan;
+use App\Models\Hr\LoanPayment;
 use Carbon\Carbon;
 
 class PayrollCalculationService
@@ -444,8 +446,16 @@ class PayrollCalculationService
         $attendanceDeductions = $attendanceDeductionData['total'];
         $attendanceBreakdown = $attendanceDeductionData['breakdown'];
 
-        // Add attendance deduction details to deduction details
-        $allDeductionDetails = array_merge($fixedDeductionDetails, $attendanceDeductionData['details']);
+        // Calculate loan deductions (supports monthly skip & auto salary_deduction mode)
+        $loanDeductionData = $this->calculateLoanDeductions($employee, $month);
+        $loanDeductions = $loanDeductionData['total'];
+
+        // Add attendance deduction details and loan deduction details to deduction details
+        $allDeductionDetails = array_merge(
+            $fixedDeductionDetails,
+            $attendanceDeductionData['details'],
+            $loanDeductionData['details']
+        );
 
         // Calculate commission if applicable
         $commissionData = ['total' => 0, 'description' => 'Not applicable', 'commission_details' => []];
@@ -468,7 +478,7 @@ class PayrollCalculationService
         $grossSalary = $baseSalary + $activeAllowances + $commission;
 
         // Calculate total deductions
-        $totalDeductions = $activeFixedDeductions + $attendanceDeductions;
+        $totalDeductions = $activeFixedDeductions + $attendanceDeductions + $loanDeductions;
 
         // Calculate net salary (prevent negative)
         $netSalary = max(0, $grossSalary - $totalDeductions);
@@ -497,179 +507,71 @@ class PayrollCalculationService
     }
 
     /**
-     * Calculate daily payroll for a daily wage employee
+     * Calculate loan deductions for an employee for a given month
      */
-    public function calculateDailyPayroll(Employee $employee, Attendance $attendance): array
+    public function calculateLoanDeductions(Employee $employee, string $month): array
     {
-        // Get effective salary structure
-        $structure = $this->getEffectiveSalaryStructure($employee);
+        $loans = Loan::where('employee_id', $employee->id)
+            ->salaryDeduction()
+            ->active()
+            ->get();
 
-        if (! $structure || ! $structure->use_daily_wages) {
-            throw new \Exception('Employee is not configured for daily wages.');
-        }
+        $totalLoanDeduction = 0;
+        $details = [];
+        $loanPaymentsToCreate = [];
 
-        $dailyRate = $structure->daily_wages;
-        $policy = $structure->attendance_deduction_policy ?? [];
-        $carryForward = $structure->carry_forward_deductions ?? false;
-
-        // Start with the daily rate
-        $dayEarning = $dailyRate;
-        $dayDeduction = 0;
-        $deductionDetails = [];
-
-        // Apply late check-in deductions
-        if (($attendance->late_minutes ?? 0) > 0) {
-            $lateDeduction = $this->calculateLateDeduction(
-                $attendance->late_minutes,
-                $policy['late_rules'] ?? [],
-                $dailyRate
-            );
-
-            if ($lateDeduction > 0) {
-                $dayDeduction += $lateDeduction;
-                $deductionDetails[] = [
-                    'name' => 'Late Check-in ('.$attendance->late_minutes.' min)',
-                    'amount' => $lateDeduction,
-                    'description' => 'Late arrival deduction for '.Carbon::parse($attendance->date)->format('M d, Y'),
-                ];
+        foreach ($loans as $loan) {
+            // Check start_month constraint
+            if ($loan->start_month && $month < $loan->start_month) {
+                continue;
             }
-        }
 
-        // Apply early check-out deductions
-        if (($attendance->early_leave_minutes ?? 0) > 0) {
-            $earlyDeduction = $this->calculateEarlyDeduction(
-                $attendance->early_leave_minutes,
-                $policy['early_rules'] ?? [],
-                $dailyRate
-            );
-
-            if ($earlyDeduction > 0) {
-                $dayDeduction += $earlyDeduction;
-                $deductionDetails[] = [
-                    'name' => 'Early Leave ('.$attendance->early_leave_minutes.' min)',
-                    'amount' => $earlyDeduction,
-                    'description' => 'Early departure deduction for '.Carbon::parse($attendance->date)->format('M d, Y'),
+            // Check if user/HR manually skipped deduction for this month
+            if ($loan->isDeductionSkippedForMonth($month)) {
+                $details[] = [
+                    'name' => "Loan Installment (Loan #{$loan->id}) - Skipped",
+                    'amount' => 0,
+                    'type' => 'loan_deduction',
+                    'description' => "Installment deferred for {$month} by management request.",
+                    'loan_id' => $loan->id,
                 ];
+                continue;
             }
-        }
 
-        // Handle carried forward deductions from previous day
-        $carriedForwardDeduction = $employee->pending_deductions ?? 0;
-        $totalDeductions = $dayDeduction + $carriedForwardDeduction;
-
-        // Determine net payable and remaining carry-forward
-        $netSalary = 0;
-        $newPendingDeductions = 0;
-
-        if ($totalDeductions <= $dayEarning) {
-            // Can pay full amount after deductions
-            $netSalary = $dayEarning - $totalDeductions;
-            $newPendingDeductions = 0;
-        } else {
-            // Deductions exceed daily earning
-            if ($carryForward) {
-                // Carry forward is allowed
-                $netSalary = 0;
-                $newPendingDeductions = $totalDeductions - $dayEarning;
+            // Check if there is a custom scheduled deduction for this month
+            $scheduled = $loan->getScheduledDeductionForMonth($month);
+            if ($scheduled && $scheduled->status === 'pending') {
+                $installment = floatval($scheduled->amount);
             } else {
-                // Carry forward not allowed - cap deductions at daily earning
-                $netSalary = 0;
-                $newPendingDeductions = 0;
-                $totalDeductions = $dayEarning;
+                $installment = floatval($loan->monthly_installment);
+            }
+
+            // Cap at remaining amount
+            $installment = min($installment, $loan->remaining_amount);
+
+            if ($installment > 0) {
+                $totalLoanDeduction += $installment;
+                $details[] = [
+                    'name' => "Loan Installment (Loan #{$loan->id})",
+                    'amount' => $installment,
+                    'type' => 'loan_deduction',
+                    'description' => "Monthly repayment for Loan #{$loan->id} (Remaining after deduction: Rs. " . number_format(max(0, $loan->remaining_amount - $installment), 2) . ")",
+                    'loan_id' => $loan->id,
+                ];
+
+                $loanPaymentsToCreate[] = [
+                    'loan_id' => $loan->id,
+                    'amount' => $installment,
+                    'scheduled_id' => $scheduled?->id,
+                ];
             }
         }
-
-        // Prevent negative salary
-        $netSalary = max(0, $netSalary);
 
         return [
-            'payroll_type' => 'daily',
-            'month' => Carbon::parse($attendance->date)->format('Y-m-d'), // Store full date for daily
-            'basic_salary' => $dailyRate,
-            'gross_salary' => $dailyRate,
-            'allowances' => 0,
-            'deductions' => 0, // Fixed deductions don't apply to daily
-            'attendance_deductions' => $dayDeduction,
-            'manual_deductions' => 0,
-            'manual_allowances' => 0,
-            'carried_forward_deduction' => $carriedForwardDeduction,
-            'bonuses' => 0,
-            'net_salary' => $netSalary,
-            'auto_generated' => true,
-            'status' => 'generated',
-            'carried_forward_to_next' => $newPendingDeductions,
-            'new_pending_deductions' => $newPendingDeductions,
-            'deduction_details' => $deductionDetails,
-            'allowance_details' => [],
-            'attendance_breakdown' => [
-                'has_data' => true,
-                'date' => $attendance->date,
-                'status' => $attendance->status,
-                'check_in' => $attendance->clock_in,
-                'check_out' => $attendance->clock_out,
-                'is_late' => $attendance->is_late ?? false,
-                'is_early_out' => $attendance->is_early_leave ?? false,
-                'late_minutes' => $attendance->late_minutes ?? 0,
-                'early_checkout_minutes' => $attendance->early_leave_minutes ?? 0,
-                'total_deduction' => $dayDeduction,
-            ],
+            'total' => $totalLoanDeduction,
+            'details' => $details,
+            'loan_payments' => $loanPaymentsToCreate,
         ];
-    }
-
-    /**
-     * Calculate late check-in deduction
-     */
-    private function calculateLateDeduction(int $lateMinutes, array $rules, float $dailyRate): float
-    {
-        if (empty($rules)) {
-            return 0;
-        }
-
-        foreach ($rules as $rule) {
-            $min = $rule['min_minutes'] ?? 0;
-            $max = $rule['max_minutes'] ?? null;
-
-            if ($lateMinutes >= $min && (is_null($max) || $lateMinutes <= $max)) {
-                $amount = $rule['amount'] ?? 0;
-                $type = $rule['type'] ?? 'fixed';
-
-                if ($type === 'percentage') {
-                    return ($dailyRate * $amount) / 100;
-                } else {
-                    return floatval($amount);
-                }
-            }
-        }
-
-        return 0;
-    }
-
-    /**
-     * Calculate early check-out deduction
-     */
-    private function calculateEarlyDeduction(int $earlyMinutes, array $rules, float $dailyRate): float
-    {
-        if (empty($rules)) {
-            return 0;
-        }
-
-        foreach ($rules as $rule) {
-            $min = $rule['min_minutes'] ?? 0;
-            $max = $rule['max_minutes'] ?? null;
-
-            if ($earlyMinutes >= $min && (is_null($max) || $earlyMinutes <= $max)) {
-                $amount = $rule['amount'] ?? 0;
-                $type = $rule['type'] ?? 'fixed';
-
-                if ($type === 'percentage') {
-                    return ($dailyRate * $amount) / 100;
-                } else {
-                    return floatval($amount);
-                }
-            }
-        }
-
-        return 0;
     }
 
     /**
@@ -692,11 +594,52 @@ class PayrollCalculationService
         foreach ($deductionDetails as $detail) {
             PayrollDetail::create([
                 'payroll_id' => $payroll->id,
-                'type' => 'deduction',
+                'type' => $detail['type'] ?? 'deduction',
                 'name' => $detail['name'],
                 'amount' => $detail['amount'],
                 'description' => $detail['description'] ?? null,
             ]);
+
+            // Process Loan Payment creation & balance updates idempotently
+            if (isset($detail['type']) && $detail['type'] === 'loan_deduction' && !empty($detail['loan_id']) && floatval($detail['amount']) > 0) {
+                $loanId = intval($detail['loan_id']);
+                $amount = floatval($detail['amount']);
+
+                // Avoid duplicate loan payment for the same payroll and loan
+                $alreadyPaidForPayroll = LoanPayment::where('payroll_id', $payroll->id)
+                    ->where('loan_id', $loanId)
+                    ->exists();
+
+                if (!$alreadyPaidForPayroll) {
+                    $loan = Loan::find($loanId);
+                    if ($loan) {
+                        LoanPayment::create([
+                            'loan_id' => $loan->id,
+                            'amount' => $amount,
+                            'payment_date' => now(),
+                            'type' => 'salary_deduction',
+                            'source' => 'payroll_auto',
+                            'payroll_id' => $payroll->id,
+                            'reference' => 'PAYROLL-' . $payroll->id,
+                            'notes' => "Automatic deduction for payroll month {$payroll->month}",
+                        ]);
+
+                        $loan->increment('paid_amount', $amount);
+                        $loan->increment('installments_paid');
+                        $loan->refresh();
+
+                        if ($loan->paid_amount >= $loan->amount) {
+                            $loan->update(['status' => 'paid']);
+                        }
+
+                        // Mark any pending scheduled deduction for this month as deducted
+                        \App\Models\Hr\LoanScheduledDeduction::where('loan_id', $loan->id)
+                            ->where('deduction_month', $payroll->month)
+                            ->where('status', 'pending')
+                            ->update(['status' => 'deducted']);
+                    }
+                }
+            }
         }
     }
 
@@ -921,41 +864,69 @@ class PayrollCalculationService
         if ($newCommission > 0) {
             $month = \Carbon\Carbon::parse($payment->payment_date)->format('Y-m');
             
-            // Find existing UNPAID payroll for this specific sale/employee
+            // Find existing UNPAID monthly payroll for this employee & month
             $payroll = \App\Models\Hr\Payroll::where('employee_id', $employee->id)
-                ->where('sale_id', $sale->id)
-                ->where('payroll_type', 'commission')
+                ->where('month', $month)
+                ->where('payroll_type', 'monthly')
                 ->where('status', '!=', 'paid')
                 ->first();
 
-            if ($payroll) {
-                $payroll->gross_salary += $newCommission;
-                $payroll->commission   += $newCommission;
-                $payroll->net_salary   += $newCommission;
-                $payroll->notes        .= " | Add. Payment {$payment->amount} -> {$newCommission} Comm.";
-                $payroll->save();
+            if (!$payroll) {
+                // Check if employee has an active monthly salary structure or is eligible for monthly payroll
+                $structure = $this->getEffectiveSalaryStructure($employee);
+                if ($structure) {
+                    $payrollData = $this->calculateMonthlyPayroll($employee, $month);
+                    $payroll = \App\Models\Hr\Payroll::create(array_merge(
+                        ['employee_id' => $employee->id],
+                        \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'breakdown', 'attendance_breakdown', 'commission_details'])
+                    ));
+                    $this->savePayrollDetails(
+                        $payroll,
+                        $payrollData['allowance_details'] ?? [],
+                        $payrollData['deduction_details'] ?? []
+                    );
+                } else {
+                    // Fallback standalone commission payroll
+                    $payroll = \App\Models\Hr\Payroll::where('employee_id', $employee->id)
+                        ->where('sale_id', $sale->id)
+                        ->where('payroll_type', 'commission')
+                        ->where('status', '!=', 'paid')
+                        ->first();
+
+                    if ($payroll) {
+                        $payroll->gross_salary += $newCommission;
+                        $payroll->commission   += $newCommission;
+                        $payroll->net_salary   += $newCommission;
+                        $payroll->save();
+                    } else {
+                        $payroll = \App\Models\Hr\Payroll::create([
+                            'employee_id' => $employee->id,
+                            'sale_id' => $sale->id,
+                            'payroll_type' => 'commission', 
+                            'month' => $month,
+                            'basic_salary' => 0,
+                            'gross_salary' => $newCommission,
+                            'allowances' => 0,
+                            'deductions' => 0,
+                            'attendance_deductions' => 0,
+                            'manual_deductions' => 0,
+                            'manual_allowances' => 0,
+                            'carried_forward_deduction' => 0,
+                            'bonuses' => 0,
+                            'commission' => $newCommission,
+                            'net_salary' => $newCommission,
+                            'status' => 'generated',
+                            'auto_generated' => true,
+                            'notes' => "Instant Commission for Sale #{$sale->invoice_no} (Triggered by Full Payment)",
+                        ]);
+                    }
+                }
             } else {
-                $payroll = \App\Models\Hr\Payroll::create([
-                    'employee_id' => $employee->id,
-                    'sale_id' => $sale->id,
-                    'payroll_type' => 'commission', 
-                    'month' => $month,
-                    'basic_salary' => 0,
-                    'gross_salary' => $newCommission,
-                    'allowances' => 0,
-                    'deductions' => 0,
-                    'attendance_deductions' => 0,
-                    'manual_deductions' => 0,
-                    'manual_allowances' => 0,
-                    'carried_forward_deduction' => 0,
-                    'bonuses' => 0,
-                    'commission' => $newCommission,
-                    'net_salary' => $newCommission,
-                    'status' => 'generated',
-                    'auto_generated' => true,
-                    'notes' => "Instant Commission for Sale #{$sale->invoice_no} (Triggered by Full Payment)",
-                    'payment_date' => null,
-                ]);
+                // Update existing monthly payroll with new commission
+                $payroll->commission   += $newCommission;
+                $payroll->gross_salary += $newCommission;
+                $payroll->net_salary   += $newCommission;
+                $payroll->save();
             }
 
             \App\Models\Hr\PayrollDetail::create([
@@ -977,6 +948,64 @@ class PayrollCalculationService
     }
 
     /**
+     * Consolidate all unpaid commission payrolls for an employee into their single monthly payroll
+     */
+    public function consolidateEmployeeMonthPayrolls(int $employeeId, string $month): void
+    {
+        $monthlyPayroll = Payroll::where('employee_id', $employeeId)
+            ->where('month', $month)
+            ->where('payroll_type', 'monthly')
+            ->first();
+
+        if (!$monthlyPayroll) {
+            return;
+        }
+
+        $commissionPayrolls = Payroll::where('employee_id', $employeeId)
+            ->where('month', $month)
+            ->where('payroll_type', 'commission')
+            ->where('status', '!=', 'paid')
+            ->get();
+
+        if ($commissionPayrolls->isEmpty()) {
+            return;
+        }
+
+        foreach ($commissionPayrolls as $commPayroll) {
+            // Move all commission details to monthly payroll
+            PayrollDetail::where('payroll_id', $commPayroll->id)
+                ->update(['payroll_id' => $monthlyPayroll->id]);
+
+            // Delete standalone commission payroll
+            $commPayroll->delete();
+        }
+
+        // Re-sum commission details for monthly payroll
+        $totalComm = PayrollDetail::where('payroll_id', $monthlyPayroll->id)
+            ->where('type', 'commission')
+            ->sum('amount');
+
+        $monthlyPayroll->commission = $totalComm;
+        $monthlyPayroll->gross_salary = floatval($monthlyPayroll->basic_salary) + floatval($monthlyPayroll->allowances) + floatval($monthlyPayroll->manual_allowances) + floatval($totalComm);
+        
+        $totalDeductions = floatval($monthlyPayroll->deductions) + floatval($monthlyPayroll->attendance_deductions) + floatval($monthlyPayroll->manual_deductions) + floatval($monthlyPayroll->carried_forward_deduction);
+        
+        // Check loan deduction
+        $activeLoan = Loan::where('employee_id', $employeeId)->salaryDeduction()->active()->first();
+        $loanPayment = LoanPayment::where('payroll_id', $monthlyPayroll->id)->first();
+        $loanDeduction = 0;
+        if ($loanPayment) {
+            $loanDeduction = floatval($loanPayment->amount);
+        } elseif ($activeLoan && !$activeLoan->isDeductionSkippedForMonth($month)) {
+            $loanDeduction = floatval($activeLoan->monthly_installment);
+        }
+        
+        $totalDeductions += $loanDeduction;
+        $monthlyPayroll->net_salary = max(0, $monthlyPayroll->gross_salary - $totalDeductions);
+        $monthlyPayroll->save();
+    }
+
+    /**
      * Generate (Calculate and Save) monthly payroll for an employee
      */
     public function generateMonthlyPayrollForEmployee(Employee $employee, string $month): ?Payroll
@@ -984,11 +1013,11 @@ class PayrollCalculationService
         // 1. Check if already exists
         $exists = Payroll::where('employee_id', $employee->id)
             ->where('month', $month)
-            ->where('payroll_type', 'monthly') // Assuming 'monthly' is the type or check existing logic
+            ->where('payroll_type', 'monthly')
             ->exists();
 
         if ($exists) {
-            return null; // Already generated
+            return null;
         }
 
         // 2. Calculate
@@ -997,9 +1026,8 @@ class PayrollCalculationService
         // 3. Create Payroll Record
         $payroll = Payroll::create(array_merge(
             ['employee_id' => $employee->id],
-            \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'breakdown', 'attendance_breakdown'])
+            \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'breakdown', 'attendance_breakdown', 'commission_details'])
         ));
-        // Note: allowance_details, deduction_details are stripped. breakdown/attendance_breakdown might also need stripping if not in fillable
 
         // 4. Save Details
         $this->savePayrollDetails(
@@ -1007,6 +1035,9 @@ class PayrollCalculationService
             $payrollData['allowance_details'] ?? [],
             $payrollData['deduction_details'] ?? []
         );
+
+        // 5. Consolidate any standalone commission payrolls into this monthly payroll
+        $this->consolidateEmployeeMonthPayrolls($employee->id, $month);
 
         return $payroll;
     }

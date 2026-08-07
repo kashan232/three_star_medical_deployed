@@ -175,12 +175,19 @@
                                                 @endcan
                                             @endif
 
-                                            @if($loan->status === 'approved')
+                                            @if(in_array($loan->status, ['approved', 'paused']))
                                                 @if($loan->loan_type === 'self_paid')
                                                     <li><a class="dropdown-item text-success py-2" href="javascript:void(0)" onclick="recordPaymentModal({{ $loan->id }}, {{ $loan->remaining_amount }})"><i class="fa fa-plus-circle me-2"></i> Record Payment</a></li>
                                                 @else
-                                                    <li><a class="dropdown-item text-primary py-2" href="javascript:void(0)" onclick="scheduleDeductionModal({{ $loan->id }}, {{ $loan->remaining_amount }})"><i class="fa fa-calendar-plus me-2"></i> Schedule Deduction</a></li>
+                                                    <li><a class="dropdown-item text-primary py-2" href="javascript:void(0)" onclick="scheduleDeductionModal({{ $loan->id }}, {{ $loan->remaining_amount }})"><i class="fa fa-calendar-plus me-2"></i> Schedule Custom Deduction</a></li>
+                                                    <li><a class="dropdown-item text-warning py-2" href="javascript:void(0)" onclick="skipMonthModal({{ $loan->id }}, '{{ addslashes($loan->employee->full_name) }}')"><i class="fa fa-ban me-2"></i> Skip / Defer Month</a></li>
                                                 @endif
+                                                <li>
+                                                    <a class="dropdown-item text-secondary py-2" href="javascript:void(0)" onclick="togglePauseLoan({{ $loan->id }}, '{{ $loan->status }}')">
+                                                        <i class="fa {{ $loan->status === 'paused' ? 'fa-play text-success' : 'fa-pause text-warning' }} me-2"></i>
+                                                        {{ $loan->status === 'paused' ? 'Resume Loan Deductions' : 'Pause Loan Deductions' }}
+                                                    </a>
+                                                </li>
                                             @endif
 
                                             @can('hr.loans.delete')
@@ -249,16 +256,18 @@
                                 {{-- Status --}}
                                 <div class="hr-tags pt-2 border-top mt-auto">
                                     @if($loan->status === 'pending')
-                                        @can('hr.loans.approve')
+                                        @canany(['hr.loans.approve', 'hr.loans.create', 'hr.loans.edit'])
                                             <div class="d-flex gap-2 w-100 mb-1">
                                                 <button class="btn btn-sm btn-success flex-grow-1" onclick="approveLoan({{ $loan->id }})"><i class="fa fa-check me-1"></i> Approve</button>
                                                 <button class="btn btn-sm btn-danger flex-grow-1" onclick="rejectLoan({{ $loan->id }})"><i class="fa fa-times me-1"></i> Reject</button>
                                             </div>
                                         @else
                                             <span class="hr-tag warning w-100 text-center">Pending Approval</span>
-                                        @endcan
-                                    @elseif($loan->status === 'approved')
+                                        @endcanany
+                                    @elseif(in_array($loan->status, ['approved', 'active']))
                                         <span class="hr-tag success w-100 text-center">Active Loan</span>
+                                    @elseif($loan->status === 'paused')
+                                        <span class="hr-tag warning w-100 text-center"><i class="fa fa-pause me-1"></i> Deductions Paused</span>
                                     @elseif($loan->status === 'rejected')
                                         <span class="hr-tag danger w-100 text-center">Rejected</span>
                                     @elseif($loan->status === 'paid')
@@ -527,6 +536,41 @@
     </div>
 
     {{-- ═══════════════════════════════════════════
+         SKIP / DEFER MONTH MODAL
+    ═══════════════════════════════════════════ --}}
+    <div class="modal fade" id="skipMonthModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
+                <div class="modal-header gradient text-white" style="background: linear-gradient(135deg, #f59e0b, #d97706) !important;">
+                    <h5 class="modal-title fw-bold"><i class="fa fa-ban me-2"></i> Defer / Skip Monthly Deduction</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="skipMonthForm" action="{{ route('hr.loans.skip-month') }}" method="POST">
+                    @csrf
+                    <input type="hidden" name="loan_id" id="skip_loan_id">
+                    <div class="modal-body p-4 bg-light">
+                        <div class="alert alert-warning border-0 shadow-sm mb-3">
+                            <i class="fa fa-exclamation-triangle me-1"></i> Skipping a month's deduction will pay full salary to <strong id="skip_emp_name"></strong> for that payroll period without deducting their loan installment.
+                        </div>
+                        <div class="form-group-modern mb-3">
+                            <label class="form-label fw-bold">Select Month to Defer</label>
+                            <input type="month" name="month" class="form-control bg-white" required value="{{ date('Y-m') }}">
+                        </div>
+                        <div class="form-group-modern">
+                            <label class="form-label fw-bold">Reason for Deferral</label>
+                            <textarea name="reason" class="form-control bg-white" rows="2" placeholder="e.g. Employee financial difficulty, medical emergency..."></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer-modern bg-white">
+                        <button type="button" class="btn btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-save text-white shadow-sm" style="background: linear-gradient(135deg, #f59e0b, #d97706);"><i class="fa fa-check me-1"></i> Confirm Skip Month</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    {{-- ═══════════════════════════════════════════
          LOAN DETAILS MODAL (Full History)
     ═══════════════════════════════════════════ --}}
     <div class="modal fade" id="loanDetailsModal" tabindex="-1" aria-hidden="true">
@@ -599,6 +643,13 @@
 @section('js')
 <script>
 $(document).ready(function () {
+    $.ajaxSetup({
+        headers: {
+            'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}',
+            'Accept': 'application/json'
+        }
+    });
+
     // ── Select2 ──
     $('.select2-loan').select2({ dropdownParent: $('#addLoanModal'), width: '100%' });
 
@@ -813,31 +864,21 @@ function doPreview() {
     }
 }
 
-// ── Approve / Reject / Delete ──
-function approveLoan(id) {
-    Swal.fire({ title: 'Approve this loan?', icon: 'question', showCancelButton: true,
-        confirmButtonText: 'Yes, Approve', confirmButtonColor: '#10b981' })
-    .then(r => { if (r.isConfirmed) {
-        $.post(`/hr/loans/${id}/approve`, { _token: '{{ csrf_token() }}' })
-        .done(res => Swal.fire('Approved!', res.success, 'success').then(() => location.reload()));
-    }});
-}
-
-function rejectLoan(id) {
-    Swal.fire({ title: 'Reject this loan?', icon: 'warning', showCancelButton: true,
-        confirmButtonText: 'Yes, Reject', confirmButtonColor: '#ef4444' })
-    .then(r => { if (r.isConfirmed) {
-        $.post(`/hr/loans/${id}/reject`, { _token: '{{ csrf_token() }}' })
-        .done(res => Swal.fire('Rejected!', res.success, 'success').then(() => location.reload()));
-    }});
-}
+// ── Delete ──
 
 function deleteLoan(id) {
     Swal.fire({ title: 'Delete Loan Record?', text: 'This removes all history.', icon: 'error',
         showCancelButton: true, confirmButtonText: 'Yes, Delete', confirmButtonColor: '#ef4444' })
     .then(r => { if (r.isConfirmed) {
-        $.ajax({ url: `/hr/loans/${id}`, type: 'DELETE', data: { _token: '{{ csrf_token() }}' } })
-        .done(res => Swal.fire('Deleted!', res.success, 'success').then(() => location.reload()));
+        var token = $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}';
+        $.ajax({
+            url: '{{ url("hr/loans") }}/' + id,
+            type: 'DELETE',
+            data: { _token: token },
+            headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' }
+        })
+        .done(res => Swal.fire('Deleted!', res.success || 'Loan deleted.', 'success').then(() => location.reload()))
+        .fail(xhr => Swal.fire('Error', xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to delete loan.', 'error'));
     }});
 }
 
@@ -863,7 +904,7 @@ function viewLoanDetails(id) {
     $('#ld_payment_timeline').html('<div class="text-center py-4"><div class="spinner-border text-primary"></div></div>');
     $('#loanDetailsModal').modal('show');
 
-    $.get(`/hr/loans/${id}/history`, function (d) {
+    $.get('{{ url("hr/loans") }}/' + id + '/history', function (d) {
         // Header
         const typeBadge = d.loan_type === 'salary_deduction'
             ? '<span class="badge bg-primary">Salary Deduction</span>'
@@ -943,6 +984,148 @@ function viewLoanDetails(id) {
             <div class="col-md-4"><div class="card border-0 bg-white shadow-sm p-3"><p class="text-muted mb-1" style="font-size:0.7rem;">DISBURSED ON</p><p class="mb-0 fw-bold">${d.disbursed_at || '—'}</p></div></div>
             <div class="col-md-4"><div class="card border-0 bg-white shadow-sm p-3"><p class="text-muted mb-1" style="font-size:0.7rem;">EXPECTED COMPLETION</p><p class="mb-0 fw-bold">${d.expected_end_month || '—'}</p></div></div>
         `);
+    });
+}
+
+function skipMonthModal(loanId, empName) {
+    $('#skip_loan_id').val(loanId);
+    $('#skip_emp_name').text(empName);
+    $('#skipMonthModal').modal('show');
+}
+
+$('#skipMonthForm').on('submit', function(e) {
+    e.preventDefault();
+    var form = $(this);
+    var token = $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}';
+    $.ajax({
+        url: form.attr('action'),
+        type: 'POST',
+        data: form.serialize(),
+        headers: {
+            'X-CSRF-TOKEN': token,
+            'Accept': 'application/json'
+        },
+        success: function(res) {
+            $('#skipMonthModal').modal('hide');
+            Swal.fire({
+                title: 'Deduction Deferred!',
+                text: res.success || 'Loan deduction deferred successfully.',
+                icon: 'success',
+                confirmButtonColor: '#3b82f6'
+            }).then(() => location.reload());
+        },
+        error: function(xhr) {
+            var err = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to defer deduction.';
+            Swal.fire('Error', err, 'error');
+        }
+    });
+});
+
+function togglePauseLoan(loanId, currentStatus) {
+    var actionText = (currentStatus === 'paused') ? 'Resume Loan Deductions?' : 'Pause Loan Deductions?';
+    var bodyText = (currentStatus === 'paused') 
+        ? 'Deductions for this loan will be reactivated in future payroll calculations.' 
+        : 'Automated salary deductions for this loan will be paused until resumed.';
+        
+    Swal.fire({
+        title: actionText,
+        text: bodyText,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#3b82f6',
+        confirmButtonText: 'Yes, Proceed'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            var token = $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}';
+            $.ajax({
+                url: '{{ url("hr/loans") }}/' + loanId + '/toggle-pause',
+                type: 'POST',
+                data: { _token: token },
+                headers: {
+                    'X-CSRF-TOKEN': token,
+                    'Accept': 'application/json'
+                },
+                success: function(res) {
+                    Swal.fire('Success', res.success || 'Loan status updated.', 'success').then(() => location.reload());
+                },
+                error: function(xhr) {
+                    var err = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Action failed';
+                    Swal.fire('Error', err, 'error');
+                }
+            });
+        }
+    });
+}
+
+function approveLoan(id) {
+    Swal.fire({
+        title: 'Approve Loan Request?',
+        text: 'This will activate the loan for automated salary deductions.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Yes, Approve'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            var token = $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}';
+            $.ajax({
+                url: '{{ url("hr/loans") }}/' + id + '/approve',
+                type: 'POST',
+                data: { _token: token },
+                headers: {
+                    'X-CSRF-TOKEN': token,
+                    'Accept': 'application/json'
+                },
+                success: function(res) {
+                    Swal.fire({
+                        title: 'Approved!',
+                        text: res.success || 'Loan approved successfully.',
+                        icon: 'success',
+                        confirmButtonColor: '#10b981'
+                    }).then(() => location.reload());
+                },
+                error: function(xhr) {
+                    var err = xhr.responseJSON?.error || xhr.responseJSON?.message || ('Error ' + xhr.status + ': ' + (xhr.statusText || 'Server Error'));
+                    Swal.fire('Error', err, 'error');
+                }
+            });
+        }
+    });
+}
+
+function rejectLoan(id) {
+    Swal.fire({
+        title: 'Reject Loan Request?',
+        text: 'This loan request will be rejected.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Yes, Reject'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            var token = $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}';
+            $.ajax({
+                url: '{{ url("hr/loans") }}/' + id + '/reject',
+                type: 'POST',
+                data: { _token: token },
+                headers: {
+                    'X-CSRF-TOKEN': token,
+                    'Accept': 'application/json'
+                },
+                success: function(res) {
+                    Swal.fire({
+                        title: 'Rejected',
+                        text: res.success || 'Loan rejected.',
+                        icon: 'success',
+                        confirmButtonColor: '#3b82f6'
+                    }).then(() => location.reload());
+                },
+                error: function(xhr) {
+                    var err = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to reject loan.';
+                    Swal.fire('Error', err, 'error');
+                }
+            });
+        }
     });
 }
 </script>

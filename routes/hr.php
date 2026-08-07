@@ -29,13 +29,15 @@ Route::middleware(['auth'])->prefix('hr')->name('hr.')->group(function () {
     Route::get('/loans', [\App\Http\Controllers\Hr\LoanController::class, 'index'])->name('loans.index')->middleware('permission:hr.loans.view');
     Route::post('/loans', [\App\Http\Controllers\Hr\LoanController::class, 'store'])->name('loans.store')->middleware('permission:hr.loans.create');
     Route::post('/loans/calculate-installment', [\App\Http\Controllers\Hr\LoanController::class, 'calculateInstallment'])->name('loans.calculate-installment');
-    Route::post('/loans/{id}/approve', [\App\Http\Controllers\Hr\LoanController::class, 'approve'])->name('loans.approve')->middleware('permission:hr.loans.approve');
-    Route::post('/loans/{id}/reject', [\App\Http\Controllers\Hr\LoanController::class, 'reject'])->name('loans.reject')->middleware('permission:hr.loans.approve');
-    Route::post('/loans/{id}/payment', [\App\Http\Controllers\Hr\LoanController::class, 'recordPayment'])->name('loans.payment')->middleware('permission:hr.loans.create');
+    Route::post('/loans/{id}/approve', [\App\Http\Controllers\Hr\LoanController::class, 'approve'])->name('loans.approve')->middleware('permission:hr.loans.approve|hr.loans.create|hr.loans.edit');
+    Route::post('/loans/{id}/reject', [\App\Http\Controllers\Hr\LoanController::class, 'reject'])->name('loans.reject')->middleware('permission:hr.loans.approve|hr.loans.create|hr.loans.edit');
+    Route::post('/loans/{id}/payment', [\App\Http\Controllers\Hr\LoanController::class, 'recordPayment'])->name('loans.payment')->middleware('permission:hr.loans.create|hr.loans.edit');
     Route::get('/loans/{id}/history', [\App\Http\Controllers\Hr\LoanController::class, 'getHistory'])->name('loans.history')->middleware('permission:hr.loans.view');
-    Route::put('/loans/{id}', [\App\Http\Controllers\Hr\LoanController::class, 'update'])->name('loans.update')->middleware('permission:hr.loans.create');
+    Route::put('/loans/{id}', [\App\Http\Controllers\Hr\LoanController::class, 'update'])->name('loans.update')->middleware('permission:hr.loans.create|hr.loans.edit');
     Route::delete('/loans/{id}', [\App\Http\Controllers\Hr\LoanController::class, 'destroy'])->name('loans.destroy')->middleware('permission:hr.loans.delete');
-    Route::post('/loans/schedule', [\App\Http\Controllers\Hr\LoanController::class, 'scheduleDeduction'])->name('loans.schedule')->middleware('permission:hr.loans.schedule');
+    Route::post('/loans/schedule', [\App\Http\Controllers\Hr\LoanController::class, 'scheduleDeduction'])->name('loans.schedule')->middleware('permission:hr.loans.create|hr.loans.edit');
+    Route::post('/loans/skip-month', [\App\Http\Controllers\Hr\LoanController::class, 'skipMonthDeduction'])->name('loans.skip-month')->middleware('permission:hr.loans.create|hr.loans.edit');
+    Route::post('/loans/{id}/toggle-pause', [\App\Http\Controllers\Hr\LoanController::class, 'togglePause'])->name('loans.toggle-pause')->middleware('permission:hr.loans.approve|hr.loans.create|hr.loans.edit');
 
     // Employees
     Route::middleware(['permission:hr.employees.view'])->group(function () {

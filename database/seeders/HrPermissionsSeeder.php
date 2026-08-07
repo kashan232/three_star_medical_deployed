@@ -70,6 +70,14 @@ class HrPermissionsSeeder extends Seeder
             'hr.salary.structure.create',
             'hr.salary.structure.edit',
             'hr.salary.structure.delete',
+
+            // Loans
+            'hr.loans.view',
+            'hr.loans.create',
+            'hr.loans.edit',
+            'hr.loans.approve',
+            'hr.loans.delete',
+            'hr.loans.schedule',
         ];
 
         foreach ($permissions as $permission) {
