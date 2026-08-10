@@ -4,15 +4,48 @@ namespace App\Services;
 
 use App\Models\BiometricDevice;
 use Exception;
+use Fsuuaas\Zkteco\Lib\ZKTeco;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Log;
 
 class BiometricDeviceService
 {
+    /**
+     * Create a ZKTeco instance with a short timeout (3s) to avoid Apache request hangs
+     */
+    protected function makeZk(string $ip, int $port = 4370): ZKTeco
+    {
+        $zk = new ZKTeco($ip, $port);
+        // Override default 60s timeout with 3s for web requests
+        socket_set_option($zk->_zkclient, SOL_SOCKET, SO_RCVTIMEO, ['sec' => 3, 'usec' => 0]);
+        socket_set_option($zk->_zkclient, SOL_SOCKET, SO_SNDTIMEO, ['sec' => 3, 'usec' => 0]);
+        return $zk;
+    }
+    /**
+     * Check if the device is ZKTeco based on port, model, or network response
+     */
+    public function isZkDevice(BiometricDevice $device): bool
+    {
+        $port = intval($device->port);
+        $model = strtolower($device->model ?? '');
+        $name = strtolower($device->name ?? '');
+
+        if ($port === 4370) {
+            return true;
+        }
+
+        if (str_contains($model, 'zk') || str_contains($model, 'k50') || str_contains($model, 'k40') || 
+            str_contains($model, 'mb') || str_contains($model, 'uface') || str_contains($model, 'in01') ||
+            str_contains($name, 'zk') || str_contains($name, 'k50')) {
+            return true;
+        }
+
+        return false;
+    }
+
     protected function getClient(BiometricDevice $device)
     {
-        // Try to decrypt or use as is
         try {
             $password = Crypt::decryptString($device->password);
         } catch (Exception $e) {
@@ -35,13 +68,26 @@ class BiometricDeviceService
      */
     public function connect(BiometricDevice $device): bool
     {
+        if ($this->isZkDevice($device)) {
+            try {
+                $zk = $this->makeZk($device->ip_address, intval($device->port ?? 4370));
+                if ($zk->connect()) {
+                    $zk->disconnect();
+                    return true;
+                }
+            } catch (Exception $e) {
+                Log::error("ZKTeco Connect Failed for {$device->ip_address}: " . $e->getMessage());
+            }
+            return false;
+        }
+
         try {
             $client = $this->getClient($device);
             $response = $client->get('ISAPI/System/deviceInfo');
 
             return $response->getStatusCode() === 200;
         } catch (Exception $e) {
-            Log::error("Hikvision Connect Failed for {$device->ip_address}: ".$e->getMessage());
+            Log::error("Hikvision Connect Failed for {$device->ip_address}: " . $e->getMessage());
 
             return false;
         }
@@ -53,44 +99,203 @@ class BiometricDeviceService
     public function testConnection(BiometricDevice $device): array
     {
         try {
+            if ($this->isZkDevice($device)) {
+                if (!extension_loaded('sockets')) {
+                    return ['success' => false, 'message' => 'PHP sockets extension is not enabled. Please enable extension=sockets in php.ini and restart Apache.'];
+                }
+
+                $zk = $this->makeZk($device->ip_address, intval($device->port ?? 4370));
+                if ($zk->connect()) {
+                    $serialRaw = $zk->serialNumber();
+                    $nameRaw = $zk->deviceName();
+                    $zk->disconnect();
+
+                    $serial = trim(str_replace(['~SerialNumber=', "\0"], '', is_string($serialRaw) ? $serialRaw : ''));
+                    $name = trim(str_replace(['~DeviceName=', "\0"], '', is_string($nameRaw) ? $nameRaw : ''));
+
+                    $msg = 'Connected Successfully to ZKTeco ' . ($name ?: ($device->model ?: 'Machine')) . ($serial ? " (S/N: {$serial})" : '');
+                    return ['success' => true, 'message' => $msg];
+                }
+
+                return [
+                    'success' => false,
+                    'message' => "ZKTeco Connection Failed — Device not responding at {$device->ip_address}:{$device->port}. Check: 1) Device is ON and connected to network. 2) PC and device are on same network (192.168.1.x). 3) Port 4370 is not blocked by Windows Firewall."
+                ];
+            }
+
             if ($this->connect($device)) {
-                return ['success' => true, 'message' => 'Connection Successful'];
+                return ['success' => true, 'message' => 'Connection Successful (Hikvision ISAPI)'];
             }
 
             return ['success' => false, 'message' => 'Connection Failed (Check Credentials/Network)'];
         } catch (Exception $e) {
-            return ['success' => false, 'message' => 'Error: '.$e->getMessage()];
+            return ['success' => false, 'message' => 'Connection Error: ' . $e->getMessage()];
         }
     }
 
     /**
-     * Get Attendance Logs via ISAPI (trying both JSON and XML formats)
+     * Get Attendance Logs
      */
     public function getAttendanceLogs(BiometricDevice $device): array
     {
-        try {
-            // Try JSON format first (since it worked for user push)
-            $logs = $this->getAttendanceLogsJson($device);
+        if ($this->isZkDevice($device)) {
+            try {
+                $zk = $this->makeZk($device->ip_address, intval($device->port ?? 4370));
+                if ($zk->connect()) {
+                    $attendance = $zk->getAttendance();
+                    $zk->disconnect();
 
-            if (! empty($logs)) {
+                    $logs = [];
+                    foreach ($attendance as $att) {
+                        $logs[] = [
+                            'id' => (string) ($att['id'] ?? $att['uid'] ?? '0'),
+                            'timestamp' => (string) ($att['timestamp'] ?? ''),
+                            'state' => intval($att['state'] ?? 1),
+                            'uid' => (string) ($att['uid'] ?? 0),
+                        ];
+                    }
+
+                    Log::info("ZKTeco Log Pull Success for {$device->ip_address}: " . count($logs) . " logs.");
+                    return $logs;
+                }
+            } catch (Exception $e) {
+                Log::error("ZKTeco Log Pull Failed for {$device->ip_address}: " . $e->getMessage());
+            }
+        }
+
+        try {
+            $logs = $this->getAttendanceLogsJson($device);
+            if (!empty($logs)) {
                 return $logs;
             }
-
-            // Fallback to XML format
             return $this->getAttendanceLogsXml($device);
-
         } catch (Exception $e) {
-            Log::error('Hikvision Log Pull Failed: '.$e->getMessage());
-
+            Log::error('Hikvision Log Pull Failed: ' . $e->getMessage());
             return [];
         }
     }
 
     /**
-     * Get Attendance Logs via JSON API
+     * Sync Device Time
      */
+    public function syncTime(BiometricDevice $device): bool
+    {
+        if ($this->isZkDevice($device)) {
+            try {
+                $zk = $this->makeZk($device->ip_address, intval($device->port ?? 4370));
+                if ($zk->connect()) {
+                    $zk->setTime(date('Y-m-d H:i:s'));
+                    $zk->disconnect();
+                    return true;
+                }
+            } catch (Exception $e) {
+                Log::error("ZKTeco Time Sync Failed for {$device->ip_address}: " . $e->getMessage());
+                return false;
+            }
+        }
+
+        try {
+            $client = $this->getClient($device);
+            $time = date('Y-m-d\TH:i:s');
+            $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+                    <Time>
+                        <timeMode>manual</timeMode>
+                        <localTime>$time</localTime>
+                        <timeZone>CST-5:00:00</timeZone>
+                    </Time>";
+
+            $client->put('ISAPI/System/time', ['body' => $xml]);
+
+            return true;
+        } catch (Exception $e) {
+            Log::error('Hikvision Time Sync Failed: ' . $e->getMessage());
+
+            return false;
+        }
+    }
+
     /**
-     * Get Attendance Logs via JSON API
+     * Add/Update user on device
+     */
+    public function addUserToDevice(BiometricDevice $device, string $userId, string $name, string $password = ''): bool
+    {
+        if ($this->isZkDevice($device)) {
+            try {
+                $zk = $this->makeZk($device->ip_address, intval($device->port ?? 4370));
+                if ($zk->connect()) {
+                    $uid = intval($userId) > 0 ? intval($userId) : 1;
+                    $zk->setUser($uid, $userId, $name, $password, 0, 0);
+                    $zk->disconnect();
+                    Log::info("User {$userId} ({$name}) pushed to ZKTeco device {$device->ip_address}");
+                    return true;
+                }
+            } catch (Exception $e) {
+                Log::error("ZKTeco Add User Failed for {$userId}: " . $e->getMessage());
+                return false;
+            }
+        }
+
+        try {
+            $client = new Client([
+                'base_uri' => "http://{$device->ip_address}:{$device->port}/",
+                'timeout' => 10,
+                'auth' => [$device->username, $this->getDecryptedPassword($device), 'digest'],
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'Accept' => 'application/json',
+                ],
+            ]);
+
+            $userData = [
+                'UserInfo' => [
+                    'employeeNo' => $userId,
+                    'name' => $name,
+                    'userType' => 'normal',
+                    'Valid' => [
+                        'enable' => true,
+                        'beginTime' => '2020-01-01T00:00:00',
+                        'endTime' => '2037-12-31T23:59:59',
+                    ],
+                    'doorRight' => '1',
+                    'RightPlan' => [
+                        [
+                            'doorNo' => 1,
+                            'planTemplateNo' => '1',
+                        ],
+                    ],
+                ],
+            ];
+
+            $response = $client->post('ISAPI/AccessControl/UserInfo/Record?format=json', [
+                'json' => $userData,
+                'http_errors' => false,
+            ]);
+
+            $statusCode = $response->getStatusCode();
+            $body = (string) $response->getBody();
+
+            if ($statusCode === 409 || $statusCode === 400 || strpos($body, 'userExisted') !== false || strpos($body, 'exist') !== false) {
+                $response = $client->put('ISAPI/AccessControl/UserInfo/Modify?format=json', [
+                    'json' => $userData,
+                    'http_errors' => false,
+                ]);
+                $statusCode = $response->getStatusCode();
+                $body = (string) $response->getBody();
+            }
+
+            if ($statusCode === 200 || $statusCode === 201) {
+                return true;
+            }
+
+            return $this->addUserToDeviceXml($device, $userId, $name, $password);
+
+        } catch (Exception $e) {
+            return $this->addUserToDeviceXml($device, $userId, $name, $password);
+        }
+    }
+
+    /**
+     * Get Attendance Logs via Hikvision JSON API
      */
     protected function getAttendanceLogsJson(BiometricDevice $device): array
     {
@@ -109,12 +314,10 @@ class BiometricDeviceService
             $searchPosition = 0;
             $hasMore = true;
 
-            // Filter logs for the last 30 days to ensure performance
             $startTime = date('Y-m-d\TH:i:s', strtotime('-30 days'));
             $endTime = date('Y-m-d\TH:i:s');
 
             while ($hasMore) {
-                // JSON Query for attendance events
                 $searchData = [
                     'AcsEventCond' => [
                         'searchID' => '1',
@@ -136,16 +339,13 @@ class BiometricDeviceService
                 $body = (string) $response->getBody();
 
                 if ($statusCode !== 200) {
-                    Log::warning("JSON pull failed at position {$searchPosition}: Status {$statusCode}");
                     $hasMore = false;
-
                     continue;
                 }
 
                 $data = json_decode($body, true);
                 $batchCount = 0;
 
-                // Parse JSON response
                 if (isset($data['AcsEvent']['InfoList'])) {
                     foreach ($data['AcsEvent']['InfoList'] as $info) {
                         $allLogs[] = [
@@ -158,33 +358,26 @@ class BiometricDeviceService
                     }
                 }
 
-                Log::info("JSON batch pulled: {$batchCount} logs at position {$searchPosition}");
-
                 if ($batchCount < 100) {
                     $hasMore = false;
                 } else {
                     $searchPosition += 100;
                 }
 
-                // Safety break
                 if ($searchPosition > 10000) {
                     $hasMore = false;
                 }
             }
 
-            Log::info('Total JSON logs found: '.count($allLogs));
-
             return $allLogs;
 
         } catch (Exception $e) {
-            Log::warning('JSON attendance pull failed: '.$e->getMessage());
-
             return [];
         }
     }
 
     /**
-     * Get Attendance Logs via XML API (fallback)
+     * Get Attendance Logs via Hikvision XML API
      */
     protected function getAttendanceLogsXml(BiometricDevice $device): array
     {
@@ -195,7 +388,6 @@ class BiometricDeviceService
             $searchPosition = 0;
             $hasMore = true;
 
-            // Filter logs for the last 30 days to ensure performance
             $startTime = date('Y-m-d\TH:i:s', strtotime('-30 days'));
             $endTime = date('Y-m-d\TH:i:s');
 
@@ -220,17 +412,13 @@ class BiometricDeviceService
                 $xmlString = (string) $response->getBody();
 
                 if ($statusCode !== 200) {
-                    Log::warning("XML pull failed at position {$searchPosition}: Status {$statusCode}");
                     $hasMore = false;
-
                     continue;
                 }
 
                 $xml = simplexml_load_string($xmlString);
                 if ($xml === false) {
-                    Log::warning("XML parse error at position {$searchPosition}");
                     $hasMore = false;
-
                     continue;
                 }
 
@@ -248,141 +436,32 @@ class BiometricDeviceService
                     }
                 }
 
-                Log::info("XML batch pulled: {$batchCount} logs at position {$searchPosition}");
-
                 if ($batchCount < 100) {
-                    $hasMore = false; // Less than maxResults means we reached the end
+                    $hasMore = false;
                 } else {
                     $searchPosition += 100;
                 }
 
-                // Safety break
                 if ($searchPosition > 10000) {
                     $hasMore = false;
                 }
             }
 
-            Log::info('Total XML logs found: '.count($allLogs));
-
             return $allLogs;
 
         } catch (Exception $e) {
-            Log::warning('XML attendance pull failed: '.$e->getMessage());
-
             return [];
         }
     }
 
     /**
-     * Sync Device Time
-     */
-    public function syncTime(BiometricDevice $device): bool
-    {
-        try {
-            $client = $this->getClient($device);
-            $time = date('Y-m-d\TH:i:s');
-            $xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-                    <Time>
-                        <timeMode>manual</timeMode>
-                        <localTime>$time</localTime>
-                        <timeZone>CST-5:00:00</timeZone>
-                    </Time>";
-
-            $client->put('ISAPI/System/time', ['body' => $xml]);
-
-            return true;
-        } catch (Exception $e) {
-            Log::error('Hikvision Time Sync Failed: '.$e->getMessage());
-
-            return false;
-        }
-    }
-
-    /**
-     * Add/Update user on device via Hikvision ISAPI (JSON format)
-     */
-    public function addUserToDevice(BiometricDevice $device, string $userId, string $name, string $password = ''): bool
-    {
-        try {
-            $client = new Client([
-                'base_uri' => "http://{$device->ip_address}:{$device->port}/",
-                'timeout' => 10,
-                'auth' => [$device->username, $this->getDecryptedPassword($device), 'digest'],
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ],
-            ]);
-
-            // Hikvision ISAPI UserInfo in JSON format
-            $userData = [
-                'UserInfo' => [
-                    'employeeNo' => $userId,
-                    'name' => $name,
-                    'userType' => 'normal',
-                    'Valid' => [
-                        'enable' => true,
-                        'beginTime' => '2020-01-01T00:00:00',
-                        'endTime' => '2037-12-31T23:59:59',
-                    ],
-                    'doorRight' => '1',
-                    'RightPlan' => [
-                        [
-                            'doorNo' => 1,
-                            'planTemplateNo' => '1',
-                        ],
-                    ],
-                ],
-            ];
-
-            // Try to add user first
-            $response = $client->post('ISAPI/AccessControl/UserInfo/Record?format=json', [
-                'json' => $userData,
-                'http_errors' => false,
-            ]);
-
-            $statusCode = $response->getStatusCode();
-            $body = (string) $response->getBody();
-
-            Log::info("Add user attempt for {$userId}: Status {$statusCode}, Body: ".substr($body, 0, 200));
-
-            // If user exists, try to modify instead
-            if ($statusCode === 409 || $statusCode === 400 || strpos($body, 'userExisted') !== false || strpos($body, 'exist') !== false) {
-                Log::info("User {$userId} exists, trying modify...");
-                $response = $client->put('ISAPI/AccessControl/UserInfo/Modify?format=json', [
-                    'json' => $userData,
-                    'http_errors' => false,
-                ]);
-                $statusCode = $response->getStatusCode();
-                $body = (string) $response->getBody();
-            }
-
-            if ($statusCode === 200 || $statusCode === 201) {
-                Log::info("User {$userId} ({$name}) pushed to device {$device->ip_address} via JSON");
-
-                return true;
-            }
-
-            Log::warning("JSON Push failed. Status: {$statusCode}. Trying XML fallback...");
-
-            return $this->addUserToDeviceXml($device, $userId, $name, $password);
-
-        } catch (Exception $e) {
-            Log::warning("Hikvision Add User JSON Failed for {$userId}: ".$e->getMessage().'. Trying XML fallback...');
-
-            return $this->addUserToDeviceXml($device, $userId, $name, $password);
-        }
-    }
-
-    /**
-     * Add/Update user on device via Hikvision ISAPI (XML format)
+     * Add/Update user on device via Hikvision XML
      */
     protected function addUserToDeviceXml(BiometricDevice $device, string $userId, string $name, string $password = ''): bool
     {
         try {
             $client = $this->getClient($device);
 
-            // Minimal XML Helper
             $xmlBody = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
             <UserInfo version=\"2.0\" xmlns=\"http://www.hikvision.com/ver20/XMLSchema\">
                 <employeeNo>{$userId}</employeeNo>
@@ -402,18 +481,16 @@ class BiometricDeviceService
                 </RightPlan>
             </UserInfo>";
 
-            // Try to add user first (POST)
             try {
                 $response = $client->post('ISAPI/AccessControl/UserInfo/Record', [
                     'body' => $xmlBody,
-                    'http_errors' => false, // Handle 4xx manually
+                    'http_errors' => false,
                 ]);
                 $statusCode = $response->getStatusCode();
             } catch (Exception $ex) {
                 $statusCode = 500;
             }
 
-            // If user exists (409/old firmware behavior), try PUT to Modify
             if ($statusCode !== 200 && $statusCode !== 201) {
                 $response = $client->put('ISAPI/AccessControl/UserInfo/Modify', [
                     'body' => $xmlBody,
@@ -422,26 +499,13 @@ class BiometricDeviceService
                 $statusCode = $response->getStatusCode();
             }
 
-            if ($statusCode === 200 || $statusCode === 201) {
-                Log::info("User {$userId} ({$name}) pushed to device {$device->ip_address} via XML");
-
-                return true;
-            }
-
-            Log::error("XML Push User Failed. Status: {$statusCode}");
-
-            return false;
+            return ($statusCode === 200 || $statusCode === 201);
 
         } catch (Exception $e) {
-            Log::error("Hikvision Add User XML Failed for {$userId}: ".$e->getMessage());
-
             return false;
         }
     }
 
-    /**
-     * Get decrypted password
-     */
     protected function getDecryptedPassword(BiometricDevice $device): string
     {
         try {
@@ -453,6 +517,19 @@ class BiometricDeviceService
 
     public function clearLogs(BiometricDevice $device): bool
     {
+        if ($this->isZkDevice($device)) {
+            try {
+                $zk = $this->makeZk($device->ip_address, intval($device->port ?? 4370));
+                if ($zk->connect()) {
+                    $zk->clearAttendance();
+                    $zk->disconnect();
+                    return true;
+                }
+            } catch (Exception $e) {
+                Log::error("ZKTeco Clear Logs Failed: " . $e->getMessage());
+                return false;
+            }
+        }
         return false;
     }
 
