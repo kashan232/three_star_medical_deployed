@@ -57,7 +57,7 @@
                                 <h6 class="text-secondary text-uppercase small fw-bold mb-2">Opening Balance</h6>
                                 <h3 class="fw-bold text-dark mb-0">Rs. {{ number_format($opening_balance, 2) }}</h3>
                                 <p class="small text-muted mb-0 mt-1">As of
-                                    {{ \Carbon\Carbon::parse(request('start_date', now()->startOfMonth()))->format('d-m-Y') }}
+                                    {{ \Carbon\Carbon::parse(request('start_date', now()->startOfMonth()))->format('d/m/Y') }}
                                 </p>
                             </div>
                         </div>
@@ -119,7 +119,7 @@
                                         @foreach ($transactions as $txn)
                                             <tr class="border-light-subtle">
                                                 <td class="ps-4 fw-medium text-dark">
-                                                    {{ \Carbon\Carbon::parse($txn['date'])->format('d-m-Y') }}</td>
+                                                    {{ \Carbon\Carbon::parse($txn['date'])->format('d/m/Y') }}</td>
                                                 <td class="text-muted small">{{ $txn['description'] }}</td>
                                                 <td class="text-end font-monospace text-dark">
                                                     {{ $txn['debit'] > 0 ? number_format($txn['debit'], 2) : '-' }}

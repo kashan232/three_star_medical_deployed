@@ -394,7 +394,7 @@
                                             <div class="text-emerald" style="font-size: 1.1rem;"><i
                                                     class="fas fa-calendar-check"></i></div>
                                             <span
-                                                class="fw-600">{{ \Carbon\Carbon::parse($purchase->purchase_date)->format('d-m-Y') }}</span>
+                                                class="fw-600">{{ \Carbon\Carbon::parse($purchase->purchase_date)->format('d/m/Y') }}</span>
                                         </div>
                                     </td>
                                     <td>

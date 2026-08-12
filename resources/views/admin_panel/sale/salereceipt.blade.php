@@ -137,10 +137,10 @@
 
     <div class="info-row">
         <span>Inv #: {{ $sale->invoice_no ?? $sale->id }}</span>
-        <span>{{ $sale->created_at->format('d-m-Y h:i A') }}</span>
+        <span>{{ $sale->created_at->format('d/m/Y h:i A') }}</span>
     </div>
     <div class="info-row">
-        <span>Date: {{ $sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->format('d-m-Y') : $sale->created_at->format('d-m-Y') }}</span>
+        <span>Date: {{ $sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->format('d/m/Y') : $sale->created_at->format('d/m/Y') }}</span>
     </div>
     <div class="info-row">
         <span>Cust: {{ Str::limit($sale->customer_relation->customer_name ?? 'Walking', 18) }}</span>

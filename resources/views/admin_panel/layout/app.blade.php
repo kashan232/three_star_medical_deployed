@@ -283,6 +283,9 @@
     <!-- SweetAlert2 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css" rel="stylesheet">
 
+    <!-- Flatpickr CSS for dd/mm/yyyy Date Picker -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
     @vite(['resources/js/app.js'])
     @yield('style')
 </head>
@@ -1301,6 +1304,35 @@
         // Ensure function contexts are bound correctly
         window.ERPImportLoader.preventInteraction = window.ERPImportLoader.preventInteraction.bind(window.ERPImportLoader);
         window.ERPImportLoader.preventKeyboard = window.ERPImportLoader.preventKeyboard.bind(window.ERPImportLoader);
+    </script>
+
+    <!-- Flatpickr JS for dd/mm/yyyy Date Format -->
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            initGlobalDatepickers();
+        });
+
+        function initGlobalDatepickers(container = document) {
+            if (typeof flatpickr === 'undefined') return;
+            const dateInputs = container.querySelectorAll('input[type="date"], input.datepicker-ddmmyyyy');
+            dateInputs.forEach(input => {
+                if (input._flatpickr) return;
+                input.type = 'text';
+                flatpickr(input, {
+                    dateFormat: "Y-m-d",
+                    altInput: true,
+                    altFormat: "d/m/Y",
+                    allowInput: true
+                });
+            });
+        }
+
+        if (typeof $ !== 'undefined') {
+            $(document).on('shown.bs.modal shown.bs.tab', function(e) {
+                initGlobalDatepickers(e.target);
+            });
+        }
     </script>
     <!-- ============================================== -->
 </body>

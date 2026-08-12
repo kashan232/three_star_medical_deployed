@@ -154,7 +154,7 @@
                                             <div class="hr-item-subtitle">{{ $loan->employee->designation->name ?? 'N/A' }}</div>
                                             <div class="hr-item-meta">
                                                 <i class="fa fa-calendar-alt me-1"></i>
-                                                {{ $loan->created_at->format('d M, Y') }}
+                                                {{ $loan->created_at->format('d/m/Y') }}
                                             </div>
                                         </div>
                                     </div>

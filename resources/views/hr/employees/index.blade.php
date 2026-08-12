@@ -107,7 +107,7 @@
                                             <div class="hr-item-subtitle">{{ $emp->email }}</div>
                                             <div class="hr-item-meta">
                                                 ID: {{ $emp->id }} • Joined
-                                                {{ \Carbon\Carbon::parse($emp->joining_date)->format('M d, Y') }}
+                                                {{ \Carbon\Carbon::parse($emp->joining_date)->format('d/m/Y') }}
                                             </div>
                                         </div>
                                     </div>

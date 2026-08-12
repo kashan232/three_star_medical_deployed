@@ -393,7 +393,7 @@
                                             <div class="text-emerald" style="font-size: 1.1rem;"><i
                                                     class="fas fa-calendar-check"></i></div>
                                             <span
-                                                class="fw-bold">{{ \Carbon\Carbon::parse($sale->sale_date)->format('d-m-Y') }}</span>
+                                                class="fw-bold">{{ \Carbon\Carbon::parse($sale->sale_date)->format('d/m/Y') }}</span>
                                         </div>
                                     </td>
                                     <td>

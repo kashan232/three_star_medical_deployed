@@ -421,7 +421,7 @@
     <div class="rpt-page">
         <div class="print-header" style="display:none; margin-bottom:16px;">
             <h2 style="margin:0;font-size:18px;font-weight:700;">🏠 Warehouse Activity Report</h2>
-            <p style="margin:4px 0 0;font-size:12px;color:#555;">Printed: {{ now()->format('Y-m-d H:i') }}</p>
+            <p style="margin:4px 0 0;font-size:12px;color:#555;">Printed: {{ now()->format('d/m/Y H:i') }}</p>
         </div>
 
         <div class="rpt-topbar">

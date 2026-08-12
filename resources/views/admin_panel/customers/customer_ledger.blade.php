@@ -579,7 +579,7 @@
                                 </div>
                             </div>
                             <div style="text-align:right;">
-                                    <div class="period-badge">📅 {{ \Carbon\Carbon::parse($start)->format('d-m-Y') }} → {{ \Carbon\Carbon::parse($end)->format('d-m-Y') }}</div>
+                                    <div class="period-badge">📅 {{ \Carbon\Carbon::parse($start)->format('d/m/Y') }} → {{ \Carbon\Carbon::parse($end)->format('d/m/Y') }}</div>
                             </div>
                         </div>
 
@@ -680,7 +680,7 @@
                                             @endphp
                                             <tr>
                                                 <td style="color:var(--muted);font-size:.82rem;">
-                                                        {{ \Carbon\Carbon::parse($ledger->created_at)->format('d-m-Y') }}
+                                                        {{ \Carbon\Carbon::parse($ledger->created_at)->format('d/m/Y') }}
                                                 </td>
                                                 <td>
                                                     @if ($invoice !== '—')

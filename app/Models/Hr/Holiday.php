@@ -40,12 +40,16 @@ class Holiday extends Model
     public static function isHoliday($date, $employeeId = null)
     {
         return self::where(function ($query) use ($date) {
-            $query->whereDate('date', '<=', $date)
-                  ->where(function ($q) use ($date) {
-                      $q->whereDate('end_date', '>=', $date)
-                        ->orWhereNull('end_date')
-                        ->orWhere('end_date', '=', \DB::raw('date'));
-                  });
+            $query->where(function ($q) use ($date) {
+                // Single-day holiday (no end_date): must match exact date
+                $q->whereNull('end_date')
+                  ->whereDate('date', '=', $date);
+            })->orWhere(function ($q) use ($date) {
+                // Multi-day holiday: date must fall within the range
+                $q->whereNotNull('end_date')
+                  ->whereDate('date', '<=', $date)
+                  ->whereDate('end_date', '>=', $date);
+            });
         })->when($employeeId, function ($query) use ($employeeId) {
             $query->where(function($q) use ($employeeId) {
                 $q->doesntHave('employees')
@@ -62,12 +66,16 @@ class Holiday extends Model
     public static function getHoliday($date, $employeeId = null)
     {
         return self::with('employees')->where(function ($query) use ($date) {
-            $query->whereDate('date', '<=', $date)
-                  ->where(function ($q) use ($date) {
-                      $q->whereDate('end_date', '>=', $date)
-                        ->orWhereNull('end_date')
-                        ->orWhere('end_date', '=', \DB::raw('date'));
-                  });
+            $query->where(function ($q) use ($date) {
+                // Single-day holiday (no end_date): must match exact date
+                $q->whereNull('end_date')
+                  ->whereDate('date', '=', $date);
+            })->orWhere(function ($q) use ($date) {
+                // Multi-day holiday: date must fall within the range
+                $q->whereNotNull('end_date')
+                  ->whereDate('date', '<=', $date)
+                  ->whereDate('end_date', '>=', $date);
+            });
         })->when($employeeId, function ($query) use ($employeeId) {
             $query->where(function($q) use ($employeeId) {
                 $q->doesntHave('employees')
