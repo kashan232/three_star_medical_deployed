@@ -347,7 +347,7 @@ class PayrollController extends Controller
                     'is_aggregated'      => true,
                     'total_commission'   => $aggMaxComm,
                     'paid_so_far'        => max(0, $aggMaxComm - $aggRemaining - $liveTotalComm),
-                    'current_commission' => $liveTotalComm,
+                    'current_commission' => floatval($payroll->commission) + $liveTotalComm, // Use saved database value + any new unpaid live commission
                     'remaining_commission' => $aggRemaining,
                     'customer_paid_total' => $aggCustPaid,
                     'sale_total'         => $aggSaleTotal,

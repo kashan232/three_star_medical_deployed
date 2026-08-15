@@ -880,14 +880,17 @@ class PayrollCalculationService
                 ->where('status', '!=', 'paid')
                 ->first();
 
+            $isNewMonthlyPayroll = false;
+            $allowancesToSave = [];
+            $deductionsToSave = [];
+
             if (!$payroll) {
                 // Check if employee has an active monthly salary structure or is eligible for monthly payroll
                 $structure = $this->getEffectiveSalaryStructure($employee);
                 if ($structure) {
                     $payrollData = $this->calculateMonthlyPayroll($employee, $month);
                     
-                    // We must explicitly add the new commission because calculateMonthlyPayroll might
-                    // omit it due to uncommitted DB changes in this transaction.
+                    // We explicitly add the new commission initially
                     $payrollData['commission'] = ($payrollData['commission'] ?? 0) + $newCommission;
                     $payrollData['gross_salary'] = ($payrollData['gross_salary'] ?? 0) + $newCommission;
                     $payrollData['net_salary'] = ($payrollData['net_salary'] ?? 0) + $newCommission;
@@ -896,11 +899,10 @@ class PayrollCalculationService
                         ['employee_id' => $employee->id],
                         \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'breakdown', 'attendance_breakdown', 'commission_details'])
                     ));
-                    $this->savePayrollDetails(
-                        $payroll,
-                        $payrollData['allowance_details'] ?? [],
-                        $payrollData['deduction_details'] ?? []
-                    );
+
+                    $isNewMonthlyPayroll = true;
+                    $allowancesToSave = $payrollData['allowance_details'] ?? [];
+                    $deductionsToSave = $payrollData['deduction_details'] ?? [];
                 } else {
                     // Fallback standalone commission payroll
                     $payroll = \App\Models\Hr\Payroll::where('employee_id', $employee->id)
@@ -909,19 +911,14 @@ class PayrollCalculationService
                         ->where('status', '!=', 'paid')
                         ->first();
 
-                    if ($payroll) {
-                        $payroll->gross_salary += $newCommission;
-                        $payroll->commission   += $newCommission;
-                        $payroll->net_salary   += $newCommission;
-                        $payroll->save();
-                    } else {
+                    if (!$payroll) {
                         $payroll = \App\Models\Hr\Payroll::create([
                             'employee_id' => $employee->id,
                             'sale_id' => $sale->id,
                             'payroll_type' => 'commission', 
                             'month' => $month,
                             'basic_salary' => 0,
-                            'gross_salary' => $newCommission,
+                            'gross_salary' => 0, // Will be updated below
                             'allowances' => 0,
                             'deductions' => 0,
                             'attendance_deductions' => 0,
@@ -929,22 +926,18 @@ class PayrollCalculationService
                             'manual_allowances' => 0,
                             'carried_forward_deduction' => 0,
                             'bonuses' => 0,
-                            'commission' => $newCommission,
-                            'net_salary' => $newCommission,
+                            'commission' => 0, // Will be updated below
+                            'net_salary' => 0, // Will be updated below
                             'status' => 'generated',
                             'auto_generated' => true,
                             'notes' => "Instant Commission for Sale #{$sale->invoice_no} (Triggered by Full Payment)",
                         ]);
                     }
                 }
-            } else {
-                // Update existing monthly payroll with new commission
-                $payroll->commission   += $newCommission;
-                $payroll->gross_salary += $newCommission;
-                $payroll->net_salary   += $newCommission;
-                $payroll->save();
             }
 
+            // 1. Create the PayrollDetail for this commission immediately!
+            // This ensures any re-calculation sums it properly.
             \App\Models\Hr\PayrollDetail::create([
                 'payroll_id' => $payroll->id,
                 'type' => 'commission',
@@ -952,6 +945,19 @@ class PayrollCalculationService
                 'amount' => $newCommission,
                 'description' => "Invoice #{$sale->invoice_no}: Tax Base Rs. {$taxExclusiveBase} -> {$newCommission} Commission (Fully Paid)",
             ]);
+
+            // 2. Update the main Payroll record
+            if ($isNewMonthlyPayroll) {
+                // Since this recalculates totals based on PayrollDetail records, 
+                // it will correctly sum the newly created commission detail above!
+                $this->savePayrollDetails($payroll, $allowancesToSave, $deductionsToSave);
+            } else {
+                // Update existing monthly or standalone commission payroll directly
+                $payroll->commission   += $newCommission;
+                $payroll->gross_salary += $newCommission;
+                $payroll->net_salary   += $newCommission;
+                $payroll->save();
+            }
 
             // Track paid commission on the sale
             \Illuminate\Support\Facades\DB::table('sales')
