@@ -715,7 +715,8 @@ class ReportingController extends Controller
         return view('admin_panel.reporting.purchase_report');
     }
 
-    public function fetchPurchaseReport(Request $request)
+    // ─── Helper: build purchase report data ───────
+    private function buildPurchaseReportData(Request $request): array
     {
         $startDate   = $request->start_date;
         $endDate     = $request->end_date;
@@ -732,28 +733,17 @@ class ReportingController extends Controller
             ->join('vendors', 'purchases.vendor_id', '=', 'vendors.id')
             ->leftJoin('warehouses', 'purchases.warehouse_id', '=', 'warehouses.id')
             ->select(
-                'purchases.id',
-                'purchases.invoice_no',
-                'purchases.purchase_date',
-                'purchases.status_purchase',
-                'vendors.name as vendor_name',
-                'vendors.phone as vendor_phone',
-                'warehouses.warehouse_name',
-                'purchases.subtotal',
-                'purchases.discount',
-                'purchases.extra_cost',
-                'purchases.net_amount',
-                'purchases.paid_amount',
-                'purchases.due_amount',
-                'purchases.note',
-                'purchases.po_ref'
+                'purchases.id', 'purchases.invoice_no', 'purchases.purchase_date',
+                'purchases.status_purchase', 'vendors.name as vendor_name',
+                'vendors.phone as vendor_phone', 'warehouses.warehouse_name',
+                'purchases.subtotal', 'purchases.discount', 'purchases.extra_cost',
+                'purchases.net_amount', 'purchases.paid_amount', 'purchases.due_amount',
+                'purchases.note', 'purchases.po_ref'
             );
 
-        // Branch filter
         if ($branchId) {
             $query->where('purchases.branch_id', $branchId);
         }
-
         if ($startDate && $endDate) {
             $query->whereBetween('purchases.purchase_date', [$startDate, $endDate]);
         }
@@ -767,7 +757,6 @@ class ReportingController extends Controller
             $query->where('purchases.warehouse_id', $warehouseId);
         }
 
-        // Sub-query logic for product-based filters
         if (($catId && $catId !== 'all') || ($subId && $subId !== 'all') || ($brandId && $brandId !== 'all') || ($productId && $productId !== 'all')) {
             $query->whereIn('purchases.id', function($sub) use ($catId, $subId, $brandId, $productId) {
                 $sub->select('purchase_id')->from('purchase_items')
@@ -780,55 +769,30 @@ class ReportingController extends Controller
         }
 
         $purchases = $query->orderBy('purchases.purchase_date', 'desc')->get();
-
-        // Enrich with items and returns
         $purchaseIds = $purchases->pluck('id')->toArray();
 
-        // Items keyed by purchase_id
         $itemsQuery = DB::table('purchase_items')
             ->join('products', 'purchase_items.product_id', '=', 'products.id')
             ->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
             ->leftJoin('product_uoms', 'purchase_items.uom_id', '=', 'product_uoms.id')
             ->whereIn('purchase_items.purchase_id', $purchaseIds)
             ->select(
-                'purchase_items.purchase_id',
-                'products.item_code',
-                'products.item_name',
-                'brands.name as brand_name',
-                'purchase_items.qty',
-                'purchase_items.loose_qty',
-                'purchase_items.free_qty_pieces',
-                'purchase_items.unit',
-                'purchase_items.price',
-                'purchase_items.item_discount',
-                'purchase_items.line_total',
-                'purchase_items.size_mode',
-                'purchase_items.pieces_per_box',
-                'purchase_items.gst_percent',
-                'purchase_items.gst_amount',
-                'purchase_items.it_percent',
-                'purchase_items.adv_tax_percent',
-                'products.hs_code',
-                'product_uoms.name as table_uom_name',
-                'purchase_items.uom_factor'
+                'purchase_items.purchase_id', 'products.item_code', 'products.item_name',
+                'brands.name as brand_name', 'purchase_items.qty', 'purchase_items.loose_qty',
+                'purchase_items.free_qty_pieces', 'purchase_items.unit', 'purchase_items.price',
+                'purchase_items.item_discount', 'purchase_items.line_total', 'purchase_items.size_mode',
+                'purchase_items.pieces_per_box', 'purchase_items.gst_percent', 'purchase_items.gst_amount',
+                'purchase_items.it_percent', 'purchase_items.adv_tax_percent', 'products.hs_code',
+                'product_uoms.name as table_uom_name', 'purchase_items.uom_factor'
             );
 
-        if ($catId && $catId !== 'all') {
-            $itemsQuery->where('products.category_id', $catId);
-        }
-        if ($subId && $subId !== 'all') {
-            $itemsQuery->where('products.sub_category_id', $subId);
-        }
-        if ($brandId && $brandId !== 'all') {
-            $itemsQuery->where('products.brand_id', $brandId);
-        }
-        if ($productId && $productId !== 'all') {
-            $itemsQuery->where('products.id', $productId);
-        }
+        if ($catId && $catId !== 'all')      $itemsQuery->where('products.category_id', $catId);
+        if ($subId && $subId !== 'all')      $itemsQuery->where('products.sub_category_id', $subId);
+        if ($brandId && $brandId !== 'all')  $itemsQuery->where('products.brand_id', $brandId);
+        if ($productId && $productId !== 'all') $itemsQuery->where('products.id', $productId);
 
         $itemsMap = $itemsQuery->get()->groupBy('purchase_id');
 
-        // Returns keyed by purchase_id
         $returnsMap = DB::table('purchase_returns')
             ->whereIn('purchase_id', $purchaseIds)
             ->select('purchase_id', DB::raw('SUM(net_amount) as total_returned'), DB::raw('COUNT(*) as return_count'))
@@ -837,11 +801,7 @@ class ReportingController extends Controller
             ->keyBy('purchase_id');
 
         $rows = [];
-        $grandSubtotal = 0;
-        $grandNet = 0;
-        $grandPaid = 0;
-        $grandDue = 0;
-        $grandReturned = 0;
+        $grandSubtotal = 0; $grandNet = 0; $grandPaid = 0; $grandDue = 0; $grandReturned = 0;
 
         foreach ($purchases as $p) {
             $items = $itemsMap->get($p->id, collect());
@@ -894,7 +854,16 @@ class ReportingController extends Controller
             ];
         }
 
-        // Dropdown data for filters
+        return ['rows' => $rows, 'grandSubtotal' => $grandSubtotal, 'grandNet' => $grandNet, 
+                'grandPaid' => $grandPaid, 'grandDue' => $grandDue, 'grandReturned' => $grandReturned,
+                'start' => $startDate, 'end' => $endDate];
+    }
+
+    public function fetchPurchaseReport(Request $request)
+    {
+        $d = $this->buildPurchaseReportData($request);
+        $branchId = $this->getBranchId();
+
         $vendors = DB::table('vendors')
             ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->select('id', 'name')->orderBy('name')->get();
@@ -904,15 +873,101 @@ class ReportingController extends Controller
             ->select('id', 'warehouse_name')->orderBy('warehouse_name')->get();
 
         return response()->json([
-            'data' => $rows,
+            'data' => $d['rows'],
             'vendors' => $vendors,
             'warehouses' => $warehouses,
-            'grand_subtotal' => $grandSubtotal,
-            'grand_net' => $grandNet,
-            'grand_paid' => $grandPaid,
-            'grand_due' => $grandDue,
-            'grand_returned' => $grandReturned,
+            'grand_subtotal' => $d['grandSubtotal'],
+            'grand_net' => $d['grandNet'],
+            'grand_paid' => $d['grandPaid'],
+            'grand_due' => $d['grandDue'],
+            'grand_returned' => $d['grandReturned'],
         ]);
+    }
+
+    public function exportPurchaseReportExcel(Request $request)
+    {
+        $d = $this->buildPurchaseReportData($request);
+        
+        $data = [['Invoice No', 'Date', 'Vendor', 'Warehouse', 'Subtotal', 'Discount', 'Extra Cost', 'Net Amount', 'Paid', 'Due', 'Returned', 'Status', 'Item Code', 'Item Name', 'Packing', 'Qty', 'Free', 'Price', 'Item Discount', 'Line Total']];
+        
+        foreach ($d['rows'] as $r) {
+            if (empty($r['items'])) {
+                $data[] = [$r['invoice_no'], $r['purchase_date'], $r['vendor_name'], $r['warehouse_name'], $r['subtotal'], $r['discount'], $r['extra_cost'], $r['net_amount'], $r['paid_amount'], $r['due_amount'], $r['total_returned'], $r['status'], '', '', '', '', '', '', '', ''];
+            } else {
+                foreach ($r['items'] as $ii => $it) {
+                    if ($ii == 0) {
+                        $data[] = [$r['invoice_no'], $r['purchase_date'], $r['vendor_name'], $r['warehouse_name'], $r['subtotal'], $r['discount'], $r['extra_cost'], $r['net_amount'], $r['paid_amount'], $r['due_amount'], $r['total_returned'], $r['status'], $it['item_code'], $it['item_name'], $it['uom_name'], $it['qty'], $it['free_qty'], $it['price'], $it['item_discount'], $it['line_total']];
+                    } else {
+                        $data[] = [$r['invoice_no'], $r['purchase_date'], $r['vendor_name'], $r['warehouse_name'], '', '', '', '', '', '', '', '', $it['item_code'], $it['item_name'], $it['uom_name'], $it['qty'], $it['free_qty'], $it['price'], $it['item_discount'], $it['line_total']];
+                    }
+                }
+            }
+        }
+        
+        $data[] = [];
+        $data[] = ['','','','GRAND TOTAL:', $d['grandSubtotal'], '', '', $d['grandNet'], $d['grandPaid'], $d['grandDue'], $d['grandReturned']];
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Purchase_Report_' . now()->format('Y-m-d') . '.xlsx';
+
+        return response((string) $xlsx, 200, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+            'Pragma'              => 'no-cache',
+        ]);
+    }
+
+    public function exportPurchaseReportPdf(Request $request)
+    {
+        $d = $this->buildPurchaseReportData($request);
+        $filename = 'Purchase_Report_' . now()->format('Y-m-d') . '.pdf';
+
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 8px; margin: 10px; }
+            h2 { text-align:center; font-size:12px; margin-bottom:4px; }
+            p.sub { text-align:center; color:#555; margin:0 0 8px; font-size:8px; }
+            table { width:100%; border-collapse:collapse; }
+            th { background:#1e40af; color:#fff; padding:4px 2px; text-align:left; font-size:7px; }
+            td { padding:3px 2px; border-bottom:1px solid #e5e7eb; font-size:7px; }
+            tr:nth-child(even) td { background:#f8fafc; }
+            .num { text-align:right; }
+            .total-row td { font-weight:bold; background:#dbeafe !important; }
+        </style></head><body>
+        <h2>Purchase Report — Detailed</h2>
+        <p class="sub">Period: ' . ($d['start'] ?? '-') . ' to ' . ($d['end'] ?? '-') . ' &nbsp;|&nbsp; Generated: ' . now()->format('d M Y H:i') . '</p>
+        <table>
+        <tr><th>Invoice</th><th>Date</th><th>Vendor</th><th>Warehouse</th><th>Status</th><th>Item</th><th>Code</th><th>Packing</th><th class="num">Rate</th><th class="num">Qty</th><th class="num">Free</th><th class="num">Total</th></tr>';
+
+        foreach ($d['rows'] as $r) {
+            foreach ($r['items'] as $it) {
+                $html .= '<tr>
+                    <td>' . e($r['invoice_no'])  . '</td>
+                    <td>' . e($r['purchase_date'])     . '</td>
+                    <td>' . e($r['vendor_name']) . '</td>
+                    <td>' . e($r['warehouse_name'])     . '</td>
+                    <td>' . e($r['status'])     . '</td>
+                    <td>' . e($it['item_name'])  . '</td>
+                    <td>' . e($it['item_code'])  . '</td>
+                    <td>' . e($it['uom_name'])  . '</td>
+                    <td class="num">' . number_format($it['price'],     2) . '</td>
+                    <td class="num">' . number_format($it['qty'],      2) . '</td>
+                    <td class="num">' . number_format($it['free_qty'],     2) . '</td>
+                    <td class="num">' . number_format($it['line_total'],    2) . '</td>
+                </tr>';
+            }
+        }
+
+        $html .= '<tr class="total-row">
+            <td colspan="11">GRAND NET TOTAL</td>
+            <td class="num">' . number_format($d['grandNet'],  2) . '</td>
+        </tr></table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)
+            ->setPaper('a4', 'landscape')
+            ->setOptions(['defaultFont' => 'DejaVu Sans', 'isRemoteEnabled' => false]);
+
+        return $pdf->download($filename);
     }
 
     public function sale_report()
@@ -1306,7 +1361,7 @@ class ReportingController extends Controller
         $xlsx     = \Shuchkin\SimpleXLSXGen::fromArray($data);
         $filename = 'Sale_Report_' . now()->format('Y-m-d') . '.xlsx';
 
-        return response($xlsx->xlsx(), 200, [
+        return response((string) $xlsx, 200, [
             'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
             'Cache-Control'       => 'no-cache, no-store, must-revalidate',

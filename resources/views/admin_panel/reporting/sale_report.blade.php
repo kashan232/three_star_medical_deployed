@@ -430,7 +430,8 @@
                     <div class="filter-group" style="flex-direction: row; gap: 6px; align-items: flex-end; min-width: 400px; margin-left: 10px; flex: 1.5;">
                         <button class="btn-filter-action btn-filter-search" id="btnSearch" style="flex: 1;">🔍 Search</button>
                         <button class="btn-filter-action btn-filter-reset" id="btnReset" style="flex: 1;">↺ Reset</button>
-                        <button class="btn-filter-action btn-pdf-action" id="btnExportPdf" style="flex: 1.2;">Export PDF</button>
+                        <button class="btn-filter-action btn-excel-action" id="btnExportExcel" style="flex: 1.2;">📊 Export Excel</button>
+                        <button class="btn-filter-action btn-pdf-action" id="btnExportPdf" style="flex: 1.2;">📄 Export PDF</button>
                         <button class="btn-filter-action btn-print-action" onclick="printReport()" style="flex: 1;">🖨 Print</button>
                     </div>
                 </div>

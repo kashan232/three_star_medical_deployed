@@ -458,8 +458,8 @@
                     <div class="filter-group" style="flex-direction: row; gap: 6px; align-items: flex-end; min-width: 400px; margin-left: 10px; flex: 1.5;">
                         <button class="btn-filter-action btn-filter-search" id="btnSearch" style="flex: 1;">🔍 Search</button>
                         <button class="btn-filter-action btn-filter-reset" id="btnReset" style="flex: 1;">↺ Reset</button>
-                        <button class="btn-filter-action btn-pdf-action" id="btnExportPdf" style="flex: 1.2;">Export PDF</button>
-                        <button class="btn-filter-action btn-csv-action" id="btnExportCsv" style="flex: 1.2;">⬇ Export CSV</button>
+                        <button class="btn-filter-action btn-excel-action" id="btnExportExcel" style="flex: 1.2;">📊 Export Excel</button>
+                        <button class="btn-filter-action btn-pdf-action" id="btnExportPdf" style="flex: 1.2;">📄 Export PDF</button>
                         <button class="btn-filter-action btn-print-action" onclick="printReport()" style="flex: 1;">🖨 Print</button>
                     </div>
                 </div>
@@ -881,54 +881,28 @@
                     return;
                 }
 
-                const { jsPDF } = window.jspdf;
-                const el = document.getElementById('reportResult');
-                
-                this.textContent = 'Generating...';
-                this.disabled = true;
-
-                try {
-                    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-                    const imgData = canvas.toDataURL('image/png');
-                    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-                    
-                    const w = pdf.internal.pageSize.getWidth();
-                    const h = (canvas.height * w) / canvas.width;
-                    
-                    pdf.addImage(imgData, 'PNG', 0, 0, w, h);
-                    pdf.save(`Detailed_Purchase_Report_${new Date().getTime()}.pdf`);
-                } catch (e) {
-                    console.error(e);
-                    alert('PDF generation failed.');
-                } finally {
-                    this.textContent = 'Export PDF';
-                    this.disabled = false;
-                }
+            // PDF Export — server-side via DomPDF for guaranteed proper filename
+            document.getElementById('btnExportPdf').addEventListener('click', function() {
+                const params = new URLSearchParams({
+                    start_date:      document.getElementById('start_date').value,
+                    end_date:        document.getElementById('end_date').value,
+                    vendor_id:       document.getElementById('filterVendor').value,
+                    warehouse_id:    document.getElementById('filterWarehouse').value,
+                    status:          document.getElementById('filterStatus').value,
+                });
+                window.location.href = `{{ route('report.purchase.export.pdf') }}?${params}`;
             });
 
-            // CSV Export
-            document.getElementById('btnExportCsv').addEventListener('click', function() {
-                if (!lastData.length) {
-                    alert('No data to export. Run a search first.');
-                    return;
-                }
-                let csv = 'Invoice No,Date,Vendor,Warehouse,Subtotal,Discount,Extra Cost,Net Amount,Paid,Due,Returned,Status,Item Code,Item Name,Packing,Qty (Pcs),Free (Pcs),Price,Item Discount,Line Total\n';
-                lastData.forEach(r => {
-                    if (r.items.length === 0) {
-                        csv += `"${r.invoice_no}","${r.purchase_date}","${r.vendor_name}","${r.warehouse_name}",${r.subtotal},${r.discount},${r.extra_cost},${r.net_amount},${r.paid_amount},${r.due_amount},${r.total_returned},"${r.status}","","","","","","","",""\n`;
-                    } else {
-                        r.items.forEach((it, ii) => {
-                            csv += `"${r.invoice_no}","${r.purchase_date}","${r.vendor_name}","${r.warehouse_name}",${ii > 0 ? ',,,,,,,' : r.subtotal+','+r.discount+','+r.extra_cost+','+r.net_amount+','+r.paid_amount+','+r.due_amount+','+r.total_returned},"${ii > 0 ? '' : r.status}","${it.item_code}","${it.item_name}","${it.uom_name}",${it.qty},${it.free_qty},${it.price},${it.item_discount},${it.line_total}\n`;
-                        });
-                    }
+            // Excel Export — server-side for guaranteed proper filename
+            document.getElementById('btnExportExcel').addEventListener('click', function() {
+                const params = new URLSearchParams({
+                    start_date:      document.getElementById('start_date').value,
+                    end_date:        document.getElementById('end_date').value,
+                    vendor_id:       document.getElementById('filterVendor').value,
+                    warehouse_id:    document.getElementById('filterWarehouse').value,
+                    status:          document.getElementById('filterStatus').value,
                 });
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(blob);
-                a.download = `purchase_report_${new Date().toISOString().slice(0,10)}.csv`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+                window.location.href = `{{ route('report.purchase.export.excel') }}?${params}`;
             });
 
             const now = new Date();
