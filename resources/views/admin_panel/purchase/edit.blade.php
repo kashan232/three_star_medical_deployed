@@ -591,6 +591,11 @@
                 </tr>`;
                 const $row = $(html);
                 $('#purchaseTableBody').append($row);
+                
+                if (typeof initGlobalDatepickers === 'function') {
+                    initGlobalDatepickers($row[0]);
+                }
+                
                 recalcAll();
                 return $row;
             };

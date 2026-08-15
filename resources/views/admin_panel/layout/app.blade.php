@@ -1319,6 +1319,11 @@
             dateInputs.forEach(input => {
                 if (input._flatpickr) return;
                 input.type = 'text';
+                
+                if (!input.placeholder) {
+                    input.placeholder = 'dd/mm/yyyy';
+                }
+
                 flatpickr(input, {
                     dateFormat: "Y-m-d",
                     altInput: true,

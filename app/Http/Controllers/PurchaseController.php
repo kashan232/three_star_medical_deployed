@@ -741,8 +741,8 @@ class PurchaseController extends Controller
             // Recalculate GST on gst_base at summary level if no per-line GST; else use sum
             // Per spec: we use the per-line GST amounts already summed
             $invoiceTotal  = $gstBase + $totalGst;
-            // WHT and Adv Tax are applied on net (no freight, no GST base)
-            $netAmount     = $invoiceTotal - $totalWht - $totalAdv;
+            // WHT is deducted on net, Adv Tax is added on net
+            $netAmount     = $invoiceTotal - $totalWht + $totalAdv;
 
             $paidAmount = 0;
             if ($status !== 'draft' && $request->filled('payment_amount')) {

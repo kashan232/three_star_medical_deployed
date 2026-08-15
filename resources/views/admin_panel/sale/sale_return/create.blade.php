@@ -878,7 +878,11 @@
                         // 2. Clear & Render Items
                         $('#returnItems').empty();
                         res.items.forEach(item => {
-                            $('#returnItems').append(createReturnRow(item));
+                            const $row = $(createReturnRow(item));
+                            $('#returnItems').append($row);
+                            if (typeof initGlobalDatepickers === 'function') {
+                                initGlobalDatepickers($row[0]);
+                            }
                         });
                         // Initialize Select2 for new rows
                         if ($.fn.select2) {

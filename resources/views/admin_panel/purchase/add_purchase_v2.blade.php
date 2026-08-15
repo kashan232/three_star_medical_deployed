@@ -1356,6 +1356,10 @@
             const $inserted = $('#purchaseItems tr:last');
 
             initSelect2($inserted.find('.product-select2'));
+            
+            if (typeof initGlobalDatepickers === 'function') {
+                initGlobalDatepickers($inserted[0]);
+            }
 
             recalcRow($inserted);
             recalcSummary();

@@ -463,8 +463,8 @@
                                             @endif
                                             
                                             @if((float)($item['adv_tax_percent'] ?? $item['adv_percent'] ?? 0) > 0)
-                                                <div class="row-adv-amount text-danger" style="font-size:0.75rem;" title="Advance Tax">- 0.00</div>
-                                                <small class="text-danger d-block" style="font-size:0.6rem;">Adv: {{ (float)($item['adv_tax_percent'] ?? $item['adv_percent'] ?? 0) }}%</small>
+                                                <div class="row-adv-amount text-success" style="font-size:0.75rem;" title="Advance Tax">+ 0.00</div>
+                                                <small class="text-success d-block" style="font-size:0.6rem;">Adv: {{ (float)($item['adv_tax_percent'] ?? $item['adv_percent'] ?? 0) }}%</small>
                                             @endif
                                         </td>
 
@@ -556,9 +556,9 @@
                                         readonly value="0.00">
                                 </div>
                                 <div class="summary-row">
-                                    <span class="text-danger">Advance Tax <small>(Deducted ➖)</small></span>
+                                    <span class="text-success">Advance Tax <small>(Added ➕)</small></span>
                                     <input type="text" id="totalAdv"
-                                        class="form-control form-control-sm w-50 text-end border-0 bg-transparent p-0 text-danger"
+                                        class="form-control form-control-sm w-50 text-end border-0 bg-transparent p-0 text-success"
                                         readonly value="0.00">
                                 </div>
                                 <div class="summary-row">
@@ -825,10 +825,10 @@
                 
                 // Pakistan Standard:
                 // Invoice Total = Net + GST
-                // Net Refund = Invoice Total - WHT - Adv
+                // Net Refund = Invoice Total - IT + Adv
                 const netBeforeGst = totalGross - combinedDiscount;
                 const invoiceTotal = netBeforeGst + totalGst;
-                const netRefund    = invoiceTotal - totalIt - totalAdv;
+                const netRefund    = invoiceTotal - totalIt + totalAdv;
 
                 $('#billAmount').val(totalGross.toFixed(2));
                 $('#totalGst').val(totalGst.toFixed(2));
@@ -944,7 +944,11 @@
                         // 2. Clear & Render Items
                         $('#returnItems').empty();
                         res.items.forEach(item => {
-                            $('#returnItems').append(createReturnRow(item));
+                            const $row = $(createReturnRow(item));
+                            $('#returnItems').append($row);
+                            if (typeof initGlobalDatepickers === 'function') {
+                                initGlobalDatepickers($row[0]);
+                            }
                         });
                         // Initialize Select2 for new rows
                         if ($.fn.select2) {
@@ -1078,8 +1082,8 @@
                             ` : ''}
                             
                             ${(item.adv_tax_percent > 0) ? `
-                                <div class="row-adv-amount text-danger" style="font-size:0.75rem;" title="Advance Tax">- 0.00</div>
-                                <small class="text-danger d-block" style="font-size:0.6rem;">Adv: ${item.adv_tax_percent}%</small>
+                                <div class="row-adv-amount text-success" style="font-size:0.75rem;" title="Advance Tax">+ 0.00</div>
+                                <small class="text-success d-block" style="font-size:0.6rem;">Adv: ${item.adv_tax_percent}%</small>
                             ` : ''}
                         </td>
                         <td>

@@ -737,7 +737,14 @@
                                                 <input type="hidden" name="gst_amount[]" class="gst-amount-row" value="{{ (float)$item->gst_amount }}">
                                             </td>
                                             <td><input type="number" step="any" name="it_percent[]" class="form-control inc-tax text-end row-input" value="{{ (float)$item->it_percent }}"></td>
-                                            <td><input type="number" step="any" name="adv_tax_percent[]" class="form-control adv-tax text-end row-input" value="{{ (float)$item->adv_tax_percent }}"></td>
+                                            <td>
+                                                <div class="input-group input-group-sm shadow-sm" style="width: 100%; min-width: 110px;">
+                                                    <input type="number" step="any" class="form-control adv-tax-val text-end row-input" value="{{ (float)$item->adv_tax_percent }}">
+                                                    <button type="button" class="btn btn-sm btn-primary text-dark adv-tax-type-toggle p-1" data-type="percent" style="width: 32px; font-size: 0.7rem; font-weight: 700;">%</button>
+                                                    <input type="hidden" class="adv-tax-type" value="percent">
+                                                    <input type="hidden" name="adv_tax_percent[]" class="adv-tax" value="{{ (float)$item->adv_tax_percent }}">
+                                                </div>
+                                            </td>
                                             <td><input type="text" name="total[]" class="form-control row-net-total input-highlight text-end" readonly value="{{ (float)$item->total_amount }}"></td>
                                             <td><input type="date" name="mfg_date[]" class="form-control text-secondary row-input" value="{{ $item->mfg_date ? date('Y-m-d', strtotime($item->mfg_date)) : '' }}"></td>
                                             <td><input type="date" name="expiry[]" class="form-control text-secondary row-input" value="{{ $item->exp_date ? date('Y-m-d', strtotime($item->exp_date)) : '' }}"></td>
@@ -964,10 +971,10 @@
                                             id="total_it" readonly tabindex="-1" value="0.00">
                                     </div>
 
-                                    <div class="summary-row text-danger tax-summary-row">
-                                        <span class="summary-label text-danger">Advance Tax <small>(Deducted ➖)</small></span>
+                                    <div class="summary-row text-success tax-summary-row">
+                                        <span class="summary-label text-success">Advance Tax <small>(Added ➕)</small></span>
                                         <input type="text"
-                                            class="form-control form-control-sm text-end w-50 bg-transparent border-0 summary-value text-danger"
+                                            class="form-control form-control-sm text-end w-50 bg-transparent border-0 summary-value text-success"
                                             id="total_adv" readonly tabindex="-1" value="0.00">
                                     </div>
                                     @endif
@@ -1238,14 +1245,15 @@
         function toggleGstFields() {
             let isGst = $('#gst_invoice').is(':checked');
             if (isGst) {
-                $('.gst, .inc-tax, .adv-tax').prop('readonly', false).css('background', '');
+                $('.gst, .inc-tax, .adv-tax-val').prop('readonly', false).css('background', '');
                 $('.tax-col, .tax-summary-row').show();
                 $('.item-row').each(function() {
                     $(this).find('.gst, .gst-amount-display, .inc-tax, .adv-tax').closest('td').show();
                     $(this).find('.row-net-total').closest('td').show();
                 });
             } else {
-                $('.gst, .inc-tax, .adv-tax').val(0).prop('readonly', true).css('background', '#e9ecef');
+                $('.gst, .inc-tax, .adv-tax-val, .adv-tax').val(0);
+                $('.gst, .inc-tax, .adv-tax-val').prop('readonly', true).css('background', '#e9ecef');
                 $('.tax-col, .tax-summary-row').hide();
                 $('.item-row').each(function() {
                     $(this).find('.gst, .gst-amount-display, .inc-tax, .adv-tax').closest('td').hide();
@@ -1629,11 +1637,22 @@
             const itPercent = num($row.find('.inc-tax').val());
             const itAmount = subTotal * (itPercent / 100);
 
-            const advPercent = num($row.find('.adv-tax').val());
-            const advAmount = subTotal * (advPercent / 100);
+            const advType = $row.find('.adv-tax-type').val() || 'percent';
+            let advVal = num($row.find('.adv-tax-val').val());
+            let advAmount = 0;
+            let advPercent = 0;
 
-            // Line net: subtotal + GST - WHT - Adv
-            let netTotal = subTotal + gstAmount - itAmount - advAmount;
+            if (advType === 'percent') {
+                advPercent = advVal;
+                advAmount = subTotal * (advPercent / 100);
+            } else {
+                advAmount = advVal;
+                advPercent = subTotal > 0 ? (advAmount / subTotal) * 100 : 0;
+            }
+            $row.find('.adv-tax').val(advPercent.toFixed(6));
+
+            // Line net: subtotal + GST - WHT + Adv
+            let netTotal = subTotal + gstAmount - itAmount + advAmount;
 
             $row.find('.gst-amount-row').val(gstAmount.toFixed(2));
             $row.find('.gst-amount-display').val(gstAmount.toFixed(2));
@@ -1732,10 +1751,10 @@
             // Pakistan Standard:
             // GST Base = summarySub + freight + expense
             // Invoice Total = GST Base + GST
-            // Net Payable = Invoice Total - WHT - Adv
+            // Net Payable = Invoice Total - WHT + Adv
             const gstBase      = summarySub + sumFreight + sumExpense;
             const invoiceTotal = gstBase + totalGstOnly;
-            const finalNet     = invoiceTotal - totalItAmt - totalAdvAmt;
+            const finalNet     = invoiceTotal - totalItAmt + totalAdvAmt;
 
             $('#invoice_total').val(invoiceTotal.toFixed(2));
             $('#final_net_total').val(finalNet.toFixed(2));
@@ -1853,7 +1872,14 @@
                     <input type="hidden" name="gst_amount[]" class="gst-amount-row" value="0">
                 </td>
                 <td><input type="number" step="any" name="it_percent[]" class="form-control inc-tax text-end row-input" value="0"></td>
-                <td><input type="number" step="any" name="adv_tax_percent[]" class="form-control adv-tax text-end row-input" value="0"></td>
+                <td>
+                    <div class="input-group input-group-sm shadow-sm" style="width: 100%; min-width: 110px;">
+                        <input type="number" step="any" class="form-control adv-tax-val text-end row-input" value="0">
+                        <button type="button" class="btn btn-sm btn-primary text-dark adv-tax-type-toggle p-1" data-type="percent" style="width: 32px; font-size: 0.7rem; font-weight: 700;">%</button>
+                        <input type="hidden" class="adv-tax-type" value="percent">
+                        <input type="hidden" name="adv_tax_percent[]" class="adv-tax" value="0">
+                    </div>
+                </td>
                 <td><input type="text" name="total[]" class="form-control row-net-total input-highlight text-end" readonly></td>
                 <td><input type="date" name="mfg_date[]" class="form-control text-secondary row-input"></td>
                 <td><input type="date" name="expiry[]" class="form-control text-secondary row-input"></td>
@@ -1871,6 +1897,11 @@
             </tr>`;
             $('#purchaseItems').append(html);
             const $row = $('#purchaseItems tr:last');
+            
+            if (typeof initGlobalDatepickers === 'function') {
+                initGlobalDatepickers($row[0]);
+            }
+            
             recalcRow($row);
             return $row;
         }
@@ -2003,7 +2034,7 @@
         });
 
         // Calculations & Removals
-        $('#purchaseItems').on('input', '.quantity, .loose_qty, .free_qty, .free_qty_pieces, .price, .item_discount, .gst, .inc-tax, .adv-tax',
+        $('#purchaseItems').on('input', '.quantity, .loose_qty, .free_qty, .free_qty_pieces, .price, .item_discount, .gst, .inc-tax, .adv-tax-val',
             function() {
                 let $row = $(this).closest('tr');
                 recalcRow($row, false);
@@ -2233,6 +2264,26 @@
             recalcSummary();
             checkEmptyState();
         }
+
+        // Advance Tax Toggles Row
+        $('#purchaseItems').on('click', '.adv-tax-type-toggle', function() {
+            let $btn = $(this);
+            let $hidden = $btn.siblings('.adv-tax-type');
+            let current = $btn.attr('data-type');
+            let next = (current === 'amount') ? 'percent' : 'amount';
+
+            $btn.attr('data-type', next).text(next === 'amount' ? 'Rs' : '%');
+            $hidden.val(next);
+            
+            if (next === 'percent') {
+                $btn.removeClass('btn-outline-primary').addClass('btn-primary text-dark');
+            } else {
+                $btn.removeClass('btn-primary text-dark').addClass('btn-outline-primary');
+            }
+
+            recalcRow($btn.closest('tr'));
+            recalcSummary();
+        });
 
         $('.btn-import-single').on('click', function() {
             if (window.ERPImportLoader) window.ERPImportLoader.start();
