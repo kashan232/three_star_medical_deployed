@@ -1435,8 +1435,7 @@
         $('#btnConfirm').click(function(e) {
             e.preventDefault();
 
-            // Check for empty rows and mandatory fields (Expiry, MFG, Lot)
-            let validationErrors = [];
+            let missingInfoItems = [];
             $('#purchaseItems tr').each(function(index) {
                 let pid = $(this).find('.item-id').val();
                 if (pid) {
@@ -1445,23 +1444,16 @@
                     let lot = $(this).find('input[name="lot_no[]"]').val();
                     let name = $(this).find('.item-name').val();
 
-                    if (!mfg) validationErrors.push(
-                        `Row ${index + 1} (${name}): Mfg Date is required.`);
-                    if (!exp) validationErrors.push(
-                        `Row ${index + 1} (${name}): Expiry Date is required.`);
-                    if (!lot || lot.trim() === '') validationErrors.push(
-                        `Row ${index + 1} (${name}): Lot Number is required.`);
+                    let missing = [];
+                    if (!mfg) missing.push('MFG Date');
+                    if (!exp) missing.push('Expiry');
+                    if (!lot || lot.trim() === '') missing.push('Lot#');
+
+                    if (missing.length > 0) {
+                        missingInfoItems.push(`<li><strong>Row ${index + 1} (${name}):</strong> Missing ${missing.join(', ')}</li>`);
+                    }
                 }
             });
-
-            if (validationErrors.length > 0) {
-                Swal.fire({
-                    icon: 'error',
-                    title: 'Incomplete Item Data!',
-                    html: `<ul class="text-start">${validationErrors.map(e => `<li>${e}</li>`).join('')}</ul>`,
-                });
-                return;
-            }
 
             // Check for duplicate lots
             let duplicateLots = getDuplicateLots();
@@ -1485,22 +1477,33 @@
             let confirmBtnColor = '#059669';
             let confirmBtnText = 'Yes, Post it!';
 
-            if (expiredItems.length > 0) {
-                warningTitle = "Expired Products Detected!";
-                warningIcon = "error";
+            if (expiredItems.length > 0 || missingInfoItems.length > 0) {
+                warningTitle = "Warning: Issues Detected!";
+                warningIcon = "warning";
                 confirmBtnColor = '#dc3545';
-                confirmBtnText = 'Yes, Purchase Expired Items';
+                confirmBtnText = 'Yes, Proceed Anyway';
+                warningText = "";
 
-                let listHtml =
-                    '<div class="text-start mt-3" style="max-height: 200px; overflow-y: auto; border: 1px solid #fee2e2; border-radius: 8px; padding: 10px; background: #fff1f2;"><ul class="list-group list-group-flush" style="background: transparent;">';
-                expiredItems.forEach(item => {
-                    listHtml +=
-                        `<li class="list-group-item small text-danger p-1" style="background: transparent;"><i class="bi bi-calendar-x me-2"></i> <strong>${item.name}</strong> <br> <span class="ms-4">Code: ${item.code} | Exp: ${item.date}</span></li>`;
-                });
-                listHtml += '</ul></div>';
+                if (expiredItems.length > 0) {
+                    let listHtml =
+                        '<div class="text-start mt-3" style="max-height: 150px; overflow-y: auto; border: 1px solid #fee2e2; border-radius: 8px; padding: 10px; background: #fff1f2;"><ul class="list-group list-group-flush" style="background: transparent;">';
+                    expiredItems.forEach(item => {
+                        listHtml +=
+                            `<li class="list-group-item small text-danger p-1" style="background: transparent;"><i class="bi bi-calendar-x me-2"></i> <strong>${item.name}</strong> <br> <span class="ms-4">Code: ${item.code} | Exp: ${item.date}</span></li>`;
+                    });
+                    listHtml += '</ul></div>';
+                    warningText += `<p class="mb-2">Careful! You are attempting to purchase <strong>${expiredItems.length} product(s)</strong> that are already expired.</p>${listHtml}`;
+                }
 
-                warningText =
-                    `<p class="mb-2">Careful! You are attempting to purchase <strong>${expiredItems.length} product(s)</strong> that are already expired.</p>${listHtml}<p class="mt-3"><strong>Do you still want to proceed with this purchase?</strong></p>`;
+                if (missingInfoItems.length > 0) {
+                    let listHtml =
+                        '<div class="text-start mt-3" style="max-height: 150px; overflow-y: auto; border: 1px solid #fef3c7; border-radius: 8px; padding: 10px; background: #fffbeb;"><ul class="text-start small text-warning-emphasis mb-0" style="padding-left:1.2rem;">';
+                    listHtml += missingInfoItems.join('');
+                    listHtml += '</ul></div>';
+                    warningText += `<p class="mt-3 mb-2"><strong>${missingInfoItems.length} product(s)</strong> are missing Batch Info.</p>${listHtml}`;
+                }
+
+                warningText += '<p class="mt-3"><strong>Do you still want to proceed without this information?</strong></p>';
             }
 
             Swal.fire({
