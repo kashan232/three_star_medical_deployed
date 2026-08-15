@@ -794,8 +794,8 @@
                             <div class="filter-group" style="flex-direction: row; gap: 6px; align-items: flex-end; min-width: 400px; margin-left: 10px; flex: 1.5;">
                                 <button type="button" class="btn-filter-action btn-filter-search" id="btnSearch" style="flex: 1;">🔍 Search</button>
                                 <button type="button" class="btn-filter-action btn-filter-reset" id="btnReset" style="flex: 1;">↺ Reset</button>
-                                <button type="button" id="btnSummaryPdf" class="btn-filter-action btn-pdf-summary" style="flex: 1.2;" title="Export Summary PDF (totals per product)"><i class="fas fa-file-pdf"></i> Summary PDF</button>
-                                <button type="button" id="btnExportPdf" class="btn-filter-action btn-pdf-detail" style="flex: 1.2;" title="Export Detail PDF (full stock ledger per product)"><i class="fas fa-list-alt"></i> Detail PDF</button>
+                                <button type="button" id="btnExportExcel" class="btn-filter-action btn-excel-action" style="flex: 1.2;" title="Export Excel Spreadsheet">📊 Export Excel</button>
+                                <button type="button" id="btnExportPdf" class="btn-filter-action btn-pdf-action" style="flex: 1.2;" title="Export Detail PDF">📄 Export PDF</button>
                                 <button type="button" onclick="printReport()" class="btn-filter-action btn-print-action" style="flex: 1;" title="Print View">🖨 Print</button>
                             </div>
                         </div>
@@ -1532,314 +1532,52 @@
                 fetchReport();
             });
 
-            // ── SUMMARY PDF ──────────────────────────────────────────────────────
-            $('#btnSummaryPdf').on('click', function() {
-                if (!_allRows || _allRows.length === 0) {
-                    Swal.fire({ icon: 'warning', title: 'No Data', text: 'Please run a search first.' });
-                    return;
-                }
-
-                var startDate = $('#start_date').val();
-                var endDate   = $('#end_date').val();
-
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-
-                // Header
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(14);
-                doc.text('THREE STARS MEDICAL SUPPLIES', 148, 12, { align: 'center' });
-                doc.setFontSize(10);
-                doc.setFont('helvetica', 'normal');
-                doc.text('{{ $activeBranch->name ?? "Head Office" }}: {{ $activeBranch->address ?? "M17-18 Mezanine Floor Seth Centre, 10 Syed Mouj Darya Road (Edward Road) Lahore" }}', 148, 18, { align: 'center' });
-                doc.text('Phone: {{ $activeBranch->number ?? "0092-42-37353433" }}', 148, 22, { align: 'center' });
-                doc.setFont('helvetica', 'bold');
-                doc.setFontSize(12);
-                doc.text('ITEM STOCK SUMMARY REPORT', 148, 28, { align: 'center' });
-                doc.setFont('helvetica', 'normal');
-                doc.setFontSize(9);
-                doc.text('Period: ' + (startDate || '—') + '  to  ' + (endDate || '—'), 148, 34, { align: 'center' });
-                doc.text('Print Date: ' + new Date().toLocaleDateString('en-GB'), 270, 34, { align: 'right' });
-
-                // Build table rows
-                var tableBody = [];
-                var totInit = 0, totIn = 0, totOut = 0, totBal = 0, totPurAmt = 0, totSaleAmt = 0, totVal = 0;
-
-                _allRows.forEach(function(r, i) {
-                    var ppb  = r.pieces_per_box || 1;
-                    var bal  = parseFloat(r.balance || 0);
-                    var boxes = Math.floor(bal / ppb);
-                    var loose = Math.round(bal % ppb);
-
-                    // Product full label: Brand - Name (UOM)
-                    var label = (r.brand && r.brand !== '-' ? r.brand + ' - ' : '') + r.item_name;
-                    var uomLabel = '';
-                    if (r.packings && r.packings.length > 0) {
-                        uomLabel = r.packings.map(function(p){ return p.name + '(' + p.pieces_per_box + ')'; }).join(' / ');
-                    } else if (ppb > 1) {
-                        uomLabel = ppb + ' pcs/box';
-                    }
-
-                    var inQty  = parseFloat(r.purchased     || 0);
-                    var outQty = parseFloat(r.sold          || 0) + parseFloat(r.purchase_return_qty || 0);
-                    var retIn  = parseFloat(r.sale_return_qty || 0);
-
-                    totInit    += parseFloat(r.initial_stock || 0);
-                    totIn      += inQty;
-                    totOut     += outQty;
-                    totBal     += bal;
-                    totPurAmt  += parseFloat(r.purchase_amount || 0);
-                    totSaleAmt += parseFloat(r.sale_amount     || 0);
-                    totVal     += parseFloat(r.stock_value     || 0);
-
-                    // Warehouse summary
-                    var whText = (r.warehouses || []).map(function(w){ return w.warehouse_name + ':' + w.display; }).join('\n');
-
-                    tableBody.push([
-                        i + 1,
-                        r.item_code || '-',
-                        label + (uomLabel ? '\n' + uomLabel : ''),
-                        r.category + (r.sub_category && r.sub_category !== '-' ? '/' + r.sub_category : ''),
-                        fmt(r.initial_stock, 0),
-                        fmt(Math.abs(inQty), 0),
-                        fmt(Math.abs(parseFloat(r.purchase_return_qty || 0)), 0),
-                        fmt(Math.abs(outQty - parseFloat(r.purchase_return_qty||0)), 0),
-                        fmt(Math.abs(retIn), 0),
-                        boxes + '.' + loose + '\n(' + fmt(bal, 0) + ' pcs)',
-                        whText || '-',
-                        fmtPKR(r.purchase_amount),
-                        fmtPKR(r.sale_amount),
-                        fmtPKR(r.stock_value),
-                    ]);
-                });
-
-                // Footer row
-                tableBody.push([
-                    { content: 'GRAND TOTAL', colSpan: 4, styles: { fontStyle: 'bold', fillColor: [30, 58, 138], textColor: 255 } },
-                    { content: fmt(totInit, 0),    styles: { fontStyle: 'bold', fillColor: [30, 58, 138], textColor: 255 } },
-                    { content: fmt(totIn, 0),      styles: { fontStyle: 'bold', fillColor: [30, 58, 138], textColor: 255 } },
-                    { content: '',                 styles: { fillColor: [30, 58, 138] } },
-                    { content: fmt(totOut, 0),     styles: { fontStyle: 'bold', fillColor: [30, 58, 138], textColor: 255 } },
-                    { content: '',                 styles: { fillColor: [30, 58, 138] } },
-                    { content: fmt(totBal, 0),     styles: { fontStyle: 'bold', fillColor: [30, 58, 138], textColor: 255 } },
-                    { content: '',                 styles: { fillColor: [30, 58, 138] } },
-                    { content: fmtPKR(totPurAmt),  styles: { fontStyle: 'bold', fillColor: [30, 58, 138], textColor: 255 } },
-                    { content: fmtPKR(totSaleAmt), styles: { fontStyle: 'bold', fillColor: [30, 58, 138], textColor: 255 } },
-                    { content: fmtPKR(totVal),     styles: { fontStyle: 'bold', fillColor: [30, 58, 138], textColor: 255 } },
-                ]);
-
-                doc.autoTable({
-                    startY: 36,
-                    head: [['#', 'Code', 'Product (Brand - Name / UOM)', 'Category', 'Opening', 'In (Pur)', 'Pur.Ret', 'Out (Sale)', 'Sale Ret', 'Balance', 'Warehouse', 'Pur Amt', 'Sale Amt', 'Stock Value']],
-                    body: tableBody,
-                    styles: { fontSize: 7, cellPadding: 1.5, valign: 'middle' },
-                    headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold', fontSize: 8 },
-                    alternateRowStyles: { fillColor: [240, 245, 255] },
-                    columnStyles: {
-                        0:  { cellWidth: 8,  halign: 'center' },
-                        1:  { cellWidth: 18 },
-                        2:  { cellWidth: 45 },
-                        3:  { cellWidth: 22 },
-                        4:  { cellWidth: 14, halign: 'right' },
-                        5:  { cellWidth: 14, halign: 'right' },
-                        6:  { cellWidth: 13, halign: 'right' },
-                        7:  { cellWidth: 15, halign: 'right' },
-                        8:  { cellWidth: 13, halign: 'right' },
-                        9:  { cellWidth: 16, halign: 'center' },
-                        10: { cellWidth: 28 },
-                        11: { cellWidth: 22, halign: 'right' },
-                        12: { cellWidth: 22, halign: 'right' },
-                        13: { cellWidth: 22, halign: 'right' },
-                    },
-                    didDrawPage: function(data) {
-                        var pageCount = doc.internal.getNumberOfPages();
-                        doc.setFontSize(7);
-                        doc.text('Page ' + data.pageNumber + ' of ' + pageCount, 148, doc.internal.pageSize.height - 5, { align: 'center' });
-                    }
-                });
-
-                doc.save('item_summary_' + (startDate || 'all') + '_to_' + (endDate || 'all') + '.pdf');
-            });
-
-            // ── DETAIL PDF (Portrait A4 – Classic Ledger via html2canvas) ───────
-            $('#btnExportPdf').on('click', async function() {
+            // ── Server-Side Excel Export ─────────────────────────────────────────────────────────
+            $('#btnExportExcel').on('click', function() {
                 var startDate   = $('#start_date').val();
                 var endDate     = $('#end_date').val();
-                var productId   = $('#product_id').val() || 'all';
-                var warehouseId = $('#filterWarehouse').val() || 'all';
-                var branchId    = IS_SUPER_ADMIN ? ($('#filterBranch').val() || 'all') : 'all';
 
                 if (!startDate || !endDate) {
                     Swal.fire({ icon: 'warning', title: 'Required', text: 'Please select a date range first.' });
                     return;
                 }
-                if (!_allRows || _allRows.length === 0) {
-                    Swal.fire({ icon: 'warning', title: 'No Data', text: 'Please run a search first.' });
+
+                const params = new URLSearchParams({
+                    product_id: $('#filterProduct').val() || 'all',
+                    category_id: $('#filterCategory').val() || 'all',
+                    sub_category_id: $('#filterSubCategory').val() || 'all',
+                    brand_id: $('#filterBrand').val() || 'all',
+                    warehouse_id: $('#filterWarehouse').val() || 'all',
+                    start_date: startDate,
+                    end_date: endDate,
+                    branch_id: IS_SUPER_ADMIN ? ($('#filterBranch').val() || 'all') : 'all'
+                });
+
+                window.location.href = `{{ route('report.item_stock.export.excel') }}?${params}`;
+            });
+
+            // ── Server-Side PDF Export ─────────────────────────────────────────────────────────
+            $('#btnExportPdf').on('click', function() {
+                var startDate   = $('#start_date').val();
+                var endDate     = $('#end_date').val();
+
+                if (!startDate || !endDate) {
+                    Swal.fire({ icon: 'warning', title: 'Required', text: 'Please select a date range first.' });
                     return;
                 }
 
-                $('#loaderOverlay').css('display', 'flex');
-                $('#loaderOverlay p').text('Fetching ledger data from server...');
+                const params = new URLSearchParams({
+                    product_id: $('#filterProduct').val() || 'all',
+                    category_id: $('#filterCategory').val() || 'all',
+                    sub_category_id: $('#filterSubCategory').val() || 'all',
+                    brand_id: $('#filterBrand').val() || 'all',
+                    warehouse_id: $('#filterWarehouse').val() || 'all',
+                    start_date: startDate,
+                    end_date: endDate,
+                    branch_id: IS_SUPER_ADMIN ? ($('#filterBranch').val() || 'all') : 'all'
+                });
 
-                try {
-                    const res = await $.ajax({
-                        url: "{{ route('report.item_stock.fetch') }}",
-                        type: 'POST',
-                        data: {
-                            _token: "{{ csrf_token() }}",
-                            product_id: productId,
-                            category_id: $('#filterCategory').val() || 'all',
-                            sub_category_id: $('#filterSubCategory').val() || 'all',
-                            brand_id: $('#filterBrand').val() || 'all',
-                            warehouse_id: warehouseId,
-                            start_date: startDate,
-                            end_date: endDate,
-                            branch_id: branchId,
-                            report_type: 'ledger'
-                        }
-                    });
-
-                    if (!res.data || res.data.length === 0) {
-                        $('#loaderOverlay').hide();
-                        Swal.fire({ icon: 'info', title: 'No Data', text: 'No products found.' });
-                        return;
-                    }
-
-                    $('#loaderOverlay p').text('Building PDF layout...');
-
-                    // ── Populate the hidden HTML template ───────────────────────
-                    document.getElementById('pdfReportPeriod').textContent = startDate + ' -TO- ' + endDate;
-                    document.getElementById('pdfPrintDate').textContent    = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
-
-                    var $body = $('#pdfLedgerBody');
-                    $body.empty();
-
-                    var srBase = 1;
-
-                    for (var pi = 0; pi < res.data.length; pi++) {
-                        var product = res.data[pi];
-                        var ledger  = (res.ledger_data || {})[product.id];
-
-                        // Product display label: Brand  Name  UOM (Company)
-                        var uomLabel = '';
-                        if (product.packings && product.packings.length > 0) {
-                            uomLabel = product.packings.map(function(p){ return p.name; }).join(' / ');
-                        } else if ((product.pieces_per_box || 1) > 1) {
-                            uomLabel = product.pieces_per_box + 'PCS';
-                        }
-                        var brandPart = (product.brand && product.brand !== '-') ? product.brand + ' &nbsp; ' : '';
-                        var prodLabel = (product.item_name || '').toUpperCase()
-                            + (uomLabel ? ' &nbsp; ' + uomLabel.toUpperCase() : '');
-
-                        // — Product header row —
-                        $body.append(
-                            '<tr style="background:#d9e2f3;border:1px solid #aab8d8;">' +
-                                '<td style="border:1px solid #aab8d8;padding:3px 5px;font-weight:bold;color:#1f3864;font-size:10.5px;">' +
-                                    '<span style="margin-right:14px;">' + (pi + 1) + '</span>' +
-                                '</td>' +
-                                '<td colspan="7" style="border:1px solid #aab8d8;padding:3px 5px;font-weight:bold;color:#1f3864;font-size:10.5px;">' +
-                                    prodLabel +
-                                '</td>' +
-                            '</tr>'
-                        );
-
-                        // Opening balance row
-                        var openBal = ledger ? parseFloat(ledger.opening_balance) : 0;
-                        $body.append(
-                            '<tr>' +
-                                '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;">1</td>' +
-                                '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;"></td>' +
-                                '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;">OPENING STOCK</td>' +
-                                '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;"></td>' +
-                                '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;text-align:right;">0.00</td>' +
-                                '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;text-align:right;">' + (openBal > 0 ? fmtN(openBal, 3) : '0.000') + '</td>' +
-                                '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;text-align:right;">' + (openBal < 0 ? fmtN(Math.abs(openBal), 3) : '0.000') + '</td>' +
-                                '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;text-align:right;">' + (openBal !== 0 ? fmtN(openBal, 3) : '') + '</td>' +
-                            '</tr>'
-                        );
-
-                        // Transaction rows
-                        if (ledger && ledger.transactions && ledger.transactions.length > 0) {
-                            ledger.transactions.forEach(function(tx, idx) {
-                                var runBal = (tx.balance !== undefined && tx.balance !== null) ? fmtN(parseFloat(tx.balance), 3) : '';
-                                $body.append(
-                                    '<tr>' +
-                                        '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;">' + (idx + 2) + '</td>' +
-                                        '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;">' + (tx.date || '') + '</td>' +
-                                        '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;">' + (tx.desc || '') + '</td>' +
-                                        '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;">' + (tx.ref || '') + '</td>' +
-                                        '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;text-align:right;">' + (tx.rate ? fmtPKR(tx.rate) : '0.00') + '</td>' +
-                                        '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;text-align:right;">' + (tx.debit > 0 ? fmtN(tx.debit, 3) : '0.000') + '</td>' +
-                                        '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;text-align:right;">' + (tx.credit > 0 ? fmtN(tx.credit, 3) : '0.000') + '</td>' +
-                                        '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;text-align:right;">' + runBal + '</td>' +
-                                    '</tr>'
-                                );
-                            });
-                        }
-
-                        // Closing balance row
-                        var closeBal = ledger ? parseFloat(ledger.closing_balance) : 0;
-                        $body.append(
-                            '<tr>' +
-                                '<td colspan="7" style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;font-weight:bold;color:#c00;text-align:right;">Closing Balance :</td>' +
-                                '<td style="border:1px solid #d0d8e8;padding:2.5px 5px;font-size:10.5px;font-weight:bold;color:#c00;text-align:right;">' + (closeBal !== 0 ? fmtN(closeBal, 3) : '') + '</td>' +
-                            '</tr>'
-                        );
-                    }
-
-                    // ── Render and export as PDF pages ───────────────────────────
-                    var el  = document.getElementById('pdfA4Content');
-                    var tmpl = document.getElementById('pdfLedgerTemplate');
-                    tmpl.style.display = 'block';
-
-                    // Let browser layout settle
-                    await new Promise(function(r){ setTimeout(r, 300); });
-
-                    $('#loaderOverlay p').text('Rendering PDF pages...');
-
-                    var canvas = await html2canvas(el, {
-                        scale: 2,
-                        useCORS: true,
-                        backgroundColor: '#ffffff',
-                        logging: false
-                    });
-
-                    tmpl.style.display = 'none';
-                    $('#loaderOverlay').hide();
-
-                    // A4 at scale=2: each page = 794px * 2 = 1588px wide, 1123px * 2 = 2246px tall
-                    var pageHeightPx = Math.round((canvas.width / 794) * 1123);
-                    var totalPages   = Math.ceil(canvas.height / pageHeightPx);
-
-                    const { jsPDF } = window.jspdf;
-                    var pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-                    for (var page = 0; page < totalPages; page++) {
-                        if (page > 0) pdf.addPage();
-
-                        var srcY      = page * pageHeightPx;
-                        var srcH      = Math.min(pageHeightPx, canvas.height - srcY);
-                        var pageCanvas = document.createElement('canvas');
-                        pageCanvas.width  = canvas.width;
-                        pageCanvas.height = pageHeightPx;
-
-                        var ctx = pageCanvas.getContext('2d');
-                        ctx.fillStyle = '#ffffff';
-                        ctx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-                        ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
-
-                        var imgData = pageCanvas.toDataURL('image/jpeg', 0.95);
-                        pdf.addImage(imgData, 'JPEG', 0, 0, 210, 297);
-                    }
-
-                    pdf.save('product_ledger_' + startDate + '_to_' + endDate + '.pdf');
-
-                } catch (err) {
-                    $('#loaderOverlay').hide();
-                    document.getElementById('pdfLedgerTemplate').style.display = 'none';
-                    console.error(err);
-                    Swal.fire({ icon: 'error', title: 'PDF Error', text: (err.responseJSON && err.responseJSON.error) ? err.responseJSON.error : err.message || 'Failed to generate PDF.' });
-                }
+                window.location.href = `{{ route('report.item_stock.export.pdf') }}?${params}`;
             });
 
             // ── Auto-load on page open ─────────────────────────────────────────

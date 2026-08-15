@@ -317,6 +317,7 @@
                     <div class="filter-group" style="flex-direction: row; gap: 6px; align-items: flex-end; min-width: 320px; flex: 1.5;">
                         <button type="submit" class="btn-filter-action btn-filter-search" style="flex: 1;">🔍 Search</button>
                         <button type="button" id="btnReset" class="btn-filter-action btn-filter-reset" style="flex: 1;">↺ Reset</button>
+                        <button type="button" id="btnExportExcel" class="btn-filter-action btn-excel-action" style="flex: 1;">📊 Excel</button>
                         <button type="button" id="btnExportPdf" class="btn-filter-action btn-pdf-action" style="flex: 1;">📄 PDF</button>
                         <button type="button" onclick="window.print()" class="btn-filter-action btn-print-action" style="flex: 1;">🖨 Print</button>
                     </div>
@@ -408,38 +409,14 @@
                 });
             }
 
+            $('#btnExportExcel').on('click', function() {
+                let formData = $('#filterForm').serialize();
+                window.location.href = `{{ route('report.price_adjustment.export.excel') }}?${formData}`;
+            });
+
             $('#btnExportPdf').on('click', function() {
-                if (!_currentData.length) return alert("No data.");
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF('l', 'mm', 'a4');
-                const start = $('input[name="start_date"]').val(), end = $('input[name="end_date"]').val();
-
-                doc.setFontSize(18); doc.setTextColor(5, 150, 105);
-                doc.text('THREE STARS MEDICAL SUPPLIES', 148, 14, { align: 'center' });
-                doc.setFontSize(9); doc.setTextColor(100);
-                doc.text('{{ $activeBranch->name ?? "Head Office" }}: {{ $activeBranch->address ?? "Lahore, Pakistan" }} | Phone: {{ $activeBranch->number ?? "+92 42 37353433" }}', 148, 20, { align: 'center' });
-                doc.setFontSize(11); doc.setTextColor(0);
-                doc.text(`Price Adjustment Analysis Report (${start} to ${end})`, 148, 27, { align: 'center' });
-
-                const rows = _currentData.map(r => [
-                    moment(r.created_at).format('DD/MM/YYYY HH:mm'),
-                    r.product ? r.product.item_name : '-',
-                    r.type.toUpperCase(),
-                    parseFloat(r.old_price).toFixed(2),
-                    parseFloat(r.new_price).toFixed(2),
-                    r.ref_no || '-',
-                    r.user ? r.user.name : '-'
-                ]);
-
-                doc.autoTable({
-                    startY: 30,
-                    head: [['Date', 'Product', 'Type', 'Old Price', 'New Price', 'Ref No', 'User']],
-                    body: rows,
-                    headStyles: { fillColor: [5, 150, 105] },
-                    styles: { fontSize: 8 },
-                    columnStyles: { 3: { halign: 'right' }, 4: { halign: 'right' } }
-                });
-                doc.save(`price_report_${start}.pdf`);
+                let formData = $('#filterForm').serialize();
+                window.location.href = `{{ route('report.price_adjustment.export.pdf') }}?${formData}`;
             });
 
             fetchReport();

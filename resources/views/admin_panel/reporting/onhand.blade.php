@@ -541,7 +541,8 @@
             </div>
             <div class="topbar-actions">
                 <a href="{{ route('product') }}" class="btn-inv btn-back">← Products</a>
-                <button class="btn-inv btn-csv" id="btnCsv">⬇ Export CSV</button>
+                <button class="btn-inv btn-csv" style="background:#10b981;" id="btnExportExcel">📊 Excel</button>
+                <button class="btn-inv btn-csv" style="background:#ef4444;" id="btnExportPdf">📄 PDF</button>
                 <button class="btn-inv btn-print" onclick="printReport()">🖨 Print</button>
             </div>
         </div>
@@ -832,31 +833,12 @@
                 applyFilters();
             });
 
-            // CSV Export
-            document.getElementById('btnCsv')?.addEventListener('click', function() {
-                const visibleRows = allRows.filter(r => r.style.display !== 'none');
-                let csv = 'Code,Name,Brand,Mode,On-Hand Pcs,Cost Value (Rs),Sale Value (Rs),Status\n';
-                visibleRows.forEach(r => {
-                    const cells = r.querySelectorAll('td');
-                    const code = cells[1]?.querySelector('.item-code')?.textContent.trim() || '';
-                    const name = cells[1]?.querySelector('.item-name')?.textContent.trim() || '';
-                    const brand = cells[2]?.textContent.trim() || '';
-                    const mode = cells[3]?.textContent.trim() || '';
-                    const qty = cells[4]?.textContent.trim() || '';
-                    const cost = cells[5]?.textContent.trim() || '';
-                    const sale = cells[6]?.textContent.trim() || '';
-                    const status = cells[7]?.textContent.trim() || '';
-                    csv +=
-                        `"${code}","${name}","${brand}","${mode}","${qty}","${cost}","${sale}","${status}"\n`;
-                });
-                const a = document.createElement('a');
-                a.href = URL.createObjectURL(new Blob([csv], {
-                    type: 'text/csv;charset=utf-8;'
-                }));
-                a.download = 'inventory_onhand_{{ now()->format('Ymd_Hi') }}.csv';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
+            $('#btnExportExcel').on('click', function() {
+                window.location.href = `{{ route('reports.onhand.export.excel') }}`;
+            });
+
+            $('#btnExportPdf').on('click', function() {
+                window.location.href = `{{ route('reports.onhand.export.pdf') }}`;
             });
         })();
 

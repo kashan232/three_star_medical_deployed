@@ -133,8 +133,8 @@
             </div>
             <div class="d-flex gap-2">
                 <button onclick="window.print()" class="btn-action btn-print"><i class="fas fa-print"></i> Print</button>
-                <button id="btnExportPdf" class="btn-action btn-pdf"><i class="fas fa-file-pdf"></i> Export PDF</button>
-                <button onclick="exportToExcel()" class="btn-action btn-excel"><i class="fas fa-file-excel"></i> Export Excel</button>
+                <button id="btnExportPdf" class="btn-action btn-pdf-action" style="background:#ef4444; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600;"><i class="fas fa-file-pdf"></i> PDF</button>
+                <button id="btnExportExcel" class="btn-action btn-excel-action" style="background:#10b981; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600;"><i class="fas fa-file-excel"></i> Excel</button>
             </div>
         </div>
 
@@ -292,42 +292,17 @@
             function fmtPKR(v) { return parseFloat(v).toLocaleString('en-PK', { minimumFractionDigits: 2 }); }
             function fmtPKRK(v) { return 'PKR ' + parseFloat(v).toLocaleString('en-PK', { minimumFractionDigits: 2 }); }
 
+            $('#btnExportExcel').on('click', function() {
+                let formData = $('#filterForm').serialize();
+                window.location.href = `{{ route('report.cdr.export.excel') }}?${formData}`;
+            });
+
             $('#btnExportPdf').on('click', function() {
-                if (!_currentData.length) return alert("No data available.");
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF('l', 'mm', 'a4');
-                const start = $('input[name="start_date"]').val();
-                const end = $('input[name="end_date"]').val();
-
-                doc.setFontSize(18); doc.setTextColor(79, 70, 229);
-                doc.text('THREE STARS MEDICAL SUPPLIES', 148, 14, { align: 'center' });
-                doc.setFontSize(9); doc.setTextColor(100);
-                doc.text('{{ $activeBranch->name ?? "Head Office" }}: {{ $activeBranch->address ?? "Lahore, Pakistan" }} | Phone: {{ $activeBranch->number ?? "+92 42 37353433" }}', 148, 20, { align: 'center' });
-                doc.setFontSize(11); doc.setTextColor(0);
-                doc.text(`CDR & Tender Report (${start} to ${end})`, 148, 27, { align: 'center' });
-
-                const rows = _currentData.map(r => [
-                    r.code, moment(r.cdr_date).format('DD/MM/YYYY'), r.cdr_no,
-                    r.customer ? r.customer.customer_name : '-',
-                    r.bank_account ? r.bank_account.title : '-',
-                    parseFloat(r.amount).toLocaleString('en-PK', { minimumFractionDigits: 2 }),
-                    r.status, r.city || '-'
-                ]);
-
-                doc.autoTable({
-                    startY: 30,
-                    head: [['Code', 'Date', 'CDR No', 'Customer', 'Account', 'Amount', 'Status', 'City']],
-                    body: rows,
-                    headStyles: { fillColor: [79, 70, 229] },
-                    styles: { fontSize: 8 },
-                    columnStyles: { 5: { halign: 'right' }, 6: { halign: 'center' } }
-                });
-                doc.save(`cdr_report_${start}.pdf`);
+                let formData = $('#filterForm').serialize();
+                window.location.href = `{{ route('report.cdr.export.pdf') }}?${formData}`;
             });
 
             fetchReport();
         });
-
-        function exportToExcel() { alert('Export Excel triggered'); }
     </script>
 @endsection

@@ -544,9 +544,8 @@
                     <p style="margin:4px 0 0; font-size:.85rem; color:#64748b;">Chronological stock movement ledger — purchases, sales, delivery challans &amp; returns</p>
                 </div>
                 <div style="display:flex; gap:8px;">
-                    <button type="button" id="btnExcel" style="background:#059669; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Export Excel Spreadsheet"><i class="fas fa-file-excel me-1"></i> Excel Export</button>
-                    <button type="button" id="btnSummaryPdf" class="btn-pdf" style="background:#10b981; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Export Summary PDF"><i class="fas fa-file-pdf me-1"></i> Summary PDF</button>
-                    <button type="button" id="btnPdf" style="background:#7c3aed; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Export Detail PDF"><i class="fas fa-list-alt me-1"></i> Detail PDF</button>
+                    <button type="button" id="btnExportExcel" class="btn-filter-action btn-excel-action" title="Export Excel Spreadsheet">📊 Export Excel</button>
+                    <button type="button" id="btnExportPdf" class="btn-filter-action btn-pdf-action" title="Export Detail PDF">📄 Export PDF</button>
                     <button type="button" id="btnPrint" class="btn-print" style="background:#6366f1; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;" title="Print View">🖨 Print</button>
                 </div>
             </div>
@@ -1178,453 +1177,44 @@
     // ── Print ────────────────────────────────────────────────────────────────
     document.getElementById('btnPrint').addEventListener('click', () => window.print());
 
-    // ── Summary PDF Export ───────────────────────────────────────────────────
-    document.getElementById('btnSummaryPdf').addEventListener('click', function(){
-        if (!lastData) { alert('Please select a product and generate the ledger first.'); return; }
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ orientation: 'portrait', unit: 'pt', format: 'a4' });
+    // ── Server-Side Excel Export ─────────────────────────────────────────────────────────
+    document.getElementById('btnExportExcel')?.addEventListener('click', function() {
+        const product_id = document.getElementById('filterProduct').value;
+        const start_date = document.getElementById('filterStartDate').value;
+        const end_date = document.getElementById('filterEndDate').value;
 
-        const p   = lastData.summary.product;
-        const sum = lastData.summary;
-
-        // Company Header
-        doc.setFontSize(16); doc.setFont('helvetica','bold');
-        doc.text('THREE STARS MEDICAL SUPPLIES', 40, 50);
-        doc.setFontSize(9); doc.setFont('helvetica','normal');
-        doc.text('Product Ledger Summary Report', 40, 65);
-        doc.text('Printed: ' + new Date().toLocaleString('en-PK'), 40, 78);
-        doc.line(40, 85, 555, 85);
-
-        // Product Details Box
-        doc.setFillColor(248, 250, 252);
-        doc.rect(40, 100, 515, 90, 'F');
-        doc.setDrawColor(226, 232, 240);
-        doc.rect(40, 100, 515, 90, 'D');
-
-        doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(15, 23, 42);
-        doc.text('PRODUCT PROFILE', 55, 120);
-
-        doc.setFont('helvetica','normal'); doc.setFontSize(9.5); doc.setTextColor(71, 85, 105);
-        doc.text('Product Name:', 55, 140);
-        doc.setFont('helvetica','bold'); doc.setTextColor(15, 23, 42);
-        doc.text(p.item_name || '-', 140, 140);
-
-        doc.setFont('helvetica','normal'); doc.setTextColor(71, 85, 105);
-        doc.text('Item Code:', 55, 155);
-        doc.setFont('helvetica','bold'); doc.setTextColor(15, 23, 42);
-        doc.text(p.item_code || '-', 140, 155);
-
-        doc.setFont('helvetica','normal'); doc.setTextColor(71, 85, 105);
-        doc.text('Brand:', 55, 170);
-        doc.setFont('helvetica','bold'); doc.setTextColor(15, 23, 42);
-        doc.text(p.brand_name || '-', 140, 170);
-
-        doc.setFont('helvetica','normal'); doc.setTextColor(71, 85, 105);
-        doc.text('Category:', 300, 155);
-        doc.setFont('helvetica','bold'); doc.setTextColor(15, 23, 42);
-        doc.text(p.category_name || '-', 380, 155);
-
-        doc.setFont('helvetica','normal'); doc.setTextColor(71, 85, 105);
-        doc.text('UOM/Unit:', 300, 170);
-        doc.setFont('helvetica','bold'); doc.setTextColor(15, 23, 42);
-        doc.text(p.unit_name || 'pcs', 380, 170);
-
-        // Period Box
-        doc.setFont('helvetica','normal'); doc.setTextColor(71, 85, 105);
-        doc.text('Report Period:', 300, 120);
-        doc.setFont('helvetica','bold'); doc.setTextColor(37, 99, 235);
-        const periodStr = (sum.period_start ? fmtDate(sum.period_start) : 'All') + ' to ' + (sum.period_end ? fmtDate(sum.period_end) : 'All');
-        doc.text(periodStr, 380, 120);
-
-        // Financial & Stock Summary Table
-        doc.autoTable({
-            startY: 210,
-            head: [['Metric / Stock KPI', 'Quantity (pcs / boxes)', 'Note']],
-            body: [
-                ['Opening Balance', fmtQty(sum.opening_balance), 'Stock level before period start'],
-                ['Total Stock IN', '+' + fmtQty(sum.total_qty_in), 'Purchases and sales returns in period'],
-                ['Total Stock OUT', '-' + fmtQty(sum.total_qty_out), 'Sales, delivery challans, and returns in period'],
-                ['Closing Stock', fmtQty(sum.closing_balance), 'Current inventory level at period end'],
-                ['Total Sale Value', fmtAmt(sum.total_sale_value), 'Total revenue generated in this period'],
-            ],
-            styles: { fontSize: 10, cellPadding: 8 },
-            headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
-            columnStyles: {
-                0: { cellWidth: 150, fontStyle: 'bold' },
-                1: { cellWidth: 180, halign: 'right', fontStyle: 'bold' },
-                2: { cellWidth: 185 },
-            },
-            didParseCell: function(data) {
-                if (data.section === 'body') {
-                    if (data.row.index === 3) {
-                        data.cell.styles.fillColor = [243, 244, 246]; // Highlight closing stock
-                    }
-                    if (data.row.index === 4) {
-                        data.cell.styles.fillColor = [254, 243, 199]; // Highlight revenue
-                        data.cell.styles.textColor = [146, 64, 14];
-                    }
-                }
-            }
-        });
-
-        doc.save(`Product_Summary_${p.item_code}_${sum.period_start || 'all'}_to_${sum.period_end || 'all'}.pdf`);
-    });
-
-        // ── Detail PDF Export ───────────────────────────────────────────────────
-    document.getElementById('btnPdf').addEventListener('click', function(){
-        if (!lastData) { alert('Please select a product and generate the ledger first.'); return; }
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-
-        const p   = lastData.summary.product;
-        const sum = lastData.summary;
-
-        doc.setFontSize(16); doc.setFont('helvetica','bold');
-        doc.text('Product Ledger Report', 40, 40);
-        doc.setFontSize(10); doc.setFont('helvetica','normal');
-        doc.text(`Product: ${p.item_name} (${p.item_code})  |  Brand: ${p.brand_name}  |  Period: ${sum.period_start || 'All'} to ${sum.period_end || 'All'}`, 40, 58);
-        doc.text(`Opening: ${fmtQty(sum.opening_balance)} pcs  |  Total IN: ${fmtQty(sum.total_qty_in)} pcs  |  Total OUT: ${fmtQty(sum.total_qty_out)} pcs  |  Closing: ${fmtQty(sum.closing_balance)} pcs`, 40, 72);
-
-        const tableRows = [];
-        if (lastData.is_consolidated && lastData.products_data) {
-            lastData.products_data.forEach((pData, idx) => {
-                const prod = pData.product;
-                
-                // Group Header Row
-                const headerRow = [
-                    { content: `📦 Product #${idx+1}: [${prod.item_code}] ${prod.item_name} (Company: ${prod.brand_name} | Closing: ${fmtQty(pData.closing_balance)} pcs)`, colSpan: 8, styles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' } }
-                ];
-                headerRow.isGroupHeader = true;
-                tableRows.push(headerRow);
-                
-                pData.rows.forEach(r => {
-                    const rowData = [
-                        fmtDate(r.date),
-                        r.description,
-                        r.ref || '—',
-                        r.qty_in  ? '+' + fmtQty(r.qty_in)  : '—',
-                        r.qty_out ? '-' + fmtQty(r.qty_out) : '—',
-                        r.sale_price ? fmtAmt(r.sale_price) : '—',
-                        r.cost_price ? fmtAmt(r.cost_price) : '—',
-                        fmtQty(r.balance),
-                    ];
-                    rowData.txType = r.type;
-                    tableRows.push(rowData);
-                });
-                
-                // Subtotal Row
-                const subtotalRow = [
-                    { content: `Subtotal for [${prod.item_code}] ${prod.item_name}:`, colSpan: 3, styles: { halign: 'right', fontStyle: 'bold', fillColor: [241, 245, 249] } },
-                    { content: `+${fmtQty(pData.total_qty_in)}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [21, 128, 61], fillColor: [241, 245, 249] } },
-                    { content: `-${fmtQty(pData.total_qty_out)}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [185, 28, 28], fillColor: [241, 245, 249] } },
-                    { content: '', colSpan: 2, styles: { fillColor: [241, 245, 249] } },
-                    { content: `${fmtQty(pData.closing_balance)}`, styles: { halign: 'right', fontStyle: 'bold', textColor: [30, 58, 138], fillColor: [241, 245, 249] } }
-                ];
-                subtotalRow.isSubtotal = true;
-                tableRows.push(subtotalRow);
-            });
-        } else {
-            lastData.rows.forEach(r => {
-                const rowData = [
-                    fmtDate(r.date),
-                    r.description,
-                    r.ref || '—',
-                    r.qty_in  ? '+' + fmtQty(r.qty_in)  : '—',
-                    r.qty_out ? '-' + fmtQty(r.qty_out) : '—',
-                    r.sale_price ? fmtAmt(r.sale_price) : '—',
-                    r.cost_price ? fmtAmt(r.cost_price) : '—',
-                    fmtQty(r.balance),
-                ];
-                rowData.txType = r.type;
-                tableRows.push(rowData);
-            });
-            
-            // Add closing row
-            const closingRow = [
-                fmtDate(sum.period_end || today),
-                'Closing Balance',
-                '—', '—', '—', '—', '—',
-                fmtQty(sum.closing_balance),
-            ];
-            closingRow.isClosing = true;
-            tableRows.push(closingRow);
+        if (!product_id || !start_date || !end_date) {
+            Swal.fire('Warning', 'Please select a product and generate the ledger first.', 'warning');
+            return;
         }
 
-        doc.autoTable({
-            startY: 85,
-            head: [['Date','Description','Ref / Doc #','Qty IN','Qty OUT','Sale Price','Cost Price','Balance']],
-            body: tableRows,
-            styles: { fontSize: 8, cellPadding: 4 },
-            headStyles: { fillColor: [30, 58, 138], textColor: 255, fontStyle: 'bold' },
-            columnStyles: {
-                0: {cellWidth:60},
-                1: {cellWidth:180},
-                2: {cellWidth:80},
-                3: {halign:'right',cellWidth:60},
-                4: {halign:'right',cellWidth:60},
-                5: {halign:'right',cellWidth:80},
-                6: {halign:'right',cellWidth:80},
-                7: {halign:'right',cellWidth:75, fontStyle:'bold'},
-            },
-            didParseCell: function(data) {
-                if (data.section === 'body') {
-                    const rowData = tableRows[data.row.index];
-                    if (rowData) {
-                        if (rowData.isGroupHeader) {
-                            // Style already defined in cell
-                        } else if (rowData.isSubtotal) {
-                            // Style already defined in cell
-                        } else if (rowData.isClosing) {
-                            data.cell.styles.fillColor = [245,243,255];
-                            data.cell.styles.fontStyle = 'bold';
-                        } else if (rowData.txType === 'opening') {
-                            data.cell.styles.fillColor = [219,234,254];
-                        } else if (rowData.txType === 'purchase') {
-                            data.cell.styles.fillColor = [240,253,244];
-                        } else if (rowData.txType === 'sale') {
-                            data.cell.styles.fillColor = [255,241,242];
-                        } else if (rowData.txType === 'delivery_challan') {
-                            data.cell.styles.fillColor = [255,247,237];
-                        }
-                    }
-                }
-            },
-            foot: [[
-                '', 'TOTALS', '',
-                '+' + fmtQty(sum.total_qty_in),
-                '-' + fmtQty(sum.total_qty_out),
-                '', '', fmtQty(sum.closing_balance)
-            ]],
-            footStyles: { fillColor: [241,245,249], textColor: [15,23,42], fontStyle: 'bold' },
-        });
+        const params = new URLSearchParams({ product_id, start_date, end_date });
+        const branch_id = document.getElementById('filterBranch')?.value;
+        const warehouse_id = document.getElementById('filterWarehouse')?.value;
+        if (branch_id && branch_id !== 'all') params.append('branch_id', branch_id);
+        if (warehouse_id && warehouse_id !== 'all') params.append('warehouse_id', warehouse_id);
 
-        doc.save(`Product_Ledger_${p.item_code}_${sum.period_start || 'all'}_to_${sum.period_end || 'all'}.pdf`);
+        window.location.href = `{{ route('report.product.ledger.export.excel') }}?${params}`;
     });
 
-        // ── Official Styled Excel Export ─────────────────────────────────────────────────────────
-    document.getElementById('btnExcel').addEventListener('click', function(){
-        if (!lastData) { alert('Please select a product and generate the ledger first.'); return; }
+    // ── Server-Side PDF Export ─────────────────────────────────────────────────────────
+    document.getElementById('btnExportPdf')?.addEventListener('click', function() {
+        const product_id = document.getElementById('filterProduct').value;
+        const start_date = document.getElementById('filterStartDate').value;
+        const end_date = document.getElementById('filterEndDate').value;
 
-        const p   = lastData.summary.product;
-        const sum = lastData.summary;
-        const rows = lastData.rows || [];
-
-        const esc = s => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-
-        const xTag = 'x:';
-        let tableHtml = `
-        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
-        <head>
-            <meta charset="utf-8">
-            <!--[if gte mso 9]>
-            <xml>
-             <${xTag}ExcelWorkbook>
-              <${xTag}ExcelWorksheets>
-               <${xTag}ExcelWorksheet>
-                <${xTag}Name>Product Ledger</${xTag}Name>
-                <${xTag}WorksheetOptions>
-                 <${xTag}DisplayGridlines/>
-                </${xTag}WorksheetOptions>
-               </${xTag}ExcelWorksheet>
-              </${xTag}ExcelWorksheets>
-             </${xTag}ExcelWorkbook>
-            </xml>
-            <![endif]-->` + `
-            <style>
-                body { font-family: 'Segoe UI', Calibri, Arial, sans-serif; }
-                table { border-collapse: collapse; width: 100%; font-size: 10pt; }
-                th, td { border: 1px solid #cbd5e1; padding: 7px 10px; vertical-align: middle; }
-                
-                /* Title Header */
-                .title-header { background-color: #1e3a8a; color: #ffffff; font-size: 15pt; font-weight: bold; text-align: center; height: 42px; border: 1px solid #1e3a8a; }
-                
-                /* Meta info block */
-                .meta-lbl { background-color: #f1f5f9; color: #1e293b; font-weight: bold; border: 1px solid #cbd5e1; }
-                .meta-val { background-color: #ffffff; color: #0f172a; border: 1px solid #cbd5e1; }
-                
-                /* KPI Summary */
-                .kpi-hdr { background-color: #0f172a; color: #ffffff; font-weight: bold; text-align: center; font-size: 10pt; }
-                .kpi-val { background-color: #f8fafc; font-weight: bold; text-align: center; font-size: 11pt; border: 1px solid #cbd5e1; }
-                
-                /* Main Table Headings */
-                .tbl-hdr { background-color: #1e3a8a; color: #ffffff; font-weight: bold; font-size: 11pt; text-align: center; height: 32px; border: 1px solid #1e293b; }
-                
-                /* Data rows */
-                .row-even { background-color: #ffffff; }
-                .row-odd { background-color: #f8fafc; }
-                .row-closing { background-color: #eff6ff; font-weight: bold; }
-                
-                /* Cell utility classes */
-                .text-center { text-align: center; }
-                .text-right { text-align: right; }
-                .text-left { text-align: left; }
-                
-                .qty-in { color: #15803d; font-weight: bold; text-align: right; }
-                .qty-out { color: #b91c1c; font-weight: bold; text-align: right; }
-                .bal-val { color: #0f172a; font-weight: bold; text-align: right; }
-                
-                /* Grand Totals Footer */
-                .tbl-foot { background-color: #0f172a; color: #ffffff; font-weight: bold; font-size: 11pt; height: 34px; border: 1px solid #0f172a; }
-            </style>
-        </head>
-        <body>
-            <table>
-                <!-- Main Header Banner -->
-                <tr>
-                    <th colspan="8" class="title-header">PRODUCT LEDGER REPORT</th>
-                </tr>
-                <tr><td colspan="8" style="border:none; height:10px;"></td></tr>
-
-                <!-- Product Profile Metadata -->
-                <tr>
-                    <td class="meta-lbl">Product Name:</td>
-                    <td class="meta-val" colspan="3"><b>${esc(p.item_name)}</b></td>
-                    <td class="meta-lbl">Product Code:</td>
-                    <td class="meta-val" colspan="3"><b>${esc(p.item_code)}</b></td>
-                </tr>
-                <tr>
-                    <td class="meta-lbl">Category:</td>
-                    <td class="meta-val" colspan="3">${esc(p.category_name)}</td>
-                    <td class="meta-lbl">Brand / Company:</td>
-                    <td class="meta-val" colspan="3">${esc(p.brand_name)}</td>
-                </tr>
-                <tr>
-                    <td class="meta-lbl">Unit:</td>
-                    <td class="meta-val" colspan="3">${esc(p.unit_name || 'pcs')}</td>
-                    <td class="meta-lbl">Period Range:</td>
-                    <td class="meta-val" colspan="3">${fmtDate(sum.period_start)} to ${fmtDate(sum.period_end)}</td>
-                </tr>
-                <tr><td colspan="8" style="border:none; height:10px;"></td></tr>
-
-                <!-- KPI Executive Summary -->
-                <tr>
-                    <th class="kpi-hdr" colspan="2">Opening Stock</th>
-                    <th class="kpi-hdr" colspan="2">Total Qty IN</th>
-                    <th class="kpi-hdr" colspan="2">Total Qty OUT</th>
-                    <th class="kpi-hdr">Closing Stock</th>
-                    <th class="kpi-hdr">Total Sale Revenue</th>
-                </tr>
-                <tr>
-                    <td class="kpi-val" colspan="2">${fmtQty(sum.opening_balance)} pcs</td>
-                    <td class="kpi-val" style="color:#15803d;" colspan="2">+${fmtQty(sum.total_qty_in)} pcs</td>
-                    <td class="kpi-val" style="color:#b91c1c;" colspan="2">-${fmtQty(sum.total_qty_out)} pcs</td>
-                    <td class="kpi-val" style="color:#1e3a8a;">${fmtQty(sum.closing_balance)} pcs</td>
-                    <td class="kpi-val" style="color:#b45309;">${fmtAmt(sum.total_sale_value)}</td>
-                </tr>
-                <tr><td colspan="8" style="border:none; height:12px;"></td></tr>
-
-                <!-- Highlighted Column Headings -->
-                <thead>
-                    <tr class="tbl-hdr">
-                        <th style="width:110px;">Date</th>
-                        <th style="width:300px;">Description</th>
-                        <th style="width:130px;">Ref / Doc #</th>
-                        <th style="width:110px;">Qty IN</th>
-                        <th style="width:110px;">Qty OUT</th>
-                        <th style="width:120px;">Sale Price</th>
-                        <th style="width:120px;">Cost Price</th>
-                        <th style="width:130px;">Balance (Pcs)</th>
-                    </tr>
-                </thead>
-                <tbody>
-        `;
-
-        // Data Rows
-        if (lastData.is_consolidated && lastData.products_data) {
-            lastData.products_data.forEach((pData, idx) => {
-                const prod = pData.product;
-                tableHtml += `
-                    <tr style="background-color:#1e3a8a; color:#ffffff; font-weight:bold;">
-                        <td colspan="8">📦 Product #${idx+1}: [${esc(prod.item_code)}] ${esc(prod.item_name)} (Company: ${esc(prod.brand_name)} | Closing: ${fmtQty(pData.closing_balance)} pcs)</td>
-                    </tr>
-                `;
-                pData.rows.forEach((r, idx2) => {
-                    const descClean = esc(r.description ? r.description.replace(/<[^>]+>/g, '') : '');
-                    const rowClass  = idx2 % 2 === 0 ? 'row-even' : 'row-odd';
-                    tableHtml += `
-                        <tr class="${rowClass}">
-                            <td class="text-center">${fmtDate(r.date)}</td>
-                            <td class="text-left">${descClean}</td>
-                            <td class="text-center">${esc(r.ref || '—')}</td>
-                            <td class="qty-in">${r.qty_in ? '+' + fmtQty(r.qty_in) : '—'}</td>
-                            <td class="qty-out">${r.qty_out ? '-' + fmtQty(r.qty_out) : '—'}</td>
-                            <td class="text-right">${r.sale_price ? fmtAmt(r.sale_price) : '—'}</td>
-                            <td class="text-right">${r.cost_price ? fmtAmt(r.cost_price) : '—'}</td>
-                            <td class="bal-val">${fmtQty(r.balance)}</td>
-                        </tr>
-                    `;
-                });
-                tableHtml += `
-                    <tr style="background-color:#f1f5f9; font-weight:bold;">
-                        <td colspan="3" class="text-right">Subtotal for [${esc(prod.item_code)}] ${esc(prod.item_name)}:</td>
-                        <td class="qty-in" style="color:#15803d;">+${fmtQty(pData.total_qty_in)}</td>
-                        <td class="qty-out" style="color:#b91c1c;">-${fmtQty(pData.total_qty_out)}</td>
-                        <td colspan="2"></td>
-                        <td class="bal-val" style="color:#1e3a8a;">${fmtQty(pData.closing_balance)}</td>
-                    </tr>
-                `;
-            });
-        } else {
-            rows.forEach((r, idx) => {
-                const descClean = esc(r.description ? r.description.replace(/<[^>]+>/g, '') : '');
-                const rowClass  = idx % 2 === 0 ? 'row-even' : 'row-odd';
-                tableHtml += `
-                    <tr class="${rowClass}">
-                        <td class="text-center">${fmtDate(r.date)}</td>
-                        <td class="text-left">${descClean}</td>
-                        <td class="text-center">${esc(r.ref || '—')}</td>
-                        <td class="qty-in">${r.qty_in ? '+' + fmtQty(r.qty_in) : '—'}</td>
-                        <td class="qty-out">${r.qty_out ? '-' + fmtQty(r.qty_out) : '—'}</td>
-                        <td class="text-right">${r.sale_price ? fmtAmt(r.sale_price) : '—'}</td>
-                        <td class="text-right">${r.cost_price ? fmtAmt(r.cost_price) : '—'}</td>
-                        <td class="bal-val">${fmtQty(r.balance)}</td>
-                    </tr>
-                `;
-            });
-            // Closing Balance Row
-            tableHtml += `
-                <tr class="row-closing">
-                    <td class="text-center">${fmtDate(sum.period_end || today)}</td>
-                    <td class="text-left"><b>🏁 Closing Balance</b></td>
-                    <td class="text-center">—</td>
-                    <td class="text-right">—</td>
-                    <td class="text-right">—</td>
-                    <td class="text-right">—</td>
-                    <td class="text-right">—</td>
-                    <td class="bal-val" style="color:#1e3a8a;">${fmtQty(sum.closing_balance)}</td>
-                </tr>
-            `;
+        if (!product_id || !start_date || !end_date) {
+            Swal.fire('Warning', 'Please select a product and generate the ledger first.', 'warning');
+            return;
         }
 
-        // Grand Totals Footer Row
-        tableHtml += `
-                </tbody>
-                <tfoot>
-                    <tr class="tbl-foot">
-                        <td colspan="3" class="text-right">GRAND TOTALS:</td>
-                        <td class="text-right" style="color:#4ade80;">+${fmtQty(sum.total_qty_in)}</td>
-                        <td class="text-right" style="color:#fca5a5;">-${fmtQty(sum.total_qty_out)}</td>
-                        <td class="text-right">—</td>
-                        <td class="text-right">—</td>
-                        <td class="text-right" style="color:#93c5fd;">${fmtQty(sum.closing_balance)}</td>
-                    </tr>
-                </tfoot>
-            </table>
-        </body>
-        </html>
-        `;
+        const params = new URLSearchParams({ product_id, start_date, end_date });
+        const branch_id = document.getElementById('filterBranch')?.value;
+        const warehouse_id = document.getElementById('filterWarehouse')?.value;
+        if (branch_id && branch_id !== 'all') params.append('branch_id', branch_id);
+        if (warehouse_id && warehouse_id !== 'all') params.append('warehouse_id', warehouse_id);
 
-        // Create Blob and Trigger Download
-        const blob = new Blob(['﻿' + tableHtml], { type: 'application/vnd.ms-excel;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const safeCode = (p.item_code || 'Ledger').replace(/[^a-zA-Z0-9_-]/g, '_');
-        a.href = url;
-        a.download = `Product_Ledger_${safeCode}_${sum.period_start || 'all'}_to_${sum.period_end || 'all'}.xls`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        window.location.href = `{{ route('report.product.ledger.export.pdf') }}?${params}`;
     });
 
 })();

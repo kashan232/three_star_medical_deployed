@@ -279,7 +279,8 @@
                 <p style="margin:4px 0 0; font-size:.85rem; color:#64748b;">DC-wise detailed shipment analysis</p>
             </div>
             <div style="display:flex; gap:10px;">
-                <button class="btn-pdf" id="btnExportPdf" style="background:#ef4444; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;">Export PDF</button>
+                <button class="btn-pdf btn-excel-action" id="btnExportExcel" style="background:#10b981; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;">📊 Export Excel</button>
+                <button class="btn-pdf btn-pdf-action" id="btnExportPdf" style="background:#ef4444; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;">📄 Export PDF</button>
                 <button class="btn-print" onclick="window.print()" style="background:#6366f1; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;">🖨 Print</button>
             </div>
         </div>
@@ -635,16 +636,28 @@
                 location.reload();
             });
 
-            document.getElementById('btnExportPdf').addEventListener('click', async function() {
-                const el = document.getElementById('reportResult');
-                const { jsPDF } = window.jspdf;
-                const canvas = await html2canvas(el, { scale: 2 });
-                const imgData = canvas.toDataURL('image/png');
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const w = pdf.internal.pageSize.getWidth();
-                const h = (canvas.height * w) / canvas.width;
-                pdf.addImage(imgData, 'PNG', 0, 0, w, h);
-                pdf.save('Delivery_Report.pdf');
+            document.getElementById('btnExportExcel').addEventListener('click', function() {
+                const formData = new URLSearchParams({
+                    start_date: document.getElementById('start_date').value,
+                    end_date: document.getElementById('end_date').value,
+                    customer_id: document.getElementById('customer_id').value,
+                    brand_id: document.getElementById('brand_id').value,
+                    product_id: document.getElementById('product_id').value,
+                    vendor_id: document.getElementById('vendor_id').value
+                }).toString();
+                window.location.href = `{{ route('report.dc.export.excel') }}?${formData}`;
+            });
+
+            document.getElementById('btnExportPdf').addEventListener('click', function() {
+                const formData = new URLSearchParams({
+                    start_date: document.getElementById('start_date').value,
+                    end_date: document.getElementById('end_date').value,
+                    customer_id: document.getElementById('customer_id').value,
+                    brand_id: document.getElementById('brand_id').value,
+                    product_id: document.getElementById('product_id').value,
+                    vendor_id: document.getElementById('vendor_id').value
+                }).toString();
+                window.location.href = `{{ route('report.dc.export.pdf') }}?${formData}`;
             });
         })();
     </script>

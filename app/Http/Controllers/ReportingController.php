@@ -38,7 +38,7 @@ class ReportingController extends Controller
         return \App\Models\Branch::first(); // Default to first branch if no ID (usually Head Office)
     }
 
-    public function onhand()
+    private function buildOnhandData()
     {
         // Pull every product with its live warehouse stock
         $products = DB::table('products')
@@ -200,7 +200,109 @@ class ReportingController extends Controller
             'sale_value'     => round($grandSaleVal, 2),
         ];
 
-        return view('admin_panel.reporting.onhand', compact('rows', 'summary'));
+        return compact('rows', 'summary');
+    }
+
+    public function onhand()
+    {
+        $data = $this->buildOnhandData();
+        return view('admin_panel.reporting.onhand', $data);
+    }
+
+    public function exportOnhandExcel(Request $request)
+    {
+        $data = $this->buildOnhandData();
+        
+        $exportData = [['#', 'Item Code', 'Item Name', 'Brand', 'Unit', 'Display Qty', 'Total Pieces', 'Cost Value', 'Sale Value', 'Stock Status', 'Warehouses']];
+
+        foreach ($data['rows'] as $i => $r) {
+            $whDetails = collect($r->warehouses)->map(function($w) {
+                return $w['name'] . ': ' . $w['display'];
+            })->implode(', ');
+            
+            $exportData[] = [
+                $i + 1,
+                $r->item_code,
+                $r->item_name,
+                $r->brand_name ?? '-',
+                $r->unit_name ?? '-',
+                $r->display_qty,
+                $r->total_pieces,
+                $r->cost_value,
+                $r->sale_value,
+                strtoupper($r->stock_status),
+                $whDetails
+            ];
+        }
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($exportData);
+        $filename = 'Onhand_Report_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function exportOnhandPdf(Request $request)
+    {
+        $data = $this->buildOnhandData();
+        
+        $filename = 'Onhand_Report_' . now()->format('Y-m-d') . '.pdf';
+        
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 9px; }
+            h2 { text-align:center; font-size:14px; margin-bottom:5px; } 
+            h3 { text-align:center; font-size:10px; margin-top:0; font-weight:normal; }
+            table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+            th, td { border:1px solid #ccc; padding:3px 4px; text-align:left; }
+            th { background-color:#d9e2f3; color:#1f3864; font-weight:bold; }
+            .num { text-align:right; }
+            .total-row { font-weight:bold; background-color:#e2e8f0; }
+        </style></head><body>';
+        
+        $html .= '<h2>THREE STARS MEDICAL SUPPLIES</h2>';
+        $html .= '<h3>INVENTORY ON-HAND REPORT | Generated: ' . now()->format('d M Y, h:i A') . '</h3>';
+        
+        $html .= '<table>
+                    <tr>
+                        <th width="5%">#</th>
+                        <th width="15%">Item Code</th>
+                        <th width="20%">Item Name</th>
+                        <th width="10%">Brand</th>
+                        <th width="15%">Display Qty</th>
+                        <th width="10%" class="num">Cost Value</th>
+                        <th width="10%" class="num">Sale Value</th>
+                        <th width="15%">Warehouses</th>
+                    </tr>';
+                    
+        foreach ($data['rows'] as $i => $r) {
+            $whDetails = collect($r->warehouses)->map(function($w) {
+                return $w['name'] . ': ' . $w['display'];
+            })->implode('<br>');
+            
+            $html .= '<tr>
+                        <td>'.($i+1).'</td>
+                        <td>'.$r->item_code.'</td>
+                        <td>'.$r->item_name.'</td>
+                        <td>'.($r->brand_name ?? '-').'</td>
+                        <td>'.$r->display_qty.'</td>
+                        <td class="num">'.number_format($r->cost_value, 2).'</td>
+                        <td class="num">'.number_format($r->sale_value, 2).'</td>
+                        <td>'.$whDetails.'</td>
+                      </tr>';
+        }
+        
+        $html .= '<tr class="total-row">
+                    <td colspan="5" class="num">Totals</td>
+                    <td class="num">'.number_format($data['summary']->cost_value, 2).'</td>
+                    <td class="num">'.number_format($data['summary']->sale_value, 2).'</td>
+                    <td></td>
+                  </tr>';
+        
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'landscape');
+        return $pdf->download($filename);
     }
 
     public function item_stock_report()
@@ -229,7 +331,7 @@ class ReportingController extends Controller
     }
 
     // AJAX endpoint to fetch report rows
-    public function fetchItemStock(Request $request)
+    private function buildItemStockData(Request $request)
     {           
         try {
             Warehouse::ensureShopWarehousesExists();
@@ -497,7 +599,7 @@ class ReportingController extends Controller
                 }
             }
 
-            return response()->json([
+            return [
                 'data'           => $rows,
                 'grand_total'    => round($gStockVal, 2),
                 'grand_purchase' => round($gPurAmt, 2),
@@ -508,11 +610,185 @@ class ReportingController extends Controller
                     ->select('id', 'warehouse_name', 'type')
                     ->get(),
                 'ledger_data'    => $ledgerData,
-            ]);
+            ];
 
         } catch (\Throwable $e) {
-            return response()->json(['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+            return ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()];
         }
+    }
+
+    public function fetchItemStock(Request $request)
+    {
+        $data = $this->buildItemStockData($request);
+        if (isset($data['error'])) return response()->json($data, 500);
+        return response()->json($data);
+    }
+
+    public function exportItemStockExcel(Request $request)
+    {
+        $d = $this->buildItemStockData($request);
+        if (isset($d['error'])) return response()->json($d, 500);
+
+        $data = [['#', 'Code', 'Product (Brand - Name / UOM)', 'Category', 'Opening', 'In (Pur)', 'Pur.Ret', 'Out (Sale)', 'Sale Ret', 'Balance', 'Warehouse', 'Pur Amt', 'Sale Amt', 'Stock Value']];
+        
+        $totInit = 0; $totIn = 0; $totOut = 0; $totBal = 0; $totPurAmt = 0; $totSaleAmt = 0; $totVal = 0;
+
+        foreach ($d['data'] as $i => $r) {
+            $ppb = $r['pieces_per_box'] ?? 1;
+            $bal = (float)($r['balance'] ?? 0);
+            $boxes = floor($bal / $ppb);
+            $loose = round(fmod($bal, $ppb));
+
+            $label = (!empty($r['brand']) && $r['brand'] !== '-' ? $r['brand'] . ' - ' : '') . $r['item_name'];
+            $uomLabel = '';
+            if (!empty($r['packings']) && is_array($r['packings']) && count($r['packings']) > 0) {
+                $uomLabel = implode(' / ', array_map(fn($p) => $p['name'] . '(' . $p['pieces_per_box'] . ')', $r['packings']));
+            } elseif ($ppb > 1) {
+                $uomLabel = $ppb . ' pcs/box';
+            }
+            if ($uomLabel) $label .= "\n" . $uomLabel;
+
+            $inQty = (float)($r['purchased'] ?? 0);
+            $outQty = (float)($r['sold'] ?? 0) + (float)($r['purchase_return_qty'] ?? 0);
+            $retIn = (float)($r['sale_return_qty'] ?? 0);
+
+            $totInit += (float)($r['initial_stock'] ?? 0);
+            $totIn += $inQty;
+            $totOut += $outQty;
+            $totBal += $bal;
+            $totPurAmt += (float)($r['purchase_amount'] ?? 0);
+            $totSaleAmt += (float)($r['sale_amount'] ?? 0);
+            $totVal += (float)($r['stock_value'] ?? 0);
+
+            $whText = '';
+            if (!empty($r['warehouses'])) {
+                $whText = implode("\n", array_map(fn($w) => $w['warehouse_name'] . ':' . $w['display'], $r['warehouses']));
+            }
+
+            $catStr = $r['category'] . (!empty($r['sub_category']) && $r['sub_category'] !== '-' ? '/' . $r['sub_category'] : '');
+
+            $data[] = [
+                $i + 1,
+                $r['item_code'] ?? '-',
+                $label,
+                $catStr,
+                $r['initial_stock'] ?? 0,
+                abs($inQty),
+                abs((float)($r['purchase_return_qty'] ?? 0)),
+                abs($outQty - (float)($r['purchase_return_qty'] ?? 0)),
+                abs($retIn),
+                $boxes . '.' . $loose . "\n(" . round($bal) . ' pcs)',
+                $whText ?: '-',
+                $r['purchase_amount'] ?? 0,
+                $r['sale_amount'] ?? 0,
+                $r['stock_value'] ?? 0,
+            ];
+        }
+
+        $data[] = [
+            '', '', 'GRAND TOTAL', '', 
+            $totInit, $totIn, '', $totOut, '', $totBal, '', 
+            $totPurAmt, $totSaleAmt, $totVal
+        ];
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Item_Stock_Summary_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function exportItemStockPdf(Request $request)
+    {
+        $request->merge(['report_type' => 'ledger']); // Force detail ledger data load
+        $d = $this->buildItemStockData($request);
+        if (isset($d['error'])) return response()->json($d, 500);
+
+        $filename = 'Item_Stock_Detail_Ledger_' . now()->format('Y-m-d') . '.pdf';
+        
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 8px; }
+            h2 { text-align:center; font-size:14px; margin-bottom:5px; } 
+            h3 { text-align:center; font-size:10px; margin-top:0; font-weight:normal; }
+            table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+            th, td { border:1px solid #ccc; padding:3px 4px; text-align:left; }
+            th { background-color:#d9e2f3; color:#1f3864; font-weight:bold; }
+            .num { text-align:right; }
+            .group-hdr { background-color:#e2e8f0; font-weight:bold; }
+            .closing-row { background-color:#f1f5f9; font-weight:bold; color:#b91c1c; }
+        </style></head><body>';
+        
+        $html .= '<h2>THREE STARS MEDICAL SUPPLIES</h2>';
+        $html .= '<h3>ITEM STOCK DETAIL REPORT | Period: ' . ($request->start_date ?: 'All') . ' to ' . ($request->end_date ?: 'All') . '</h3>';
+        
+        $html .= '<table>';
+        
+        foreach ($d['data'] as $pi => $product) {
+            $ledger = $d['ledger_data'][$product['id']] ?? null;
+            
+            $uomLabel = '';
+            if (!empty($product['packings'])) {
+                $uomLabel = implode(' / ', array_column($product['packings'], 'name'));
+            } elseif (($product['pieces_per_box'] ?? 1) > 1) {
+                $uomLabel = $product['pieces_per_box'] . 'PCS';
+            }
+            
+            $prodLabel = strtoupper($product['item_name']) . ($uomLabel ? ' (' . strtoupper($uomLabel) . ')' : '');
+            
+            $html .= '<tr class="group-hdr"><td colspan="8">'.($pi+1).'. ' . $prodLabel . '</td></tr>';
+            
+            $html .= '<tr>
+                        <th width="4%">#</th>
+                        <th width="12%">Date</th>
+                        <th width="28%">Description</th>
+                        <th width="14%">Ref</th>
+                        <th class="num" width="10%">Rate</th>
+                        <th class="num" width="10%">Debit (IN)</th>
+                        <th class="num" width="10%">Credit (OUT)</th>
+                        <th class="num" width="12%">Balance</th>
+                      </tr>';
+                      
+            $openBal = $ledger ? (float)$ledger['opening_balance'] : 0;
+            $html .= '<tr>
+                        <td>1</td>
+                        <td></td>
+                        <td>OPENING STOCK</td>
+                        <td></td>
+                        <td class="num">0.00</td>
+                        <td class="num">'.($openBal > 0 ? number_format($openBal,3) : '0.000').'</td>
+                        <td class="num">'.($openBal < 0 ? number_format(abs($openBal),3) : '0.000').'</td>
+                        <td class="num">'.($openBal != 0 ? number_format($openBal,3) : '').'</td>
+                      </tr>';
+                      
+            if ($ledger && !empty($ledger['transactions'])) {
+                foreach ($ledger['transactions'] as $idx => $tx) {
+                    $html .= '<tr>
+                                <td>'.($idx+2).'</td>
+                                <td>'.($tx['date'] ?? '').'</td>
+                                <td>'.($tx['desc'] ?? '').'</td>
+                                <td>'.($tx['ref'] ?? '').'</td>
+                                <td class="num">'.($tx['rate'] ? number_format($tx['rate'],2) : '0.00').'</td>
+                                <td class="num">'.($tx['debit'] > 0 ? number_format($tx['debit'],3) : '0.000').'</td>
+                                <td class="num">'.($tx['credit'] > 0 ? number_format($tx['credit'],3) : '0.000').'</td>
+                                <td class="num">'.(isset($tx['balance']) ? number_format($tx['balance'],3) : '').'</td>
+                              </tr>';
+                }
+            }
+            
+            $closeBal = $ledger ? (float)$ledger['closing_balance'] : 0;
+            $html .= '<tr class="closing-row">
+                        <td colspan="7" class="num">Closing Balance :</td>
+                        <td class="num">'.($closeBal != 0 ? number_format($closeBal,3) : '').'</td>
+                      </tr>';
+                      
+            $html .= '<tr><td colspan="8" style="border:none; height:10px;"></td></tr>';
+        }
+        
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
+        return $pdf->download($filename);
     }
 
     /**
@@ -1534,7 +1810,7 @@ class ReportingController extends Controller
         ]);
     }
 
-    public function fetch_customer_ledger(Request $request)
+    private function buildCustomerLedgerData(Request $request)
     {
         $customerId = (int) $request->customer_id;
         $start      = $request->start_date;
@@ -1741,7 +2017,7 @@ class ReportingController extends Controller
             ];
         }
 
-        return response()->json([
+        return [
             'customer' => [
                 'id'               => $customer->id,
                 'customer_id'      => $customer->customer_id   ?? '-',
@@ -1759,7 +2035,61 @@ class ReportingController extends Controller
             'total_credit'    => round($totalCredit, 2),
             'transactions'    => $transactions,
             'report_period'   => \Carbon\Carbon::parse($start)->format('d/m/Y') . " to " . \Carbon\Carbon::parse($end)->format('d/m/Y'),
+        ];
+    }
+
+    public function fetch_customer_ledger(Request $request)
+    {
+        $data = $this->buildCustomerLedgerData($request);
+        if (isset($data->headers)) return $data; // in case of error response
+        return response()->json($data);
+    }
+
+    public function exportCustomerLedgerExcel(Request $request)
+    {
+        $d = $this->buildCustomerLedgerData($request);
+        if (isset($d->headers)) return $d; // return error response if any
+        
+        $data = [['Date', 'Invoice', 'Description', 'Type', 'Debit', 'Credit', 'Balance']];
+        $data[] = ['','','Opening Balance','','','',$d['opening_balance']];
+        foreach ($d['transactions'] as $r) {
+            $data[] = [$r['date'], $r['invoice'], $r['description'], $r['type'], $r['debit'], $r['credit'], $r['balance']];
+        }
+        $data[] = ['','','Closing Balance','',$d['total_debit'],$d['total_credit'],$d['closing_balance']];
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Customer_Ledger_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
+    }
+
+    public function exportCustomerLedgerPdf(Request $request)
+    {
+        $d = $this->buildCustomerLedgerData($request);
+        if (isset($d->headers)) return $d;
+
+        $filename = 'Customer_Ledger_' . now()->format('Y-m-d') . '.pdf';
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 10px; }
+            h2 { text-align:center; } table { width:100%; border-collapse:collapse; }
+            th, td { border:1px solid #ddd; padding:4px; text-align:left; }
+            th { background-color:#f2f2f2; }
+            .num { text-align:right; }
+        </style></head><body>';
+        $html .= '<h2>Customer Ledger: ' . $d['customer']['customer_name'] . '</h2>';
+        $html .= '<p>Period: ' . $d['report_period'] . '</p>';
+        $html .= '<table><tr><th>Date</th><th>Invoice</th><th>Description</th><th>Type</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr>';
+        $html .= '<tr><td colspan="6">Opening Balance</td><td class="num">'.number_format($d['opening_balance'],2).'</td></tr>';
+        foreach ($d['transactions'] as $t) {
+            $html .= '<tr><td>'.$t['date'].'</td><td>'.$t['invoice'].'</td><td>'.$t['description'].'</td><td>'.$t['type'].'</td><td class="num">'.number_format($t['debit'],2).'</td><td class="num">'.number_format($t['credit'],2).'</td><td class="num">'.number_format($t['balance'],2).'</td></tr>';
+        }
+        $html .= '<tr><td colspan="4"><b>Totals</b></td><td class="num"><b>'.number_format($d['total_debit'],2).'</b></td><td class="num"><b>'.number_format($d['total_credit'],2).'</b></td><td class="num"><b>'.number_format($d['closing_balance'],2).'</b></td></tr>';
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
+        return $pdf->download($filename);
     }
     public function profitLoss(Request $request)
     {
@@ -2025,7 +2355,7 @@ class ReportingController extends Controller
         return view('admin_panel.reporting.warehouse_report', compact('shops', 'warehouses'));
     }
 
-    public function fetchWarehouseReport(Request $request)
+    private function buildWarehouseData(Request $request)
     {
         try {
             $branchId = $this->getBranchId();
@@ -2252,8 +2582,178 @@ class ReportingController extends Controller
                 'summary' => $summary
             ]);
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage()], 500);
+            return ['error' => $e->getMessage()];
         }
+    }
+
+    public function fetchWarehouseReport(Request $request)
+    {
+        $data = $this->buildWarehouseData($request);
+        if (isset($data['error'])) return response()->json($data, 500);
+        return response()->json($data);
+    }
+
+    public function exportWarehouseExcel(Request $request)
+    {
+        $d = $this->buildWarehouseData($request);
+        if (isset($d['error'])) return response()->json($d, 500);
+
+        $data = [['#', 'Code', 'Product (Brand - Name / UOM)', 'Category', 'Initial', 'In (Pur)', 'Out (Sale)', 'Ret/Adj', 'Balance', 'Pur Amt', 'Sale Amt', 'Stock Value']];
+        
+        $totInit = 0; $totIn = 0; $totOut = 0; $totRetAdj = 0; $totBal = 0; $totPurAmt = 0; $totSaleAmt = 0; $totVal = 0;
+
+        foreach ($d['data'] as $i => $r) {
+            $ppb = max(1, (int)($r['pieces_per_box'] ?? 1));
+            $bal = (float)($r['balance'] ?? 0);
+            $boxes = floor($bal / $ppb);
+            $loose = round(fmod($bal, $ppb));
+
+            $label = (!empty($r['brand']) && $r['brand'] !== '-' ? $r['brand'] . ' - ' : '') . $r['item_name'];
+            $uomLabel = '';
+            if (!empty($r['packings']) && is_array($r['packings']) && count($r['packings']) > 0) {
+                $uomLabel = implode(' / ', array_map(fn($p) => $p['name'] . '(' . $p['pieces_per_box'] . ')', $r['packings']));
+            } elseif ($ppb > 1) {
+                $uomLabel = $ppb . ' pcs/box';
+            }
+            if ($uomLabel) $label .= "\n" . $uomLabel;
+
+            $totInit += (float)($r['initial'] ?? 0);
+            $totIn += (float)($r['purchased'] ?? 0);
+            $totOut += (float)($r['sold'] ?? 0);
+            $totRetAdj += (float)($r['ret_adj'] ?? 0);
+            $totBal += $bal;
+            $totPurAmt += (float)($r['purchase_amount'] ?? 0);
+            $totSaleAmt += (float)($r['sale_amount'] ?? 0);
+            $totVal += (float)($r['stock_value'] ?? 0);
+
+            $data[] = [
+                $i + 1,
+                $r['item_code'] ?? '-',
+                $label,
+                $r['category'] . (!empty($r['sub_category']) && $r['sub_category'] !== '-' ? '/' . $r['sub_category'] : ''),
+                $r['initial'] ?? 0,
+                $r['purchased'] ?? 0,
+                $r['sold'] ?? 0,
+                $r['ret_adj'] ?? 0,
+                $boxes . '.' . $loose . "\n(" . round($bal) . ' pcs)',
+                $r['purchase_amount'] ?? 0,
+                $r['sale_amount'] ?? 0,
+                $r['stock_value'] ?? 0,
+            ];
+        }
+
+        $data[] = [
+            '', '', 'GRAND TOTAL', '', 
+            $totInit, $totIn, $totOut, $totRetAdj, $totBal,
+            $totPurAmt, $totSaleAmt, $totVal
+        ];
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Warehouse_Report_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function exportWarehousePdf(Request $request)
+    {
+        $d = $this->buildWarehouseData($request);
+        if (isset($d['error'])) return response()->json($d, 500);
+
+        $filename = 'Warehouse_Report_' . now()->format('Y-m-d') . '.pdf';
+        
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 8px; }
+            h2 { text-align:center; font-size:14px; margin-bottom:5px; } 
+            h3 { text-align:center; font-size:10px; margin-top:0; font-weight:normal; }
+            table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+            th, td { border:1px solid #ccc; padding:3px 4px; text-align:left; }
+            th { background-color:#d9e2f3; color:#1f3864; font-weight:bold; }
+            .num { text-align:right; }
+            .total-row { background-color:#1e3a8a; color:white; font-weight:bold; }
+            .total-row td { border-color:#1e3a8a; }
+        </style></head><body>';
+        
+        $html .= '<h2>THREE STARS MEDICAL SUPPLIES</h2>';
+        $html .= '<h3>WAREHOUSE STOCK SUMMARY | Period: ' . ($request->start_date ?: 'All') . ' to ' . ($request->end_date ?: 'All') . '</h3>';
+        
+        $html .= '<table>
+                    <tr>
+                        <th width="3%">#</th>
+                        <th width="8%">Code</th>
+                        <th width="22%">Product (Brand - Name / UOM)</th>
+                        <th width="10%">Category</th>
+                        <th width="7%" class="num">Initial</th>
+                        <th width="7%" class="num">In (Pur)</th>
+                        <th width="7%" class="num">Out (Sale)</th>
+                        <th width="7%" class="num">Ret/Adj</th>
+                        <th width="7%" class="num">Balance</th>
+                        <th width="7%" class="num">Pur Amt</th>
+                        <th width="7%" class="num">Sale Amt</th>
+                        <th width="8%" class="num">Stock Value</th>
+                    </tr>';
+                    
+        $totInit = 0; $totIn = 0; $totOut = 0; $totRetAdj = 0; $totBal = 0; $totPurAmt = 0; $totSaleAmt = 0; $totVal = 0;
+
+        foreach ($d['data'] as $i => $r) {
+            $ppb = max(1, (int)($r['pieces_per_box'] ?? 1));
+            $bal = (float)($r['balance'] ?? 0);
+            $boxes = floor($bal / $ppb);
+            $loose = round(fmod($bal, $ppb));
+
+            $label = (!empty($r['brand']) && $r['brand'] !== '-' ? $r['brand'] . ' - ' : '') . $r['item_name'];
+            $uomLabel = '';
+            if (!empty($r['packings']) && is_array($r['packings']) && count($r['packings']) > 0) {
+                $uomLabel = implode(' / ', array_map(fn($p) => $p['name'] . '(' . $p['pieces_per_box'] . ')', $r['packings']));
+            } elseif ($ppb > 1) {
+                $uomLabel = $ppb . ' pcs/box';
+            }
+            if ($uomLabel) $label .= '<br><span style="color:#666;">' . $uomLabel . '</span>';
+            
+            $catStr = $r['category'] . (!empty($r['sub_category']) && $r['sub_category'] !== '-' ? '/' . $r['sub_category'] : '');
+
+            $totInit += (float)($r['initial'] ?? 0);
+            $totIn += (float)($r['purchased'] ?? 0);
+            $totOut += (float)($r['sold'] ?? 0);
+            $totRetAdj += (float)($r['ret_adj'] ?? 0);
+            $totBal += $bal;
+            $totPurAmt += (float)($r['purchase_amount'] ?? 0);
+            $totSaleAmt += (float)($r['sale_amount'] ?? 0);
+            $totVal += (float)($r['stock_value'] ?? 0);
+
+            $html .= '<tr>
+                        <td>'.($i+1).'</td>
+                        <td>'.($r['item_code'] ?? '-').'</td>
+                        <td>'.$label.'</td>
+                        <td>'.$catStr.'</td>
+                        <td class="num">'.number_format($r['initial'] ?? 0).'</td>
+                        <td class="num">'.number_format($r['purchased'] ?? 0).'</td>
+                        <td class="num">'.number_format($r['sold'] ?? 0).'</td>
+                        <td class="num">'.number_format($r['ret_adj'] ?? 0).'</td>
+                        <td class="num" style="text-align:center;">'.$boxes.'.'.$loose.'<br>('.round($bal).' pcs)</td>
+                        <td class="num">'.number_format($r['purchase_amount'] ?? 0, 2).'</td>
+                        <td class="num">'.number_format($r['sale_amount'] ?? 0, 2).'</td>
+                        <td class="num">'.number_format($r['stock_value'] ?? 0, 2).'</td>
+                      </tr>';
+        }
+        
+        $html .= '<tr class="total-row">
+                    <td colspan="4" class="num">GRAND TOTAL</td>
+                    <td class="num">'.number_format($totInit).'</td>
+                    <td class="num">'.number_format($totIn).'</td>
+                    <td class="num">'.number_format($totOut).'</td>
+                    <td class="num">'.number_format($totRetAdj).'</td>
+                    <td class="num">'.number_format($totBal).'</td>
+                    <td class="num">'.number_format($totPurAmt, 2).'</td>
+                    <td class="num">'.number_format($totSaleAmt, 2).'</td>
+                    <td class="num">'.number_format($totVal, 2).'</td>
+                  </tr>';
+        
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'landscape');
+        return $pdf->download($filename);
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -2271,7 +2771,7 @@ class ReportingController extends Controller
         return view('admin_panel.reporting.vendor_ledger_report', compact('vendors'));
     }
 
-    public function fetch_vendor_ledger(Request $request)
+    private function buildVendorLedgerData(Request $request)
     {
         $vendorId  = (int) $request->vendor_id;
         $start     = $request->start_date;
@@ -2475,7 +2975,7 @@ class ReportingController extends Controller
             ];
         }
 
-        return response()->json([
+        return [
             'vendor' => [
                 'id'                => $vendor->id,
                 'vendor_id'         => $vendor->vendor_code ?? $vendor->id,
@@ -2492,7 +2992,61 @@ class ReportingController extends Controller
             'total_credit'    => round($totalCredit, 2),
             'transactions'    => $transactions,
             'report_period'   => \Carbon\Carbon::parse($start)->format('d/m/Y') . " to " . \Carbon\Carbon::parse($end)->format('d/m/Y'),
+        ];
+    }
+
+    public function fetch_vendor_ledger(Request $request)
+    {
+        $data = $this->buildVendorLedgerData($request);
+        if (isset($data->headers)) return $data; // in case of error response
+        return response()->json($data);
+    }
+
+    public function exportVendorLedgerExcel(Request $request)
+    {
+        $d = $this->buildVendorLedgerData($request);
+        if (isset($d->headers)) return $d; // return error response if any
+        
+        $data = [['Date', 'Invoice', 'Description', 'Type', 'Debit', 'Credit', 'Balance']];
+        $data[] = ['','','Opening Balance','','','',$d['opening_balance']];
+        foreach ($d['transactions'] as $r) {
+            $data[] = [$r['date'], $r['invoice'], $r['description'], $r['type'], $r['debit'], $r['credit'], $r['balance']];
+        }
+        $data[] = ['','','Closing Balance','',$d['total_debit'],$d['total_credit'],$d['closing_balance']];
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Vendor_Ledger_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ]);
+    }
+
+    public function exportVendorLedgerPdf(Request $request)
+    {
+        $d = $this->buildVendorLedgerData($request);
+        if (isset($d->headers)) return $d;
+
+        $filename = 'Vendor_Ledger_' . now()->format('Y-m-d') . '.pdf';
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 10px; }
+            h2 { text-align:center; } table { width:100%; border-collapse:collapse; }
+            th, td { border:1px solid #ddd; padding:4px; text-align:left; }
+            th { background-color:#f2f2f2; }
+            .num { text-align:right; }
+        </style></head><body>';
+        $html .= '<h2>Vendor Ledger: ' . $d['vendor']['name'] . '</h2>';
+        $html .= '<p>Period: ' . $d['report_period'] . '</p>';
+        $html .= '<table><tr><th>Date</th><th>Invoice</th><th>Description</th><th>Type</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr>';
+        $html .= '<tr><td colspan="6">Opening Balance</td><td class="num">'.number_format($d['opening_balance'],2).'</td></tr>';
+        foreach ($d['transactions'] as $t) {
+            $html .= '<tr><td>'.$t['date'].'</td><td>'.$t['invoice'].'</td><td>'.$t['description'].'</td><td>'.$t['type'].'</td><td class="num">'.number_format($t['debit'],2).'</td><td class="num">'.number_format($t['credit'],2).'</td><td class="num">'.number_format($t['balance'],2).'</td></tr>';
+        }
+        $html .= '<tr><td colspan="4"><b>Totals</b></td><td class="num"><b>'.number_format($d['total_debit'],2).'</b></td><td class="num"><b>'.number_format($d['total_credit'],2).'</b></td><td class="num"><b>'.number_format($d['closing_balance'],2).'</b></td></tr>';
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
+        return $pdf->download($filename);
     }
     public function fetch_all_vendor_ledgers(Request $request)
     {
@@ -2703,7 +3257,7 @@ class ReportingController extends Controller
             compact('products', 'isSuperAdmin', 'branches', 'categories', 'subCategories', 'brands', 'warehouses'));
     }
 
-    public function fetchGlobalSummary(Request $request)
+    private function buildGlobalSummaryData(Request $request)
     {
         try {
             $start = trim($request->start_date ?? '');
@@ -2811,7 +3365,7 @@ class ReportingController extends Controller
                 $gSaleVal   += $sVal;
             }
 
-            return response()->json([
+            return [
                 'success' => true,
                 'data' => $rows,
                 'summary' => [
@@ -2823,11 +3377,134 @@ class ReportingController extends Controller
                     'sale_value' => $gSaleVal,
                     'total_stock_value' => array_sum(array_column($rows, 'stock_value'))
                 ]
-            ]);
+            ];
 
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    public function fetchGlobalSummary(Request $request)
+    {
+        $data = $this->buildGlobalSummaryData($request);
+        if (isset($data['success']) && !$data['success']) return response()->json($data, 500);
+        return response()->json($data);
+    }
+
+    public function exportGlobalSummaryExcel(Request $request)
+    {
+        $d = $this->buildGlobalSummaryData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+        
+        $data = [['#', 'Item Code', 'Item Name', 'Opening', 'Purchased', 'Sold', 'Adjusted', 'Closing', 'Purchase Value', 'Sale Value', 'Stock Value']];
+
+        foreach ($d['data'] as $i => $r) {
+            $data[] = [
+                $i + 1,
+                $r['item_code'] ?? '-',
+                $r['item_name'] ?? '-',
+                $r['opening'] ?? 0,
+                $r['purchased'] ?? 0,
+                $r['sold'] ?? 0,
+                $r['adjusted'] ?? 0,
+                $r['closing'] ?? 0,
+                $r['purchase_value'] ?? 0,
+                $r['sale_value'] ?? 0,
+                $r['stock_value'] ?? 0,
+            ];
+        }
+
+        $summ = $d['summary'] ?? [];
+        $data[] = [
+            '', '', 'GRAND TOTAL', 
+            $summ['opening'] ?? 0, 
+            $summ['purchased'] ?? 0, 
+            $summ['sold'] ?? 0, 
+            '', 
+            $summ['closing'] ?? 0, 
+            $summ['purch_value'] ?? 0, 
+            $summ['sale_value'] ?? 0, 
+            $summ['total_stock_value'] ?? 0
+        ];
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Global_Summary_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function exportGlobalSummaryPdf(Request $request)
+    {
+        $d = $this->buildGlobalSummaryData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+        
+        $filename = 'Global_Summary_' . now()->format('Y-m-d') . '.pdf';
+        
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 8px; }
+            h2 { text-align:center; font-size:14px; margin-bottom:5px; } 
+            h3 { text-align:center; font-size:10px; margin-top:0; font-weight:normal; }
+            table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+            th, td { border:1px solid #ccc; padding:3px 4px; text-align:left; }
+            th { background-color:#d9e2f3; color:#1f3864; font-weight:bold; }
+            .num { text-align:right; }
+            .total-row { background-color:#1e3a8a; color:white; font-weight:bold; }
+            .total-row td { border-color:#1e3a8a; }
+        </style></head><body>';
+        
+        $html .= '<h2>THREE STARS MEDICAL SUPPLIES</h2>';
+        $html .= '<h3>GLOBAL SUMMARY REPORT | Period: ' . ($request->start_date ?: 'All') . ' to ' . ($request->end_date ?: 'All') . '</h3>';
+        
+        $html .= '<table>
+                    <tr>
+                        <th width="3%">#</th>
+                        <th width="10%">Item Code</th>
+                        <th width="20%">Item Name</th>
+                        <th width="7%" class="num">Opening</th>
+                        <th width="7%" class="num">Purchased</th>
+                        <th width="7%" class="num">Sold</th>
+                        <th width="7%" class="num">Adjusted</th>
+                        <th width="7%" class="num">Closing</th>
+                        <th width="10%" class="num">Purchase Value</th>
+                        <th width="10%" class="num">Sale Value</th>
+                        <th width="10%" class="num">Stock Value</th>
+                    </tr>';
+                    
+        foreach ($d['data'] as $i => $r) {
+            $html .= '<tr>
+                        <td>'.($i+1).'</td>
+                        <td>'.($r['item_code'] ?? '-').'</td>
+                        <td>'.($r['item_name'] ?? '-').'</td>
+                        <td class="num">'.number_format($r['opening'] ?? 0).'</td>
+                        <td class="num">'.number_format($r['purchased'] ?? 0).'</td>
+                        <td class="num">'.number_format($r['sold'] ?? 0).'</td>
+                        <td class="num">'.number_format($r['adjusted'] ?? 0).'</td>
+                        <td class="num" style="font-weight:bold;">'.number_format($r['closing'] ?? 0).'</td>
+                        <td class="num">'.number_format($r['purchase_value'] ?? 0, 2).'</td>
+                        <td class="num">'.number_format($r['sale_value'] ?? 0, 2).'</td>
+                        <td class="num" style="font-weight:bold;">'.number_format($r['stock_value'] ?? 0, 2).'</td>
+                      </tr>';
+        }
+        
+        $summ = $d['summary'] ?? [];
+        $html .= '<tr class="total-row">
+                    <td colspan="3" class="num">GRAND TOTAL</td>
+                    <td class="num">'.number_format($summ['opening'] ?? 0).'</td>
+                    <td class="num">'.number_format($summ['purchased'] ?? 0).'</td>
+                    <td class="num">'.number_format($summ['sold'] ?? 0).'</td>
+                    <td class="num"></td>
+                    <td class="num">'.number_format($summ['closing'] ?? 0).'</td>
+                    <td class="num">'.number_format($summ['purch_value'] ?? 0, 2).'</td>
+                    <td class="num">'.number_format($summ['sale_value'] ?? 0, 2).'</td>
+                    <td class="num">'.number_format($summ['total_stock_value'] ?? 0, 2).'</td>
+                  </tr>';
+        
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'landscape');
+        return $pdf->download($filename);
     }
 
     public function cdr_report()
@@ -2840,7 +3517,7 @@ class ReportingController extends Controller
         return view('admin_panel.reporting.cdr_report', compact('customers', 'accounts', 'isSuperAdmin', 'branches'));
     }
 
-    public function fetchCdrReport(Request $request)
+    private function buildCdrReportData(Request $request)
     {
         try {
             $start = $request->start_date;
@@ -2870,17 +3547,111 @@ class ReportingController extends Controller
 
             $rows = $query->orderBy('cdr_date', 'desc')->get();
 
-            return response()->json([
+            return [
                 'success' => true,
                 'data' => $rows,
                 'summary' => [
                     'total_amount' => $rows->sum('amount'),
                     'count' => $rows->count()
                 ]
-            ]);
+            ];
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    public function fetchCdrReport(Request $request)
+    {
+        $data = $this->buildCdrReportData($request);
+        if (isset($data['success']) && !$data['success']) return response()->json($data, 500);
+        return response()->json($data);
+    }
+
+    public function exportCdrExcel(Request $request)
+    {
+        $d = $this->buildCdrReportData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+        
+        $data = [['#', 'CDR Date', 'Status', 'Cheque Number', 'Bank/Account', 'Customer', 'Reference No', 'Amount']];
+
+        foreach ($d['data'] as $i => $r) {
+            $data[] = [
+                $i + 1,
+                \Carbon\Carbon::parse($r->cdr_date)->format('Y-m-d'),
+                strtoupper($r->status),
+                $r->cheque_number ?? '-',
+                $r->bankAccount ? $r->bankAccount->title . ' (' . $r->bankAccount->account_code . ')' : '-',
+                $r->customer ? $r->customer->customer_name : '-',
+                $r->reference_no ?? '-',
+                $r->amount
+            ];
+        }
+        
+        $data[] = ['', '', '', '', '', '', 'Total:', $d['summary']['total_amount']];
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'CDR_Report_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function exportCdrPdf(Request $request)
+    {
+        $d = $this->buildCdrReportData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+        
+        $filename = 'CDR_Report_' . now()->format('Y-m-d') . '.pdf';
+        
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 9px; }
+            h2 { text-align:center; font-size:14px; margin-bottom:5px; } 
+            h3 { text-align:center; font-size:10px; margin-top:0; font-weight:normal; }
+            table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+            th, td { border:1px solid #ccc; padding:3px 4px; text-align:left; }
+            th { background-color:#d9e2f3; color:#1f3864; font-weight:bold; }
+            .num { text-align:right; }
+            .total-row { font-weight:bold; background-color:#e2e8f0; }
+        </style></head><body>';
+        
+        $html .= '<h2>THREE STARS MEDICAL SUPPLIES</h2>';
+        $html .= '<h3>CDR REPORT | Period: ' . ($request->start_date ?: 'All') . ' to ' . ($request->end_date ?: 'All') . '</h3>';
+        
+        $html .= '<table>
+                    <tr>
+                        <th width="5%">#</th>
+                        <th width="10%">CDR Date</th>
+                        <th width="10%">Status</th>
+                        <th width="15%">Cheque Number</th>
+                        <th width="20%">Bank/Account</th>
+                        <th width="20%">Customer</th>
+                        <th width="10%">Ref No</th>
+                        <th width="10%" class="num">Amount</th>
+                    </tr>';
+                    
+        foreach ($d['data'] as $i => $r) {
+            $html .= '<tr>
+                        <td>'.($i+1).'</td>
+                        <td>'.\Carbon\Carbon::parse($r->cdr_date)->format('Y-m-d').'</td>
+                        <td>'.strtoupper($r->status).'</td>
+                        <td>'.($r->cheque_number ?? '-').'</td>
+                        <td>'.($r->bankAccount ? $r->bankAccount->title . ' (' . $r->bankAccount->account_code . ')' : '-').'</td>
+                        <td>'.($r->customer ? $r->customer->customer_name : '-').'</td>
+                        <td>'.($r->reference_no ?? '-').'</td>
+                        <td class="num">'.number_format($r->amount, 2).'</td>
+                      </tr>';
+        }
+        
+        $html .= '<tr class="total-row">
+                    <td colspan="7" class="num">Total Amount</td>
+                    <td class="num">'.number_format($d['summary']['total_amount'], 2).'</td>
+                  </tr>';
+        
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
+        return $pdf->download($filename);
     }
     public function price_adjustment_report()
     {
@@ -2893,7 +3664,7 @@ class ReportingController extends Controller
         return view('admin_panel.reporting.price_adjustment_report', compact('products', 'categories', 'subCategories', 'brands'));
     }
 
-    public function fetchPriceAdjustmentReport(Request $request)
+    private function buildPriceAdjustmentData(Request $request)
     {
         try {
             $start = $request->start_date;
@@ -2939,13 +3710,100 @@ class ReportingController extends Controller
                 return $r;
             });
 
-            return response()->json([
+            return [
                 'success' => true,
                 'data' => $mappedRows
-            ]);
+            ];
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    public function fetchPriceAdjustmentReport(Request $request)
+    {
+        $data = $this->buildPriceAdjustmentData($request);
+        if (isset($data['success']) && !$data['success']) return response()->json($data, 500);
+        return response()->json($data);
+    }
+
+    public function exportPriceAdjustmentExcel(Request $request)
+    {
+        $d = $this->buildPriceAdjustmentData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+        
+        $data = [['#', 'Date & Time', 'Product', 'Adjustment Type', 'Old Price', 'New Price', 'Difference', 'Adjusted By']];
+
+        foreach ($d['data'] as $i => $r) {
+            $data[] = [
+                $i + 1,
+                $r->created_at->format('Y-m-d H:i:s'),
+                ($r->product->item_code ?? '-') . ' - ' . ($r->product->item_name ?? '-'),
+                ucfirst($r->type),
+                $r->old_price,
+                $r->new_price,
+                $r->new_price - $r->old_price,
+                $r->user->name ?? 'System',
+            ];
+        }
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Price_Adjustment_Report_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function exportPriceAdjustmentPdf(Request $request)
+    {
+        $d = $this->buildPriceAdjustmentData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+        
+        $filename = 'Price_Adjustment_Report_' . now()->format('Y-m-d') . '.pdf';
+        
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 9px; }
+            h2 { text-align:center; font-size:14px; margin-bottom:5px; } 
+            h3 { text-align:center; font-size:10px; margin-top:0; font-weight:normal; }
+            table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+            th, td { border:1px solid #ccc; padding:3px 4px; text-align:left; }
+            th { background-color:#d9e2f3; color:#1f3864; font-weight:bold; }
+            .num { text-align:right; }
+        </style></head><body>';
+        
+        $html .= '<h2>THREE STARS MEDICAL SUPPLIES</h2>';
+        $html .= '<h3>PRICE ADJUSTMENT REPORT | Period: ' . ($request->start_date ?: 'All') . ' to ' . ($request->end_date ?: 'All') . '</h3>';
+        
+        $html .= '<table>
+                    <tr>
+                        <th width="5%">#</th>
+                        <th width="15%">Date & Time</th>
+                        <th width="25%">Product</th>
+                        <th width="15%">Adjustment Type</th>
+                        <th width="10%" class="num">Old Price</th>
+                        <th width="10%" class="num">New Price</th>
+                        <th width="10%" class="num">Difference</th>
+                        <th width="10%">Adjusted By</th>
+                    </tr>';
+                    
+        foreach ($d['data'] as $i => $r) {
+            $diff = $r->new_price - $r->old_price;
+            $html .= '<tr>
+                        <td>'.($i+1).'</td>
+                        <td>'.$r->created_at->format('Y-m-d H:i:s').'</td>
+                        <td>'.($r->product->item_code ?? '-').' - '.($r->product->item_name ?? '-').'</td>
+                        <td>'.ucfirst($r->type).'</td>
+                        <td class="num">'.number_format($r->old_price, 2).'</td>
+                        <td class="num">'.number_format($r->new_price, 2).'</td>
+                        <td class="num">'.number_format($diff, 2).'</td>
+                        <td>'.($r->user->name ?? 'System').'</td>
+                      </tr>';
+        }
+        
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
+        return $pdf->download($filename);
     }
 
     public function dc_report()
@@ -2960,7 +3818,7 @@ class ReportingController extends Controller
         return view('admin_panel.reporting.dc_report', compact('customers', 'categories', 'subCategories', 'brands', 'vendors', 'products'));
     }
 
-    public function fetchDcReport(Request $request)
+    private function buildDcReportData(Request $request)
     {
         try {
             $start      = $request->start_date;
@@ -3101,12 +3959,130 @@ class ReportingController extends Controller
                 ];
             });
 
-            return response()->json(['success' => true, 'data' => $data]);
+            return ['success' => true, 'data' => $data];
 
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
-
+            return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    public function fetchDcReport(Request $request)
+    {
+        $data = $this->buildDcReportData($request);
+        if (isset($data['success']) && !$data['success']) return response()->json($data, 500);
+        return response()->json($data);
+    }
+
+    public function exportDcExcel(Request $request)
+    {
+        $d = $this->buildDcReportData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+        
+        $data = [['#', 'Date & Time', 'DC No.', 'Invoice No.', 'Customer', 'Items Count', 'Total Pieces', 'Warehouses']];
+
+        foreach ($d['data'] as $i => $r) {
+            $data[] = [
+                $i + 1,
+                $r['created_at']->format('Y-m-d H:i:s'),
+                $r['dc_no'] ?? '-',
+                $r['sale']->invoice_no ?? '-',
+                $r['customer_name'] . ' (' . $r['customer_phone'] . ')',
+                $r['items_count'],
+                $r['total_pieces'],
+                $r['warehouses']
+            ];
+            
+            if (!empty($r['items_detail'])) {
+                $data[] = ['', '--- Product ---', '--- Code ---', '--- UOM ---', '--- Boxes ---', '--- Pcs ---', '--- WH ---', ''];
+                foreach ($r['items_detail'] as $det) {
+                    $data[] = [
+                        '', 
+                        $det['product_name'], 
+                        $det['item_code'], 
+                        $det['uom_name'], 
+                        $det['qty_boxes'], 
+                        $det['qty_pieces'], 
+                        $det['warehouse'], 
+                        ''
+                    ];
+                }
+                $data[] = ['', '', '', '', '', '', '', ''];
+            }
+        }
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'DC_Report_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function exportDcPdf(Request $request)
+    {
+        $d = $this->buildDcReportData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+        
+        $filename = 'DC_Report_' . now()->format('Y-m-d') . '.pdf';
+        
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 9px; }
+            h2 { text-align:center; font-size:14px; margin-bottom:5px; } 
+            h3 { text-align:center; font-size:10px; margin-top:0; font-weight:normal; }
+            table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+            th, td { border:1px solid #ccc; padding:3px 4px; text-align:left; }
+            th { background-color:#d9e2f3; color:#1f3864; font-weight:bold; }
+            .num { text-align:right; }
+            .detail-row td { background-color:#f9fafb; font-style:italic; border:none; border-bottom:1px solid #ddd; }
+            .master-row { background-color:#e2e8f0; font-weight:bold; }
+        </style></head><body>';
+        
+        $html .= '<h2>THREE STARS MEDICAL SUPPLIES</h2>';
+        $html .= '<h3>DELIVERY CHALLAN REPORT | Period: ' . ($request->start_date ?: 'All') . ' to ' . ($request->end_date ?: 'All') . '</h3>';
+        
+        $html .= '<table>
+                    <tr>
+                        <th width="3%">#</th>
+                        <th width="12%">Date & Time</th>
+                        <th width="10%">DC No.</th>
+                        <th width="10%">Invoice No.</th>
+                        <th width="25%">Customer</th>
+                        <th width="8%" class="num">Items</th>
+                        <th width="12%" class="num">Total Pcs</th>
+                        <th width="20%">Warehouses</th>
+                    </tr>';
+                    
+        foreach ($d['data'] as $i => $r) {
+            $html .= '<tr class="master-row">
+                        <td>'.($i+1).'</td>
+                        <td>'.$r['created_at']->format('Y-m-d H:i:s').'</td>
+                        <td>'.($r['dc_no'] ?? '-').'</td>
+                        <td>'.($r['sale']->invoice_no ?? '-').'</td>
+                        <td>'.$r['customer_name'].' ('.$r['customer_phone'].')</td>
+                        <td class="num">'.$r['items_count'].'</td>
+                        <td class="num">'.$r['total_pieces'].'</td>
+                        <td>'.$r['warehouses'].'</td>
+                      </tr>';
+                      
+            if (!empty($r['items_detail'])) {
+                $html .= '<tr class="detail-row"><td></td><td colspan="3" style="font-weight:bold;">Product (Code)</td><td style="font-weight:bold;">UOM</td><td class="num" style="font-weight:bold;">Boxes</td><td class="num" style="font-weight:bold;">Pcs</td><td style="font-weight:bold;">Warehouse</td></tr>';
+                foreach ($r['items_detail'] as $det) {
+                    $html .= '<tr class="detail-row">
+                                <td></td>
+                                <td colspan="3">'.$det['product_name'].' ('.$det['item_code'].')</td>
+                                <td>'.$det['uom_name'].'</td>
+                                <td class="num">'.number_format($det['qty_boxes']).'</td>
+                                <td class="num">'.number_format($det['qty_pieces']).'</td>
+                                <td>'.$det['warehouse'].'</td>
+                              </tr>';
+                }
+            }
+        }
+        
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
+        return $pdf->download($filename);
     }
 
 
@@ -3143,7 +4119,7 @@ class ReportingController extends Controller
             compact('products', 'shops', 'warehouses', 'categories', 'subCategories', 'brands', 'isSuperAdmin', 'branches'));
     }
 
-    public function fetchProductLedger(\Illuminate\Http\Request $request)
+    private function buildProductLedgerData(\Illuminate\Http\Request $request)
     {
         try {
             $productId     = $request->input('product_id');
@@ -3564,7 +4540,7 @@ class ReportingController extends Controller
             // Sort overall flat rows chronologically
             usort($rows, fn($a, $b) => strcmp($a['sort_key'], $b['sort_key']));
 
-            return response()->json([
+            return [
                 'success'         => true,
                 'is_consolidated' => $isConsolidated,
                 'product_count'   => count($productsData),
@@ -3580,11 +4556,69 @@ class ReportingController extends Controller
                     'period_start'     => $startDate,
                     'period_end'       => $endDate,
                 ],
-            ]);
+            ];
 
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            return ['success' => false, 'message' => $e->getMessage()];
         }
+    }
+
+    public function fetchProductLedger(\Illuminate\Http\Request $request)
+    {
+        $data = $this->buildProductLedgerData($request);
+        if (isset($data['success']) && !$data['success']) return response()->json($data, 500);
+        return response()->json($data);
+    }
+
+    public function exportProductLedgerExcel(\Illuminate\Http\Request $request)
+    {
+        $d = $this->buildProductLedgerData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+        
+        $data = [['Date', 'Ref', 'Description', 'Qty In', 'Qty Out', 'Balance']];
+        $data[] = ['','','Opening Balance','','',$d['summary']['opening_balance']];
+        foreach ($d['rows'] as $r) {
+            if ($r['type'] === 'opening') continue;
+            $data[] = [$r['date'], $r['ref'], $r['description'], $r['qty_in'] ?? '-', $r['qty_out'] ?? '-', $r['balance']];
+        }
+        $data[] = ['','','Closing Balance',$d['summary']['total_qty_in'],$d['summary']['total_qty_out'],$d['summary']['closing_balance']];
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Product_Ledger_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function exportProductLedgerPdf(\Illuminate\Http\Request $request)
+    {
+        $d = $this->buildProductLedgerData($request);
+        if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
+
+        $filename = 'Product_Ledger_' . now()->format('Y-m-d') . '.pdf';
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 10px; }
+            h2 { text-align:center; } table { width:100%; border-collapse:collapse; }
+            th, td { border:1px solid #ddd; padding:4px; text-align:left; }
+            th { background-color:#f2f2f2; }
+            .num { text-align:right; }
+        </style></head><body>';
+        $pName = $d['summary']['product'] ? $d['summary']['product']->item_name : 'All Products';
+        $html .= '<h2>Product Ledger: ' . $pName . '</h2>';
+        $html .= '<p>Period: ' . \Carbon\Carbon::parse($d['summary']['period_start'])->format('d/m/Y') . ' to ' . \Carbon\Carbon::parse($d['summary']['period_end'])->format('d/m/Y') . '</p>';
+        $html .= '<table><tr><th>Date</th><th>Ref</th><th>Description</th><th class="num">Qty In</th><th class="num">Qty Out</th><th class="num">Balance</th></tr>';
+        $html .= '<tr><td colspan="5">Opening Balance</td><td class="num">'.number_format($d['summary']['opening_balance'],4).'</td></tr>';
+        
+        foreach ($d['rows'] as $t) {
+            if ($t['type'] === 'opening') continue;
+            $html .= '<tr><td>'.$t['date'].'</td><td>'.$t['ref'].'</td><td>'.$t['description'].'</td><td class="num">'.($t['qty_in'] ? number_format($t['qty_in'],2) : '-').'</td><td class="num">'.($t['qty_out'] ? number_format($t['qty_out'],2) : '-').'</td><td class="num">'.number_format($t['balance'],4).'</td></tr>';
+        }
+        $html .= '<tr><td colspan="3"><b>Totals</b></td><td class="num"><b>'.number_format($d['summary']['total_qty_in'],2).'</b></td><td class="num"><b>'.number_format($d['summary']['total_qty_out'],2).'</b></td><td class="num"><b>'.number_format($d['summary']['closing_balance'],4).'</b></td></tr>';
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
+        return $pdf->download($filename);
     }
 
     public function voucher_report()
@@ -3617,7 +4651,7 @@ class ReportingController extends Controller
             compact('customers', 'vendors', 'products', 'isSuperAdmin', 'branches'));
     }
 
-    public function fetchVoucherReport(Request $request)
+    private function buildVoucherData(Request $request)
     {
         $this->repairMissingExpenseVouchersDetails();
         try {
@@ -3837,7 +4871,7 @@ class ReportingController extends Controller
                 ];
             }
 
-            return response()->json([
+            return [
                 'data' => $rows,
                 'summary' => [
                     'total_count' => count($rows),
@@ -3851,13 +4885,130 @@ class ReportingController extends Controller
                     'posted_count' => collect($rows)->where('status', 'posted')->count(),
                     'cancelled_count' => collect($rows)->where('status', 'cancelled')->count(),
                 ]
-            ]);
+            ];
 
         } catch (\Exception $e) {
-            return response()->json(['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+            return ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()];
         }
     }
 
+    public function fetchVoucherReport(Request $request)
+    {
+        $data = $this->buildVoucherData($request);
+        if (isset($data['error'])) return response()->json($data, 500);
+        return response()->json($data);
+    }
+
+    public function exportVoucherExcel(Request $request)
+    {
+        $d = $this->buildVoucherData($request);
+        if (isset($d['error'])) return response()->json($d, 500);
+
+        $data = [['#', 'Date', 'Voucher No', 'Type', 'Party', 'Status', 'Total Amount', 'Remarks']];
+
+        foreach ($d['data'] as $i => $v) {
+            $data[] = [
+                $i + 1,
+                $v['date'] ?? '-',
+                $v['voucher_no'] ?? '-',
+                strtoupper(str_replace('_', ' ', $v['voucher_type'] ?? '-')),
+                ($v['party_name'] ?? '-') . ($v['party_type'] && $v['party_type'] !== '-' ? ' (' . $v['party_type'] . ')' : ''),
+                strtoupper($v['status'] ?? '-'),
+                $v['total_amount'] ?? 0,
+                $v['remarks'] ?? '-',
+            ];
+            
+            // Add details rows if needed, but for simple export we can keep it master level or include details below
+            // Let's include details under the master row
+            if (!empty($v['details'])) {
+                $data[] = ['', '--- Account ---', '--- Narration ---', '--- Debit ---', '--- Credit ---', '', '', ''];
+                foreach ($v['details'] as $det) {
+                    $data[] = [
+                        '', 
+                        $det['account_title'], 
+                        $det['narration'], 
+                        $det['debit'], 
+                        $det['credit'], 
+                        '', '', ''
+                    ];
+                }
+                $data[] = ['', '', '', '', '', '', '', ''];
+            }
+        }
+
+        $xlsx = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Voucher_Report_' . now()->format('Y-m-d') . '.xlsx';
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
+    }
+
+    public function exportVoucherPdf(Request $request)
+    {
+        $d = $this->buildVoucherData($request);
+        if (isset($d['error'])) return response()->json($d, 500);
+
+        $filename = 'Voucher_Report_' . now()->format('Y-m-d') . '.pdf';
+        
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 9px; }
+            h2 { text-align:center; font-size:14px; margin-bottom:5px; } 
+            h3 { text-align:center; font-size:10px; margin-top:0; font-weight:normal; }
+            table { width:100%; border-collapse:collapse; margin-bottom:10px; }
+            th, td { border:1px solid #ccc; padding:3px 4px; text-align:left; }
+            th { background-color:#d9e2f3; color:#1f3864; font-weight:bold; }
+            .num { text-align:right; }
+            .detail-row td { background-color:#f9fafb; font-style:italic; border:none; border-bottom:1px solid #ddd; }
+            .master-row { background-color:#e2e8f0; font-weight:bold; }
+        </style></head><body>';
+        
+        $html .= '<h2>THREE STARS MEDICAL SUPPLIES</h2>';
+        $html .= '<h3>VOUCHER REPORT | Period: ' . ($request->start_date ?: 'All') . ' to ' . ($request->end_date ?: 'All') . '</h3>';
+        
+        $html .= '<table>
+                    <tr>
+                        <th width="5%">#</th>
+                        <th width="10%">Date</th>
+                        <th width="12%">Voucher No</th>
+                        <th width="10%">Type</th>
+                        <th width="20%">Party</th>
+                        <th width="10%">Status</th>
+                        <th width="15%" class="num">Total Amt</th>
+                        <th width="18%">Remarks</th>
+                    </tr>';
+                    
+        foreach ($d['data'] as $i => $v) {
+            $html .= '<tr class="master-row">
+                        <td>'.($i+1).'</td>
+                        <td>'.($v['date'] ?? '-').'</td>
+                        <td>'.($v['voucher_no'] ?? '-').'</td>
+                        <td>'.strtoupper(str_replace('_', ' ', $v['voucher_type'] ?? '-')).'</td>
+                        <td>'.($v['party_name'] ?? '-').'</td>
+                        <td>'.strtoupper($v['status'] ?? '-').'</td>
+                        <td class="num">'.number_format($v['total_amount'] ?? 0, 2).'</td>
+                        <td>'.($v['remarks'] ?? '-').'</td>
+                      </tr>';
+                      
+            if (!empty($v['details'])) {
+                $html .= '<tr class="detail-row"><td colspan="2"></td><td colspan="2" style="font-weight:bold;">Account</td><td colspan="2" style="font-weight:bold;">Narration</td><td class="num" style="font-weight:bold;">Debit</td><td class="num" style="font-weight:bold;">Credit</td></tr>';
+                foreach ($v['details'] as $det) {
+                    $html .= '<tr class="detail-row">
+                                <td colspan="2"></td>
+                                <td colspan="2">'.$det['account_title'].'</td>
+                                <td colspan="2">'.$det['narration'].'</td>
+                                <td class="num">'.number_format($det['debit'], 2).'</td>
+                                <td class="num">'.number_format($det['credit'], 2).'</td>
+                              </tr>';
+                }
+            }
+        }
+        
+        $html .= '</table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
+        return $pdf->download($filename);
+    }
     public function getVoucherHeads(Request $request)
     {
         $this->repairMissingExpenseVouchersDetails();

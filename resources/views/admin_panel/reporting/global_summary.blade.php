@@ -399,6 +399,12 @@
                     </svg>
                     Reset
                 </button>
+                <button type="button" class="btn-filter-action btn-excel-action" id="btnExportExcel" style="background:#10b981; color:#fff;">
+                    📊 Excel
+                </button>
+                <button type="button" class="btn-filter-action btn-pdf-action" id="btnExportPdf" style="background:#ef4444; color:#fff;">
+                    📄 PDF
+                </button>
             </div>
         </form>
 
@@ -519,6 +525,16 @@
                 $('#kpiPurchVal').text('PKR ' + new Intl.NumberFormat().format(summary.purch_value));
                 $('#kpiClosing').html('<i class="fas fa-cubes me-2"></i>' + new Intl.NumberFormat().format(summary.closing));
             }
+            
+            $('#btnExportExcel').on('click', function() {
+                let formData = $('#filterForm').serialize();
+                window.location.href = `{{ route('report.global_summary.export.excel') }}?${formData}`;
+            });
+
+            $('#btnExportPdf').on('click', function() {
+                let formData = $('#filterForm').serialize();
+                window.location.href = `{{ route('report.global_summary.export.pdf') }}?${formData}`;
+            });
         });
     </script>
 @endsection

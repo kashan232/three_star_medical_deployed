@@ -435,10 +435,14 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/report/item-stock', [ReportingController::class, 'item_stock_report'])->middleware('permission:item.stock.report.view')->name('report.item_stock');
     Route::post('/report/item-stock-fetch', [ReportingController::class, 'fetchItemStock'])->middleware('permission:item.stock.report.view')->name('report.item_stock.fetch');
+    Route::get('report/item-stock/export/excel', [ReportingController::class, 'exportItemStockExcel'])->middleware('permission:item.stock.report.view')->name('report.item_stock.export.excel');
+    Route::get('report/item-stock/export/pdf', [ReportingController::class, 'exportItemStockPdf'])->middleware('permission:item.stock.report.view')->name('report.item_stock.export.pdf');
 
     Route::get('/report/voucher', [ReportingController::class, 'voucher_report'])->name('report.voucher');
     Route::get('/report/voucher/fetch', [ReportingController::class, 'fetchVoucherReport'])->name('report.voucher.fetch');
     Route::get('/report/voucher/heads', [ReportingController::class, 'getVoucherHeads'])->name('report.voucher.heads');
+    Route::get('report/voucher/export/excel', [ReportingController::class, 'exportVoucherExcel'])->name('report.voucher.export.excel');
+    Route::get('report/voucher/export/pdf', [ReportingController::class, 'exportVoucherPdf'])->name('report.voucher.export.pdf');
 
     Route::get('report/purchase', [ReportingController::class, 'purchase_report'])->middleware('permission:purchase.report.view')->name('report.purchase');
     Route::post('report/purchase/fetch', [ReportingController::class, 'fetchPurchaseReport'])->middleware('permission:purchase.report.view')->name('report.purchase.fetch');
@@ -453,31 +457,47 @@ Route::middleware('auth')->group(function () {
     Route::get('report/customer/ledger', [ReportingController::class, 'customer_ledger_report'])->middleware('permission:customer.ledger.view')->name('report.customer.ledger');
     Route::get('report/customer-ledger/fetch', [ReportingController::class, 'fetch_customer_ledger'])->middleware('permission:customer.ledger.view')->name('report.customer.ledger.fetch');
     Route::get('report/customer-ledger/fetch-all', [ReportingController::class, 'fetch_all_customer_ledgers'])->middleware('permission:customer.ledger.view')->name('report.customer.ledger.fetch_all');
+    Route::get('report/customer-ledger/export/excel', [ReportingController::class, 'exportCustomerLedgerExcel'])->middleware('permission:customer.ledger.view')->name('report.customer.ledger.export.excel');
+    Route::get('report/customer-ledger/export/pdf', [ReportingController::class, 'exportCustomerLedgerPdf'])->middleware('permission:customer.ledger.view')->name('report.customer.ledger.export.pdf');
 
     Route::get('report/vendor/ledger', [ReportingController::class, 'vendor_ledger_report'])->middleware('permission:customer.ledger.view')->name('report.vendor.ledger');
     Route::get('report/vendor-ledger/fetch', [ReportingController::class, 'fetch_vendor_ledger'])->middleware('permission:customer.ledger.view')->name('report.vendor.ledger.fetch');
     Route::get('report/vendor-ledger/fetch-all', [ReportingController::class, 'fetch_all_vendor_ledgers'])->middleware('permission:customer.ledger.view')->name('report.vendor.ledger.fetch_all');
+    Route::get('report/vendor-ledger/export/excel', [ReportingController::class, 'exportVendorLedgerExcel'])->middleware('permission:customer.ledger.view')->name('report.vendor.ledger.export.excel');
+    Route::get('report/vendor-ledger/export/pdf', [ReportingController::class, 'exportVendorLedgerPdf'])->middleware('permission:customer.ledger.view')->name('report.vendor.ledger.export.pdf');
 
     Route::get('reports/onhand', [ReportingController::class, 'onhand'])->middleware('permission:inventory.onhand.view')->name('reports.onhand');
     Route::get('report/warehouse', [ReportingController::class, 'warehouse_report'])->middleware('permission:warehouse.stock.view')->name('report.warehouse');
     Route::post('report/warehouse/fetch', [ReportingController::class, 'fetchWarehouseReport'])->middleware('permission:warehouse.stock.view')->name('report.warehouse.fetch');
+    Route::get('report/warehouse/export/excel', [ReportingController::class, 'exportWarehouseExcel'])->middleware('permission:warehouse.stock.view')->name('report.warehouse.export.excel');
+    Route::get('report/warehouse/export/pdf', [ReportingController::class, 'exportWarehousePdf'])->middleware('permission:warehouse.stock.view')->name('report.warehouse.export.pdf');
 
     Route::get('reports/profit-loss', [ReportingController::class, 'profitLoss'])->name('reports.profit_loss');
     
     Route::get('report/global-summary', [ReportingController::class, 'globalSummary'])->name('report.global_summary');
     Route::post('report/global-summary/fetch', [ReportingController::class, 'fetchGlobalSummary'])->name('report.global_summary.fetch');
+    Route::get('report/global-summary/export/excel', [ReportingController::class, 'exportGlobalSummaryExcel'])->name('report.global_summary.export.excel');
+    Route::get('report/global-summary/export/pdf', [ReportingController::class, 'exportGlobalSummaryPdf'])->name('report.global_summary.export.pdf');
 
     Route::get('report/cdr', [ReportingController::class, 'cdr_report'])->name('report.cdr');
     Route::post('report/cdr/fetch', [ReportingController::class, 'fetchCdrReport'])->name('report.cdr.fetch');
+    Route::get('report/cdr/export/excel', [ReportingController::class, 'exportCdrExcel'])->name('report.cdr.export.excel');
+    Route::get('report/cdr/export/pdf', [ReportingController::class, 'exportCdrPdf'])->name('report.cdr.export.pdf');
 
     Route::get('report/price-adjustment', [ReportingController::class, 'price_adjustment_report'])->name('report.price_adjustment');
     Route::post('report/price-adjustment/fetch', [ReportingController::class, 'fetchPriceAdjustmentReport'])->name('report.price_adjustment.fetch');
+    Route::get('report/price-adjustment/export/excel', [ReportingController::class, 'exportPriceAdjustmentExcel'])->name('report.price_adjustment.export.excel');
+    Route::get('report/price-adjustment/export/pdf', [ReportingController::class, 'exportPriceAdjustmentPdf'])->name('report.price_adjustment.export.pdf');
 
     Route::get('report/dc', [ReportingController::class, 'dc_report'])->name('report.dc');
     Route::post('report/dc/fetch', [ReportingController::class, 'fetchDcReport'])->name('report.dc.fetch');
+    Route::get('report/dc/export/excel', [ReportingController::class, 'exportDcExcel'])->name('report.dc.export.excel');
+    Route::get('report/dc/export/pdf', [ReportingController::class, 'exportDcPdf'])->name('report.dc.export.pdf');
 
     Route::get('report/product-ledger', [ReportingController::class, 'product_ledger_report'])->name('report.product.ledger');
     Route::get('report/product-ledger/fetch', [ReportingController::class, 'fetchProductLedger'])->name('report.product.ledger.fetch');
+    Route::get('report/product-ledger/export/excel', [ReportingController::class, 'exportProductLedgerExcel'])->name('report.product.ledger.export.excel');
+    Route::get('report/product-ledger/export/pdf', [ReportingController::class, 'exportProductLedgerPdf'])->name('report.product.ledger.export.pdf');
 
     // Return modules list for permission dropdowns (AJAX)
     Route::get('/modules/list', function () {

@@ -603,8 +603,8 @@
                 <p>Detailed statement of account — debits, credits & running balance</p>
             </div>
             <div class="topbar-actions" id="exportBtns" style="display:none;">
-                <button class="btn-led btn-csv" id="btnPdf">⬇ Export PDF</button>
-                <button class="btn-led btn-reset-form" id="btnExportAll">📁 Export All Customers PDF</button>
+                <button class="btn-filter-action btn-excel-action" id="btnExportExcel">📊 Export Excel</button>
+                <button class="btn-filter-action btn-pdf-action" id="btnExportPdf">📄 Export PDF</button>
             </div>
         </div>
 
@@ -1069,148 +1069,34 @@
                 document.getElementById('txCount').textContent = `${txList.length} transaction(s) in period`;
             }
 
-            // PDF Export
-            document.getElementById('btnPdf')?.addEventListener('click', function() {
-                if (!lastRes) return;
-                
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF({ orientation: 'p', unit: 'pt', format: 'a4' });
+            // Server-Side Excel Export
+            document.getElementById('btnExportExcel')?.addEventListener('click', function() {
+                const customer_id = document.getElementById('sel_customer').value;
+                const start_date = document.getElementById('sel_start').value;
+                const end_date = document.getElementById('sel_end').value;
 
-                // Company Header
-                doc.setFontSize(16);
-                doc.setTextColor(0, 0, 0); 
-                doc.text('THREE STARS MEDICAL SUPPLIES', 40, 45);
-                
-                doc.setFontSize(9);
-                doc.setTextColor(0, 0, 0); 
-                doc.text('{{ $activeBranch->name ?? "Head Office" }} : {{ $activeBranch->address ?? "M17-18 Mezanine Floor Seth Centre 10 Syed Mouj Darya Road (Edward Road) Lahore.." }}', 40, 60);
-                doc.text('Phone : {{ $activeBranch->number ?? "0092-42-37353433" }}', 40, 72);
+                if (!customer_id || !start_date || !end_date) {
+                    Swal.fire('Warning', 'Please generate the report first before exporting.', 'warning');
+                    return;
+                }
 
-                doc.setFontSize(11);
-                doc.setTextColor(0, 0, 0); 
-                doc.text('Customer Ledger Statement', 40, 95);
-                doc.setFontSize(9);
-                doc.text(`Period: ${formatDate(lastRes.startDate)} to ${formatDate(lastRes.endDate)}`, 400, 95);
-                
-                // Customer Info
-                doc.setFontSize(9);
-                doc.setTextColor(0, 0, 0); 
-                doc.text(`Customer: ${lastRes.customer.customer_name} (${lastRes.customer.customer_id})`, 40, 110);
-                doc.text(`Address: ${lastRes.customer.address || '-'}`, 40, 122);
-                doc.setDrawColor(0, 0, 0);
-                doc.line(40, 130, 555, 130);
+                const params = new URLSearchParams({ customer_id, start_date, end_date });
+                window.location.href = `{{ route('report.customer.ledger.export.excel') }}?${params}`;
+            });
 
-                const txList = lastRes.transactions || [];
-                const tableData = [];
-                
-                // Opening B/F
-                tableData.push([
-                    '-', '-', 'Opening B/F', 'Opening Balance Brought Forward', 
-                    '-', '-', 
-                    fmt(Math.abs(lastRes.opening_balance)) + (lastRes.opening_balance >= 0 ? ' Dr' : ' Cr')
-                ]);
+            // Server-Side PDF Export
+            document.getElementById('btnExportPdf')?.addEventListener('click', function() {
+                const customer_id = document.getElementById('sel_customer').value;
+                const start_date = document.getElementById('sel_start').value;
+                const end_date = document.getElementById('sel_end').value;
 
-                txList.forEach(t => {
-                    const dr = parseFloat(t.debit || 0);
-                    const cr = parseFloat(t.credit || 0);
-                    const bal = parseFloat(t.balance || 0);
-                    tableData.push([
-                        formatDate((t.date || '').split(' ')[0]),
-                        t.invoice || '-',
-                        t.type.toUpperCase(),
-                        t.description,
-                        dr > 0 ? fmt(dr) : '-',
-                        cr > 0 ? fmt(cr) : '-',
-                        fmt(Math.abs(bal)) + (bal >= 0 ? ' Dr' : ' Cr')
-                    ]);
-                });
+                if (!customer_id || !start_date || !end_date) {
+                    Swal.fire('Warning', 'Please generate the report first before exporting.', 'warning');
+                    return;
+                }
 
-                // Total & Closing rows
-                tableData.push([
-                    { content: 'PERIOD TOTALS', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 240, 240] } },
-                    { content: fmt(lastRes.total_debit), styles: { halign: 'right', fontStyle: 'bold' } },
-                    { content: fmt(lastRes.total_credit), styles: { halign: 'right', fontStyle: 'bold' } },
-                    '-'
-                ]);
-
-                tableData.push([
-                    { content: 'CLOSING BALANCE', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 240, 240] } },
-                    { content: '', colSpan: 2 },
-                    { content: fmt(Math.abs(lastRes.closing_balance)) + (lastRes.closing_balance >= 0 ? ' Dr' : ' Cr'), styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 240, 240] } }
-                ]);
-
-                doc.autoTable({
-                    startY: 140,
-                    head: [['Date', 'Ref/Inv', 'Type', 'Description', 'Debit', 'Credit', 'Balance']],
-                    body: tableData,
-                    theme: 'grid',
-                    styles: { fontSize: 8, cellPadding: 4, textColor: [0, 0, 0], lineColor: [0, 0, 0] },
-                    headStyles: { fillColor: [0, 0, 0], textColor: 255, fontStyle: 'bold' },
-                    columnStyles: {
-                        0: { cellWidth: 55 },
-                        1: { cellWidth: 60 },
-                        2: { cellWidth: 50 },
-                        4: { halign: 'right' },
-                        5: { halign: 'right' },
-                        6: { halign: 'right' }
-                    },
-                    didDrawPage: (data) => {
-                        const str = "Page " + doc.internal.getNumberOfPages();
-                        doc.setFontSize(8);
-                        doc.text(str, data.settings.margin.left, doc.internal.pageSize.height - 10);
-                    }
-                });
-
-                // ── Summary Table (at the bottom) ───────────────────────────
-                const summaryY = doc.autoTable.previous.finalY + 30;
-                
-                // Add "SUMMARY" text
-                doc.setFontSize(10);
-                doc.setTextColor(100, 116, 139);
-                doc.text(`SUMMARY : ${lastRes.customer.customer_id} - ${lastRes.customer.customer_name}`, 300, summaryY - 10);
-
-                const ob = parseFloat(lastRes.opening_balance || 0);
-                const cb = parseFloat(lastRes.closing_balance || 0);
-                
-                const summaryData = [
-                    [
-                        { content: 'B/F BALANCE AS ON', styles: { fontStyle: 'bold' } },
-                        { content: formatDate(lastRes.startDate), styles: { fontStyle: 'bold' } },
-                        { content: fmt(Math.abs(ob)), styles: { halign: 'right', fontStyle: 'bold' } },
-                        { content: ob >= 0 ? 'DR' : 'CR', styles: { fontStyle: 'bold' } }
-                    ],
-                    [
-                        { content: 'TOTAL DEBIT AMOUNT', styles: { fontStyle: 'bold' }, colSpan: 2 },
-                        { content: fmt(lastRes.total_debit), styles: { halign: 'right', fontStyle: 'bold' } },
-                        ''
-                    ],
-                    [
-                        { content: 'TOTAL CREDIT AMOUNT', styles: { fontStyle: 'bold' }, colSpan: 2 },
-                        { content: fmt(lastRes.total_credit), styles: { halign: 'right', fontStyle: 'bold' } },
-                        ''
-                    ],
-                    [
-                        { content: 'CLOSING BALANCE AS ON', styles: { fontStyle: 'bold' } },
-                        { content: formatDate(lastRes.endDate), styles: { fontStyle: 'bold' } },
-                        { content: fmt(Math.abs(cb)), styles: { halign: 'right', fontStyle: 'bold' } },
-                        { content: cb >= 0 ? 'DR' : 'CR', styles: { fontStyle: 'bold' } }
-                    ]
-                ];
-
-                doc.autoTable({
-                    startY: summaryY,
-                    margin: { left: 250 },
-                    tableWidth: 320,
-                    body: summaryData,
-                    theme: 'plain',
-                    styles: { fontSize: 9, cellPadding: 5, borderBottom: 1, borderColor: [0, 0, 0], textColor: [0, 0, 0] },
-                    columnStyles: {
-                        2: { cellWidth: 80 },
-                        3: { cellWidth: 30 }
-                    }
-                });
-
-                doc.save(`ledger_${(lastRes.customer.customer_name).replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`);
+                const params = new URLSearchParams({ customer_id, start_date, end_date });
+                window.location.href = `{{ route('report.customer.ledger.export.pdf') }}?${params}`;
             });
 
             // PDF Export ALL

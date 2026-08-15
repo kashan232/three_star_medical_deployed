@@ -874,13 +874,6 @@
                 lastData = [];
             });
 
-            // PDF Export logic matching Sale Report
-            document.getElementById('btnExportPdf').addEventListener('click', async function() {
-                if (!lastData.length) {
-                    alert('No data to export. Run a search first.');
-                    return;
-                }
-
             // PDF Export — server-side via DomPDF for guaranteed proper filename
             document.getElementById('btnExportPdf').addEventListener('click', function() {
                 const params = new URLSearchParams({
@@ -889,6 +882,10 @@
                     vendor_id:       document.getElementById('filterVendor').value,
                     warehouse_id:    document.getElementById('filterWarehouse').value,
                     status:          document.getElementById('filterStatus').value,
+                    category_id:     document.getElementById('filterCategory').value,
+                    sub_category_id: document.getElementById('filterSubCategory').value,
+                    brand_id:        document.getElementById('filterBrand').value,
+                    product_id:      document.getElementById('filterProduct').value,
                 });
                 window.location.href = `{{ route('report.purchase.export.pdf') }}?${params}`;
             });
@@ -901,6 +898,10 @@
                     vendor_id:       document.getElementById('filterVendor').value,
                     warehouse_id:    document.getElementById('filterWarehouse').value,
                     status:          document.getElementById('filterStatus').value,
+                    category_id:     document.getElementById('filterCategory').value,
+                    sub_category_id: document.getElementById('filterSubCategory').value,
+                    brand_id:        document.getElementById('filterBrand').value,
+                    product_id:      document.getElementById('filterProduct').value,
                 });
                 window.location.href = `{{ route('report.purchase.export.excel') }}?${params}`;
             });

@@ -8215,3 +8215,10 @@ label {
 /* ============================ */
 
 /*# sourceMappingURL=style.css.map */
+/* --- Export Buttons --- */
+.btn-filter-action { cursor: pointer; padding: 4px 8px; min-width: 80px; height: 32px; border: none; transition: background-color 0.2s, transform 0.1s; font-size: 13px; font-weight: 500; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
+.btn-filter-action:active { transform: scale(0.98); }
+.btn-excel-action { background: #10b981; color: #fff; }
+.btn-excel-action:hover { background: #059669; color: #fff; }
+.btn-pdf-action { background: #ef4444; color: #fff; }
+.btn-pdf-action:hover { background: #dc2626; color: #fff; }

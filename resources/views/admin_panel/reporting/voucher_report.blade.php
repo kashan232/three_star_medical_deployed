@@ -578,7 +578,8 @@
                 <p>ERP double-entry ledger statement of cash, bank, journal, and contra transactions</p>
             </div>
             <div class="topbar-actions" id="exportBtns" style="display:none;">
-                <button class="btn-led btn-csv" id="btnCsv">⬇ Export CSV</button>
+                <button class="btn-filter-action btn-excel-action" id="btnExportExcel">📊 Export Excel</button>
+                <button class="btn-filter-action btn-pdf-action" id="btnExportPdf">📄 Export PDF</button>
                 <button class="btn-led btn-print" onclick="window.print()">🖨 Print Report</button>
             </div>
         </div>
@@ -1124,24 +1125,48 @@
                 }
             };
 
-            // Export to CSV logic
-            document.getElementById('btnCsv').addEventListener('click', function() {
+            // Export Excel logic
+            document.getElementById('btnExportExcel').addEventListener('click', function() {
                 if (reportData.length === 0) return;
 
-                let csv = 'Voucher #,Date,Type,Party,Remarks,Total Amount,Status,Created By\n';
-                reportData.forEach(v => {
-                    csv += `"${v.voucher_no}","${v.date}","${v.voucher_type}","${v.party_name.replace(/"/g, '""')}","${v.remarks.replace(/"/g, '""')}","${v.total_amount}","${v.status}","${v.created_by}"\n`;
+                const params = new URLSearchParams({
+                    start_date: document.getElementById('sel_start').value,
+                    end_date: document.getElementById('sel_end').value,
+                    month: document.getElementById('sel_month').value,
+                    year: document.getElementById('sel_year').value,
+                    party_type: document.getElementById('sel_party_type').value,
+                    customer_id: document.getElementById('sel_customer').value,
+                    vendor_id: document.getElementById('sel_vendor').value,
+                    product_id: document.getElementById('sel_product').value,
+                    voucher_type: document.getElementById('sel_voucher_type').value,
+                    status: document.getElementById('sel_status').value,
+                    head_id: document.getElementById('sel_head_id').value,
+                    branch_id: IS_SUPER_ADMIN ? document.getElementById('sel_branch').value : 'all'
                 });
 
-                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-                const link = document.createElement("a");
-                const url = URL.createObjectURL(blob);
-                link.setAttribute("href", url);
-                link.setAttribute("download", `voucher_summary_report_${new Date().toISOString().slice(0, 10)}.csv`);
-                link.style.visibility = 'hidden';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                window.location.href = `{{ route('report.voucher.export.excel') }}?${params}`;
+            });
+
+            // Export PDF logic
+            document.getElementById('btnExportPdf').addEventListener('click', function() {
+                if (reportData.length === 0) return;
+
+                const params = new URLSearchParams({
+                    start_date: document.getElementById('sel_start').value,
+                    end_date: document.getElementById('sel_end').value,
+                    month: document.getElementById('sel_month').value,
+                    year: document.getElementById('sel_year').value,
+                    party_type: document.getElementById('sel_party_type').value,
+                    customer_id: document.getElementById('sel_customer').value,
+                    vendor_id: document.getElementById('sel_vendor').value,
+                    product_id: document.getElementById('sel_product').value,
+                    voucher_type: document.getElementById('sel_voucher_type').value,
+                    status: document.getElementById('sel_status').value,
+                    head_id: document.getElementById('sel_head_id').value,
+                    branch_id: IS_SUPER_ADMIN ? document.getElementById('sel_branch').value : 'all'
+                });
+
+                window.location.href = `{{ route('report.voucher.export.pdf') }}?${params}`;
             });
 
         })();

@@ -510,7 +510,8 @@
                     <div class="filter-group" style="flex-direction: row; gap: 6px; align-items: flex-end; min-width: 360px; margin-left: 10px; flex: 1.5;">
                         <button class="btn-filter-action btn-filter-search" onclick="loadReport()" style="flex: 1;">🔍 Search</button>
                         <button class="btn-filter-action btn-filter-reset" onclick="resetFilters()" style="flex: 1;">↺ Reset</button>
-                        <button class="btn-filter-action btn-csv-action" onclick="exportData()" style="flex: 1;">⬇ CSV</button>
+                        <button type="button" class="btn-filter-action btn-excel-action" id="btnExportExcel" style="flex: 1;">📊 Excel</button>
+                        <button type="button" class="btn-filter-action btn-pdf-action" id="btnExportPdf" style="flex: 1;">📄 PDF</button>
                         <button class="btn-filter-action btn-print-action" onclick="window.print()" style="flex: 1;">🖨 Print</button>
                     </div>
                 </div>
@@ -763,30 +764,38 @@
                 });
         }
 
-        function exportData() {
+        document.getElementById('btnExportExcel').addEventListener('click', function() {
             if (reportData.length === 0) {
                 Swal.fire('Empty', 'No data to export.', 'info');
                 return;
             }
-
-            let csv =
-                "Item Code,Item Name,Current Stock (Pcs),Stock Value (Rs),Purchased Qty,Purchased Amount (Rs),Sold Qty,Sold Amount (Rs),Transferred In,Transferred Out\n";
-
-            reportData.forEach(r => {
-                csv +=
-                    `"${r.item_code}","${r.item_name}","${r.current_stock}","${r.stock_value}","${r.purchased_qty}","${r.purchased_amount}","${r.sold_qty}","${r.sold_amount}","${r.transferred_in}","${r.transferred_out}"\n`;
+            const params = new URLSearchParams({
+                start_date: document.getElementById('start_date').value,
+                end_date: document.getElementById('end_date').value,
+                warehouse_id: document.getElementById('filterWarehouse').value || 'all',
+                category_id: document.getElementById('filterCategory').value || 'all',
+                sub_category_id: document.getElementById('filterSubCategory').value || 'all',
+                brand_id: document.getElementById('filterBrand').value || 'all',
+                product_id: document.getElementById('filterProduct').value || 'all'
             });
+            window.location.href = `{{ route('report.warehouse.export.excel') }}?${params}`;
+        });
 
-            const blob = new Blob([csv], {
-                type: 'text/csv;charset=utf-8;'
+        document.getElementById('btnExportPdf').addEventListener('click', function() {
+            if (reportData.length === 0) {
+                Swal.fire('Empty', 'No data to export.', 'info');
+                return;
+            }
+            const params = new URLSearchParams({
+                start_date: document.getElementById('start_date').value,
+                end_date: document.getElementById('end_date').value,
+                warehouse_id: document.getElementById('filterWarehouse').value || 'all',
+                category_id: document.getElementById('filterCategory').value || 'all',
+                sub_category_id: document.getElementById('filterSubCategory').value || 'all',
+                brand_id: document.getElementById('filterBrand').value || 'all',
+                product_id: document.getElementById('filterProduct').value || 'all'
             });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.setAttribute("href", url);
-            link.setAttribute("download", "warehouse_report.csv");
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-        }
+            window.location.href = `{{ route('report.warehouse.export.pdf') }}?${params}`;
+        });
     </script>
 @endsection
