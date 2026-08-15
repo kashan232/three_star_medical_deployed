@@ -445,6 +445,8 @@ Route::middleware('auth')->group(function () {
 
     Route::get('report/sale', [ReportingController::class, 'sale_report'])->middleware('permission:sale.report.view')->name('report.sale');
     Route::get('report/sale/fetch', [ReportingController::class, 'fetchsaleReport'])->middleware('permission:sale.report.view')->name('report.sale.fetch');
+    Route::get('report/sale/export/excel', [ReportingController::class, 'exportSaleReportExcel'])->middleware('permission:sale.report.view')->name('report.sale.export.excel');
+    Route::get('report/sale/export/pdf', [ReportingController::class, 'exportSaleReportPdf'])->middleware('permission:sale.report.view')->name('report.sale.export.pdf');
 
     Route::get('report/customer/ledger', [ReportingController::class, 'customer_ledger_report'])->middleware('permission:customer.ledger.view')->name('report.customer.ledger');
     Route::get('report/customer-ledger/fetch', [ReportingController::class, 'fetch_customer_ledger'])->middleware('permission:customer.ledger.view')->name('report.customer.ledger.fetch');

@@ -1179,7 +1179,197 @@ class ReportingController extends Controller
         ]);
     }
 
+    // ─── Helper: build sale report data (shared by Excel & PDF exports) ───────
+    private function buildSaleReportData(Request $request): array
+    {
+        $start       = $request->start_date;
+        $end         = $request->end_date;
+        $customerId  = $request->customer_id;
+        $status      = $request->status;
+        $warehouseId = $request->warehouse_id;
+        $catId       = $request->category_id;
+        $subId       = $request->sub_category_id;
+        $brandId     = $request->brand_id;
+        $productId   = $request->product_id;
+        $vendorId    = $request->vendor_id;
+        $branchId    = $this->getBranchId();
+
+        $vendorProductIds = [];
+        if ($vendorId && $vendorId !== 'all') {
+            $vendorProductIds = DB::table('purchase_items')
+                ->join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
+                ->where('purchases.vendor_id', $vendorId)
+                ->pluck('purchase_items.product_id')->unique()->toArray();
+            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'vendor_id')) {
+                $directIds = DB::table('products')->where('vendor_id', $vendorId)->pluck('id')->toArray();
+                $vendorProductIds = array_unique(array_merge($vendorProductIds, $directIds));
+            }
+        }
+
+        $query = DB::table('sales')
+            ->leftJoin('customers', 'sales.customer_id', '=', 'customers.id')
+            ->select('sales.id','sales.invoice_no','sales.sale_status','sales.total_bill_amount',
+                     'sales.total_extradiscount','sales.total_net','sales.cash','sales.change',
+                     'sales.created_at','customers.customer_name');
+
+        if (($catId && $catId !== 'all') || ($subId && $subId !== 'all') ||
+            ($brandId && $brandId !== 'all') || ($productId && $productId !== 'all') ||
+            ($vendorId && $vendorId !== 'all')) {
+            $query->whereIn('sales.id', function($sub) use ($catId, $subId, $brandId, $productId, $vendorId, $vendorProductIds) {
+                $sub->select('sale_id')->from('sale_items')
+                    ->join('products', 'products.id', '=', 'sale_items.product_id')
+                    ->when($catId    && $catId    !== 'all', fn($q) => $q->where('products.category_id',     $catId))
+                    ->when($subId    && $subId    !== 'all', fn($q) => $q->where('products.sub_category_id', $subId))
+                    ->when($brandId  && $brandId  !== 'all', fn($q) => $q->where('products.brand_id',        $brandId))
+                    ->when($productId && $productId !== 'all', fn($q) => $q->where('products.id',            $productId))
+                    ->when($vendorId && $vendorId !== 'all',
+                        fn($q) => $q->whereIn('products.id', !empty($vendorProductIds) ? $vendorProductIds : [0]));
+            });
+        }
+
+        if ($branchId)                             $query->where('sales.branch_id', $branchId);
+        if ($start && $end)                        $query->whereBetween(DB::raw('DATE(sales.created_at)'), [$start, $end]);
+        if ($customerId && $customerId !== 'all')  $query->where('sales.customer_id', $customerId);
+        if ($status     && $status     !== 'all')  $query->where('sales.sale_status', $status);
+        if ($warehouseId && $warehouseId !== 'all') {
+            $query->whereIn('sales.id', function($sub) use ($warehouseId) {
+                $sub->select('sale_id')->from('sale_items')->where('warehouse_id', $warehouseId);
+            });
+        }
+
+        $sales   = $query->orderBy('sales.created_at', 'desc')->get();
+        $saleIds = $sales->pluck('id')->toArray();
+
+        $itemsMap = DB::table('sale_items')
+            ->join('products', 'sale_items.product_id', '=', 'products.id')
+            ->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
+            ->leftJoin('units', 'products.unit_id', '=', 'units.id')
+            ->leftJoin('product_uoms', function($join) {
+                $join->on('products.id', '=', 'product_uoms.product_id')
+                     ->on('sale_items.uom_factor', '=', 'product_uoms.pieces_per_box');
+            })
+            ->whereIn('sale_items.sale_id', $saleIds)
+            ->select('sale_items.sale_id','products.item_code','products.item_name',
+                     'brands.name as brand_name','product_uoms.name as uom_name',
+                     'units.name as master_uom','products.hs_code',
+                     'sale_items.qty','sale_items.free_qty','sale_items.price','sale_items.total',
+                     'sale_items.gst_amount','sale_items.inc_tax','sale_items.adv_tax','sale_items.discount_amount')
+            ->get()->groupBy('sale_id');
+
+        $rows = []; $grandQty = 0; $grandFree = 0; $grandNet = 0;
+
+        foreach ($sales as $s) {
+            $dp = explode('-', explode(' ', $s->created_at)[0]);
+            $date = count($dp) === 3 ? "{$dp[2]}/{$dp[1]}/{$dp[0]}" : $s->created_at;
+
+            foreach ($itemsMap->get($s->id, collect()) as $it) {
+                $qty   = (float)($it->qty       ?? 0);
+                $free  = (float)($it->free_qty  ?? 0);
+                $total = (float)($it->total      ?? 0);
+                $grandQty += $qty; $grandFree += $free; $grandNet += $total;
+
+                $rows[] = [
+                    'invoice'   => $s->invoice_no ?? 'SLE-'.$s->id,
+                    'date'      => $date,
+                    'customer'  => $s->customer_name ?? 'Walk-in',
+                    'status'    => $s->sale_status ?? '-',
+                    'item'      => trim(($it->item_name ?? '') . ' ' . ($it->brand_name ?? '')),
+                    'code'      => $it->item_code ?? '',
+                    'hs_code'   => $it->hs_code ?? '',
+                    'packing'   => $it->uom_name ?? $it->master_uom ?? '',
+                    'rate'      => (float)($it->price ?? 0),
+                    'qty'       => $qty,
+                    'free'      => $free,
+                    'discount'  => (float)($it->discount_amount ?? 0),
+                    'gst'       => (float)($it->gst_amount ?? 0),
+                    'total'     => $total,
+                ];
+            }
+        }
+
+        return ['rows' => $rows, 'grandQty' => $grandQty, 'grandFree' => $grandFree, 'grandNet' => $grandNet,
+                'start' => $start, 'end' => $end];
+    }
+
+    /** Server-side Excel export — proper filename via Content-Disposition */
+    public function exportSaleReportExcel(Request $request)
+    {
+        $d = $this->buildSaleReportData($request);
+
+        $data   = [['Invoice No','Date','Customer','Status','Item Description','Code','HS Code','Packing','Rate','Qty','Free','Discount','GST','Net Total']];
+        foreach ($d['rows'] as $r) {
+            $data[] = [$r['invoice'],$r['date'],$r['customer'],$r['status'],$r['item'],$r['code'],$r['hs_code'],$r['packing'],$r['rate'],$r['qty'],$r['free'],$r['discount'],$r['gst'],$r['total']];
+        }
+        $data[] = [];
+        $data[] = ['','','','','','','','','GRAND TOTAL:',$d['grandQty'],$d['grandFree'],'','',$d['grandNet']];
+
+        $xlsx     = \Shuchkin\SimpleXLSXGen::fromArray($data);
+        $filename = 'Sale_Report_' . now()->format('Y-m-d') . '.xlsx';
+
+        return response($xlsx->xlsx(), 200, [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+            'Cache-Control'       => 'no-cache, no-store, must-revalidate',
+            'Pragma'              => 'no-cache',
+        ]);
+    }
+
+    /** Server-side PDF export — proper filename via Content-Disposition */
+    public function exportSaleReportPdf(Request $request)
+    {
+        $d        = $this->buildSaleReportData($request);
+        $filename = 'Sale_Report_' . now()->format('Y-m-d') . '.pdf';
+
+        $html = '<html><head><style>
+            body { font-family: DejaVu Sans, sans-serif; font-size: 9px; margin: 10px; }
+            h2 { text-align:center; font-size:13px; margin-bottom:4px; }
+            p.sub { text-align:center; color:#555; margin:0 0 8px; font-size:8px; }
+            table { width:100%; border-collapse:collapse; }
+            th { background:#1e40af; color:#fff; padding:4px 3px; text-align:left; font-size:8px; }
+            td { padding:3px 3px; border-bottom:1px solid #e5e7eb; font-size:8px; }
+            tr:nth-child(even) td { background:#f8fafc; }
+            .num { text-align:right; }
+            .total-row td { font-weight:bold; background:#dbeafe !important; }
+        </style></head><body>
+        <h2>Sale Report — Detailed</h2>
+        <p class="sub">Period: ' . ($d['start'] ?? '-') . ' to ' . ($d['end'] ?? '-') . ' &nbsp;|&nbsp; Generated: ' . now()->format('d M Y H:i') . '</p>
+        <table>
+        <tr><th>Invoice</th><th>Date</th><th>Customer</th><th>Item</th><th>Code</th><th>Packing</th><th class="num">Rate</th><th class="num">Qty</th><th class="num">Free</th><th class="num">Discount</th><th class="num">GST</th><th class="num">Total</th></tr>';
+
+        foreach ($d['rows'] as $r) {
+            $html .= '<tr>
+                <td>' . e($r['invoice'])  . '</td>
+                <td>' . e($r['date'])     . '</td>
+                <td>' . e($r['customer']) . '</td>
+                <td>' . e($r['item'])     . '</td>
+                <td>' . e($r['code'])     . '</td>
+                <td>' . e($r['packing'])  . '</td>
+                <td class="num">' . number_format($r['rate'],     2) . '</td>
+                <td class="num">' . number_format($r['qty'],      2) . '</td>
+                <td class="num">' . number_format($r['free'],     2) . '</td>
+                <td class="num">' . number_format($r['discount'], 2) . '</td>
+                <td class="num">' . number_format($r['gst'],      2) . '</td>
+                <td class="num">' . number_format($r['total'],    2) . '</td>
+            </tr>';
+        }
+
+        $html .= '<tr class="total-row">
+            <td colspan="7">GRAND TOTAL</td>
+            <td class="num">' . number_format($d['grandQty'],  2) . '</td>
+            <td class="num">' . number_format($d['grandFree'], 2) . '</td>
+            <td class="num"></td><td class="num"></td>
+            <td class="num">' . number_format($d['grandNet'],  2) . '</td>
+        </tr></table></body></html>';
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)
+            ->setPaper('a4', 'landscape')
+            ->setOptions(['defaultFont' => 'DejaVu Sans', 'isRemoteEnabled' => false]);
+
+        return $pdf->download($filename);
+    }
+
     public function customer_ledger_report()
+
     {
         $branchId  = $this->getBranchId();
         $customers = DB::table('customers')

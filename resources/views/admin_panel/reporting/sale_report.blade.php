@@ -831,37 +831,39 @@
                 lastData = [];
             });
 
-            // PDF Export using html2canvas as per user template
-            document.getElementById('btnExportPdf').addEventListener('click', async function() {
-                if (!lastData.length) {
-                    alert('No data to export. Run a search first.');
-                    return;
-                }
+            // PDF Export — server-side via DomPDF for guaranteed proper filename
+            document.getElementById('btnExportPdf').addEventListener('click', function() {
+                const params = new URLSearchParams({
+                    start_date:      document.getElementById('start_date').value,
+                    end_date:        document.getElementById('end_date').value,
+                    customer_id:     document.getElementById('filterCustomer').value,
+                    warehouse_id:    document.getElementById('filterWarehouse').value,
+                    status:          document.getElementById('filterStatus').value,
+                    category_id:     document.getElementById('filterCategory').value,
+                    sub_category_id: document.getElementById('filterSubCategory').value,
+                    brand_id:        document.getElementById('filterBrand').value,
+                    product_id:      document.getElementById('filterProduct').value,
+                    vendor_id:       document.getElementById('filterVendor') ? document.getElementById('filterVendor').value : 'all',
+                });
+                // Server returns Content-Disposition: attachment — browser saves with correct name
+                window.location.href = `{{ route('report.sale.export.pdf') }}?${params}`;
+            });
 
-                const { jsPDF } = window.jspdf;
-                const el = document.getElementById('reportResult');
-                
-                // Show standard processing feedback
-                this.textContent = 'Generating...';
-                this.disabled = true;
-
-                try {
-                    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
-                    const imgData = canvas.toDataURL('image/png');
-                    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-                    
-                    const w = pdf.internal.pageSize.getWidth();
-                    const h = (canvas.height * w) / canvas.width;
-                    
-                    pdf.addImage(imgData, 'PNG', 0, 0, w, h);
-                    pdf.save(`Detailed_Sale_Report_${new Date().getTime()}.pdf`);
-                } catch (e) {
-                    console.error(e);
-                    alert('PDF generation failed.');
-                } finally {
-                    this.textContent = 'Export PDF';
-                    this.disabled = false;
-                }
+            // Excel Export — server-side for guaranteed proper filename
+            document.getElementById('btnExportExcel').addEventListener('click', function() {
+                const params = new URLSearchParams({
+                    start_date:      document.getElementById('start_date').value,
+                    end_date:        document.getElementById('end_date').value,
+                    customer_id:     document.getElementById('filterCustomer').value,
+                    warehouse_id:    document.getElementById('filterWarehouse').value,
+                    status:          document.getElementById('filterStatus').value,
+                    category_id:     document.getElementById('filterCategory').value,
+                    sub_category_id: document.getElementById('filterSubCategory').value,
+                    brand_id:        document.getElementById('filterBrand').value,
+                    product_id:      document.getElementById('filterProduct').value,
+                    vendor_id:       document.getElementById('filterVendor') ? document.getElementById('filterVendor').value : 'all',
+                });
+                window.location.href = `{{ route('report.sale.export.excel') }}?${params}`;
             });
 
             // Use LOCAL date (not UTC) to avoid timezone cutoff at night
