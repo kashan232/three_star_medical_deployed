@@ -408,6 +408,11 @@
                           </div>
 
                           <div class="mb-2">
+                              <label class="form-label fw-bold">Commission %</label>
+                              <input type="number" step="0.01" min="0" max="100" class="form-control" id="commission_percentage" name="commission_percentage" placeholder="Enter % (e.g. 1.00)">
+                          </div>
+
+                          <div class="mb-2">
                               <label class="form-label fw-bold">Remarks</label>
                               <textarea class="form-control" id="remarks"></textarea>
                           </div>
