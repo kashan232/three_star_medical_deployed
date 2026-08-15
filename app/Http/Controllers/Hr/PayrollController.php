@@ -692,8 +692,17 @@ class PayrollController extends Controller
             }
 
             if ($existing) {
-                // Remove old details before re-saving fresh ones
-                $existing->details()->delete();
+                // Preserve existing commission details and total
+                $existingCommissionTotal = $existing->details()->where('type', 'commission')->sum('amount');
+                
+                // Remove old non-commission details before re-saving fresh ones
+                $existing->details()->where('type', '!=', 'commission')->delete();
+                
+                // Add the existing commission back to the new calculation
+                $payrollData['commission'] = ($payrollData['commission'] ?? 0) + $existingCommissionTotal;
+                $payrollData['gross_salary'] = ($payrollData['gross_salary'] ?? 0) + $existingCommissionTotal;
+                $payrollData['net_salary'] = ($payrollData['net_salary'] ?? 0) + $existingCommissionTotal;
+
                 $existing->update(array_merge(
                     ['auto_generated' => false],
                     \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'new_pending_deductions', 'auto_generated'])
@@ -710,7 +719,8 @@ class PayrollController extends Controller
             $this->payrollService->savePayrollDetails(
                 $payroll,
                 $payrollData['allowance_details'] ?? [],
-                $payrollData['deduction_details'] ?? []
+                $payrollData['deduction_details'] ?? [],
+                $payrollData['commission_details'] ?? []
             );
 
             // Update pending deductions for daily payroll
@@ -839,7 +849,6 @@ class PayrollController extends Controller
                     'error' => 'No eligible employees found for monthly payroll. Employees must be active and have either: (1) a salary structure without daily wages, OR (2) commission enabled.',
                 ], 400);
             }
-            // The extra brace was here, it has been removed.
 
             $generated = 0;
             $updated = 0;
@@ -866,7 +875,7 @@ class PayrollController extends Controller
                             continue;
                         }
                         // Delete old breakdown details before recalculating fresh
-                        $existing->details()->delete();
+                        $existing->details()->where('type', '!=', 'commission')->delete();
                     }
 
                     $payrollData = $this->payrollService->calculateMonthlyPayroll($employee, $request->month);
@@ -890,6 +899,17 @@ class PayrollController extends Controller
                     }
 
                     if ($existing) {
+                        // Preserve existing commission details and total
+                        $existingCommissionTotal = $existing->details()->where('type', 'commission')->sum('amount');
+                        
+                        // Remove old non-commission details before re-saving fresh ones
+                        $existing->details()->where('type', '!=', 'commission')->delete();
+                        
+                        // Add the existing commission back to the new calculation
+                        $payrollData['commission'] = ($payrollData['commission'] ?? 0) + $existingCommissionTotal;
+                        $payrollData['gross_salary'] = ($payrollData['gross_salary'] ?? 0) + $existingCommissionTotal;
+                        $payrollData['net_salary'] = ($payrollData['net_salary'] ?? 0) + $existingCommissionTotal;
+
                         $existing->update(array_merge(
                             ['auto_generated' => true],
                             \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'breakdown', 'attendance_breakdown'])
@@ -909,7 +929,8 @@ class PayrollController extends Controller
                     $this->payrollService->savePayrollDetails(
                         $payroll,
                         $payrollData['allowance_details'] ?? [],
-                        $payrollData['deduction_details'] ?? []
+                        $payrollData['deduction_details'] ?? [],
+                        $payrollData['commission_details'] ?? []
                     );
 
                     // Consolidate standalone commission payrolls into single monthly payroll card
@@ -1019,7 +1040,7 @@ class PayrollController extends Controller
                         $skipped++;
                         continue;
                     }
-                    $existing->details()->delete();
+                    $existing->details()->where('type', '!=', 'commission')->delete();
                 }
 
                 // Get attendance for the date

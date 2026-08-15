@@ -577,7 +577,7 @@ class PayrollCalculationService
     /**
      * Save payroll details (allowances and deductions breakdown)
      */
-    public function savePayrollDetails(Payroll $payroll, array $allowanceDetails, array $deductionDetails): void
+    public function savePayrollDetails(Payroll $payroll, array $allowanceDetails, array $deductionDetails, array $commissionDetails = []): void
     {
         // Save allowances
         foreach ($allowanceDetails as $detail) {
@@ -592,9 +592,10 @@ class PayrollCalculationService
 
         // Save deductions
         foreach ($deductionDetails as $detail) {
+            $typeToSave = (isset($detail['type']) && $detail['type'] === 'loan_deduction') ? 'deduction' : ($detail['type'] ?? 'deduction');
             PayrollDetail::create([
                 'payroll_id' => $payroll->id,
-                'type' => $detail['type'] ?? 'deduction',
+                'type' => $typeToSave,
                 'name' => $detail['name'],
                 'amount' => $detail['amount'],
                 'description' => $detail['description'] ?? null,
@@ -640,6 +641,17 @@ class PayrollCalculationService
                     }
                 }
             }
+        }
+
+        // Save commissions
+        foreach ($commissionDetails as $detail) {
+            PayrollDetail::create([
+                'payroll_id' => $payroll->id,
+                'type' => 'commission',
+                'name' => $detail['name'],
+                'amount' => $detail['amount'],
+                'description' => $detail['description'] ?? null,
+            ]);
         }
     }
 
@@ -1055,7 +1067,8 @@ class PayrollCalculationService
         $this->savePayrollDetails(
             $payroll,
             $payrollData['allowance_details'] ?? [],
-            $payrollData['deduction_details'] ?? []
+            $payrollData['deduction_details'] ?? [],
+            $payrollData['commission_details'] ?? []
         );
 
         // 5. Consolidate any standalone commission payrolls into this monthly payroll
