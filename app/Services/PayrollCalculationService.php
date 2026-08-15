@@ -715,11 +715,15 @@ class PayrollCalculationService
 
             // Sum of all payments linked to this sale
             $endOfMonth = \Carbon\Carbon::parse($month . '-01')->endOfMonth()->format('Y-m-d');
-            $posPaid = max(0, floatval($sale->cash) + floatval($sale->card) - max(0, floatval($sale->change)));
-            
-            $totalPaymentsOnSale = $posPaid + \App\Models\CustomerPayment::where('sale_id', $sale->id)
+            $totalPaymentsOnSale = \App\Models\CustomerPayment::where('sale_id', $sale->id)
                 ->where('payment_date', '<=', $endOfMonth)
                 ->sum('amount');
+
+            // Fallback for legacy POS sales where CustomerPayment might not have been created
+            if ($totalPaymentsOnSale == 0) {
+                $posPaid = max(0, floatval($sale->cash) + floatval($sale->card) - max(0, floatval($sale->change)));
+                $totalPaymentsOnSale = $posPaid;
+            }
 
             // Trigger rule: Full payment required (customer must pay 100% of invoice amount)
             if ($totalPaymentsOnSale < ($saleTotal - 0.01)) {
@@ -850,8 +854,13 @@ class PayrollCalculationService
         }
 
         // Calculate total payments received on sale
-        $posPaid = max(0, floatval($sale->cash) + floatval($sale->card) - max(0, floatval($sale->change)));
-        $totalPaymentsOnSale = $posPaid + \App\Models\CustomerPayment::where('sale_id', $sale->id)->sum('amount');
+        $totalPaymentsOnSale = \App\Models\CustomerPayment::where('sale_id', $sale->id)->sum('amount');
+        
+        // Fallback for legacy POS sales where CustomerPayment might not have been created
+        if ($totalPaymentsOnSale == 0) {
+            $posPaid = max(0, floatval($sale->cash) + floatval($sale->card) - max(0, floatval($sale->change)));
+            $totalPaymentsOnSale = $posPaid;
+        }
         
         // Trigger condition: FULL PAYMENT REQUIRED (Customer must pay 100% of invoice amount)
         if ($totalPaymentsOnSale < ($saleTotal - 0.01)) {
@@ -876,6 +885,13 @@ class PayrollCalculationService
                 $structure = $this->getEffectiveSalaryStructure($employee);
                 if ($structure) {
                     $payrollData = $this->calculateMonthlyPayroll($employee, $month);
+                    
+                    // We must explicitly add the new commission because calculateMonthlyPayroll might
+                    // omit it due to uncommitted DB changes in this transaction.
+                    $payrollData['commission'] = ($payrollData['commission'] ?? 0) + $newCommission;
+                    $payrollData['gross_salary'] = ($payrollData['gross_salary'] ?? 0) + $newCommission;
+                    $payrollData['net_salary'] = ($payrollData['net_salary'] ?? 0) + $newCommission;
+
                     $payroll = \App\Models\Hr\Payroll::create(array_merge(
                         ['employee_id' => $employee->id],
                         \Illuminate\Support\Arr::except($payrollData, ['allowance_details', 'deduction_details', 'breakdown', 'attendance_breakdown', 'commission_details'])
