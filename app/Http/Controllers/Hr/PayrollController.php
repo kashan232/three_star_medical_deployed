@@ -692,16 +692,26 @@ class PayrollController extends Controller
             }
 
             if ($existing) {
-                // Preserve existing commission details and total
+                // Get existing commission details from DB (already paid/added previously)
                 $existingCommissionTotal = $existing->details()->where('type', 'commission')->sum('amount');
                 
                 // Remove old non-commission details before re-saving fresh ones
+                // IMPORTANT: DO NOT delete commission details - they were already added by payment triggers
                 $existing->details()->where('type', '!=', 'commission')->delete();
                 
-                // Add the existing commission back to the new calculation
-                $payrollData['commission'] = ($payrollData['commission'] ?? 0) + $existingCommissionTotal;
-                $payrollData['gross_salary'] = ($payrollData['gross_salary'] ?? 0) + $existingCommissionTotal;
-                $payrollData['net_salary'] = ($payrollData['net_salary'] ?? 0) + $existingCommissionTotal;
+                // $payrollData['commission'] is freshly calculated from live sales by calculateMonthlyPayroll()
+                // If the service already calculated commission (from sales), use that fresh value.
+                // If service returned 0 (no live calculation), fall back to existing DB commission.
+                // NEVER add both - that causes double commission!
+                $freshCommission = floatval($payrollData['commission'] ?? 0);
+                if ($freshCommission <= 0 && $existingCommissionTotal > 0) {
+                    // Service didn't recalculate commission (e.g., commission_paid already set)
+                    // Restore from DB
+                    $payrollData['commission'] = $existingCommissionTotal;
+                    $payrollData['gross_salary'] = floatval($payrollData['gross_salary'] ?? 0) + $existingCommissionTotal;
+                    $payrollData['net_salary'] = floatval($payrollData['net_salary'] ?? 0) + $existingCommissionTotal;
+                }
+                // else: fresh commission is already in $payrollData - use it as-is (no double-add)
 
                 $existing->update(array_merge(
                     ['auto_generated' => false],
@@ -899,16 +909,26 @@ class PayrollController extends Controller
                     }
 
                     if ($existing) {
-                        // Preserve existing commission details and total
+                        // Get existing commission details from DB (already paid/added previously)
                         $existingCommissionTotal = $existing->details()->where('type', 'commission')->sum('amount');
                         
                         // Remove old non-commission details before re-saving fresh ones
+                        // IMPORTANT: DO NOT delete commission details - they were already added by payment triggers
                         $existing->details()->where('type', '!=', 'commission')->delete();
                         
-                        // Add the existing commission back to the new calculation
-                        $payrollData['commission'] = ($payrollData['commission'] ?? 0) + $existingCommissionTotal;
-                        $payrollData['gross_salary'] = ($payrollData['gross_salary'] ?? 0) + $existingCommissionTotal;
-                        $payrollData['net_salary'] = ($payrollData['net_salary'] ?? 0) + $existingCommissionTotal;
+                        // $payrollData['commission'] is freshly calculated from live sales by calculateMonthlyPayroll()
+                        // If the service already calculated commission (from sales), use that fresh value.
+                        // If service returned 0 (no live calculation), fall back to existing DB commission.
+                        // NEVER add both - that causes double commission!
+                        $freshCommission = floatval($payrollData['commission'] ?? 0);
+                        if ($freshCommission <= 0 && $existingCommissionTotal > 0) {
+                            // Service didn't recalculate commission (e.g., commission_paid already set)
+                            // Restore from DB
+                            $payrollData['commission'] = $existingCommissionTotal;
+                            $payrollData['gross_salary'] = floatval($payrollData['gross_salary'] ?? 0) + $existingCommissionTotal;
+                            $payrollData['net_salary'] = floatval($payrollData['net_salary'] ?? 0) + $existingCommissionTotal;
+                        }
+                        // else: fresh commission is already in $payrollData - use it as-is (no double-add)
 
                         $existing->update(array_merge(
                             ['auto_generated' => true],

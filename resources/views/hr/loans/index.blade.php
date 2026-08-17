@@ -306,7 +306,7 @@
                     <button type="button" class="btn-close btn-close-white opacity-75" data-bs-dismiss="modal"></button>
                 </div>
 
-                <form action="{{ route('hr.loans.store') }}" method="POST" id="addLoanForm" data-ajax-validate="true">
+                <form action="{{ route('hr.loans.store') }}" method="POST" id="addLoanForm" onsubmit="return handleAddLoanSubmit(event, this)">
                     @csrf
                     <input type="hidden" name="loan_type" id="loanTypeInput" value="salary_deduction">
 
@@ -692,11 +692,11 @@ $(document).ready(function () {
     // ── Open Edit Modal ──
     window.editLoan = function(loan) {
         $('#addLoanForm')[0].reset();
-        $('#addLoanForm').attr('action', `/hr/loans/${loan.id}`);
+        $('#addLoanForm').attr('action', '{{ url("hr/loans") }}/' + loan.id);
         
-        if ($('#addLoanForm .method-put').length === 0) {
-            $('#addLoanForm').append('<input type="hidden" name="_method" value="PUT" class="method-put">');
-        }
+        // Always remove and re-add _method=PUT to ensure it's fresh
+        $('#addLoanForm .method-put').remove();
+        $('#addLoanForm').append('<input type="hidden" name="_method" value="PUT" class="method-put">');
 
         // Populate fields
         $('.select2-loan').val(loan.employee_id).trigger('change');
@@ -738,14 +738,15 @@ $(document).ready(function () {
             return;
         }
 
+        var token = $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}';
         $.ajax({
-            url: `/hr/loans/${loanId}/payment`,
+            url: '{{ url("hr/loans") }}/' + loanId + '/payment',
             type: 'POST',
-            data: $(this).serialize() + '&_token={{ csrf_token() }}',
+            data: $(this).serialize(),
+            headers: { 'X-CSRF-TOKEN': token, 'Accept': 'application/json' },
             success: function (res) {
-                if (res.success) {
-                    Swal.fire('Recorded!', res.success, 'success').then(() => location.reload());
-                }
+                $('#recordPaymentModal').modal('hide');
+                Swal.fire('Recorded!', res.success || 'Payment recorded successfully.', 'success').then(() => location.reload());
             },
             error: function (xhr) {
                 const errs = xhr.responseJSON?.errors;
@@ -1019,7 +1020,44 @@ $('#skipMonthForm').on('submit', function(e) {
             Swal.fire('Error', err, 'error');
         }
     });
+
 });
+
+// ── Add/Edit Loan Form AJAX Submit (Global) ──
+function handleAddLoanSubmit(e, formElement) {
+    e.preventDefault();
+    var form = $(formElement);
+    var token = $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}';
+    
+    var submitBtn = form.find('button[type="submit"]');
+    var originalBtnText = submitBtn.html();
+    submitBtn.html('<i class="fa fa-spinner fa-spin me-1"></i> Processing...').prop('disabled', true);
+
+    $.ajax({
+        url: form.attr('action'),
+        type: 'POST',
+        data: form.serialize(),
+        headers: {
+            'X-CSRF-TOKEN': token,
+            'Accept': 'application/json'
+        },
+        success: function(res) {
+            $('#addLoanModal').modal('hide');
+            Swal.fire({
+                title: 'Success!',
+                text: res.success || 'Loan request processed successfully.',
+                icon: 'success',
+                confirmButtonColor: '#10b981'
+            }).then(() => location.reload());
+        },
+        error: function(xhr) {
+            submitBtn.html(originalBtnText).prop('disabled', false);
+            var err = xhr.responseJSON?.error || xhr.responseJSON?.message || 'Failed to submit loan request.';
+            Swal.fire('Error', err, 'error');
+        }
+    });
+    return false;
+}
 
 function togglePauseLoan(loanId, currentStatus) {
     var actionText = (currentStatus === 'paused') ? 'Resume Loan Deductions?' : 'Pause Loan Deductions?';
