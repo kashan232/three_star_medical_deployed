@@ -150,4 +150,13 @@ Route::middleware(['auth'])->prefix('hr')->name('hr.')->group(function () {
 Route::middleware(['auth'])->group(function () {
     Route::get('my-attendance', [AttendanceController::class, 'myAttendance'])->name('my-attendance');
     Route::post('my-attendance/mark', [AttendanceController::class, 'markMyAttendance'])->name('my-attendance.mark');
+
+    // ── Employee Self-Service Portal ─────────────────────────────────────────
+    Route::prefix('employee/portal')->name('employee.portal.')->group(function () {
+        Route::get('/',           [\App\Http\Controllers\Hr\EmployeePortalController::class, 'index'])->name('index');
+        Route::get('/salary',     [\App\Http\Controllers\Hr\EmployeePortalController::class, 'getSalaryData'])->name('salary');
+        Route::get('/commission', [\App\Http\Controllers\Hr\EmployeePortalController::class, 'getCommissionData'])->name('commission');
+        Route::get('/loans',      [\App\Http\Controllers\Hr\EmployeePortalController::class, 'getLoanData'])->name('loans');
+        Route::get('/attendance', [\App\Http\Controllers\Hr\EmployeePortalController::class, 'getAttendanceHistory'])->name('attendance');
+    });
 });

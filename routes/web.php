@@ -49,6 +49,11 @@ Route::get('/', function () {
     return auth()->check() ? redirect()->route('home') : redirect()->route('login');
 });
 
+// Employee Login Routes
+Route::get('employee-login', [\App\Http\Controllers\Hr\EmployeeLoginController::class, 'showLoginForm'])->name('employee.login');
+Route::post('employee-login', [\App\Http\Controllers\Hr\EmployeeLoginController::class, 'login'])->name('employee.login.submit');
+Route::post('employee-logout', [\App\Http\Controllers\Hr\EmployeeLoginController::class, 'logout'])->name('employee.logout');
+
 Route::get('/home', [HomeController::class, 'index'])->middleware('auth')->name('home');
 
 // ── Super Admin Branch Switcher ────────────────────────────────────────────────

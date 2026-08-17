@@ -700,7 +700,7 @@
                                     <label class="form-label">
                                         <i class="fa fa-code-branch"></i> Assign Branch
                                     </label>
-                                    <select name="branch_id" id="userBranch" class="form-control">
+                                    <select name="branch_id" id="userBranch" class="form-control" style="height: 45px;">
                                         <option value="">-- No Branch (Super Admin) --</option>
                                         @foreach ($branches as $branch)
                                             <option value="{{ $branch->id }}">{{ $branch->name }}</option>

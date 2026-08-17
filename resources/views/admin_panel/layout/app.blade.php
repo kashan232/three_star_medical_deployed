@@ -318,6 +318,14 @@
                *===========================-->
                     <div class="nav_wrapper_main d-flex align-items-center justify-content-between flex-grow-1">
                         <ul class="navbar-nav navbar-nav-right mr-0 ml-auto">
+                            <!-- Employee Portal Quick Access -->
+                            <li class="nav-item mr-2">
+                                <a href="{{ route('employee.portal.index') }}" class="nav-link"
+                                    style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; border-radius: 8px; padding: 8px 16px;">
+                                    <i class="fa fa-user-circle"></i> Employee Portal
+                                </a>
+                            </li>
+
                             <!-- My Attendance Quick Access -->
                             <li class="nav-item mr-3">
                                 <a href="{{ route('my-attendance') }}" class="nav-link"
