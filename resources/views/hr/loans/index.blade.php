@@ -303,7 +303,7 @@
                         <h5 class="modal-title fw-800 mb-0"><i class="fa fa-hand-holding-usd me-2"></i> New Loan Request</h5>
                         <p class="mb-0 opacity-75 small">Choose loan type and configure repayment terms</p>
                     </div>
-                    <button type="button" class="btn-close btn-close-white opacity-75" data-bs-dismiss="modal"></button>
+                    <button type="button" class="close text-white" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="background:transparent; border:none; font-size:1.6rem; color:#fff; cursor:pointer; opacity:0.85; line-height:1;"><span aria-hidden="true">&times;</span></button>
                 </div>
 
                 <form action="{{ route('hr.loans.store') }}" method="POST" id="addLoanForm" onsubmit="return handleAddLoanSubmit(event, this)">
@@ -424,7 +424,7 @@
                     </div>
 
                     <div class="modal-footer-modern">
-                        <button type="button" class="btn btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-cancel" data-dismiss="modal" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-save"><i class="fa fa-paper-plane me-1"></i> Submit Request</button>
                     </div>
                 </form>
@@ -440,7 +440,7 @@
             <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
                 <div class="modal-header border-0 p-4" style="background: linear-gradient(135deg, #10b981, #059669); color: white;">
                     <h5 class="modal-title fw-800 mb-0"><i class="fa fa-plus-circle me-2"></i> Record Loan Payment</h5>
-                    <button type="button" class="btn-close btn-close-white opacity-75" data-bs-dismiss="modal"></button>
+                    <button type="button" class="close text-white" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="background:transparent; border:none; font-size:1.6rem; color:#fff; cursor:pointer; opacity:0.85; line-height:1;"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <form id="recordPaymentForm" data-ajax-validate="true">
                     @csrf
@@ -487,7 +487,7 @@
                         </div>
                     </div>
                     <div class="modal-footer-modern">
-                        <button type="button" class="btn btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-cancel" data-dismiss="modal" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-save" style="background: linear-gradient(135deg, #10b981, #059669);"><i class="fa fa-check me-1"></i> Record Payment</button>
                     </div>
                 </form>
@@ -503,7 +503,7 @@
             <div class="modal-content border-0">
                 <div class="modal-header bg-warning-subtle">
                     <h5 class="modal-title text-warning-emphasis"><i class="fa fa-clock me-2"></i> Schedule One-Off Deduction</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="close text-dark" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="background:transparent; border:none; font-size:1.6rem; color:#333; cursor:pointer; opacity:0.85; line-height:1;"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <form action="{{ route('hr.loans.schedule') }}" method="POST" id="scheduleForm" data-ajax-validate="true">
                     @csrf
@@ -527,7 +527,7 @@
                         </div>
                     </div>
                     <div class="modal-footer-modern">
-                        <button type="button" class="btn btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-cancel" data-dismiss="modal" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-save bg-warning border-warning text-dark"><i class="fa fa-calendar-check me-1"></i> Schedule</button>
                     </div>
                 </form>
@@ -543,7 +543,7 @@
             <div class="modal-content border-0 shadow-lg" style="border-radius: 16px;">
                 <div class="modal-header gradient text-white" style="background: linear-gradient(135deg, #f59e0b, #d97706) !important;">
                     <h5 class="modal-title fw-bold"><i class="fa fa-ban me-2"></i> Defer / Skip Monthly Deduction</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    <button type="button" class="close text-white" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="background:transparent; border:none; font-size:1.6rem; color:#fff; cursor:pointer; opacity:0.85; line-height:1;"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <form id="skipMonthForm" action="{{ route('hr.loans.skip-month') }}" method="POST">
                     @csrf
@@ -562,7 +562,7 @@
                         </div>
                     </div>
                     <div class="modal-footer-modern bg-white">
-                        <button type="button" class="btn btn-cancel" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-cancel" data-dismiss="modal" data-bs-dismiss="modal">Cancel</button>
                         <button type="submit" class="btn btn-save text-white shadow-sm" style="background: linear-gradient(135deg, #f59e0b, #d97706);"><i class="fa fa-check me-1"></i> Confirm Skip Month</button>
                     </div>
                 </form>
@@ -581,7 +581,7 @@
                         <h5 class="modal-title fw-800 mb-0" id="ld_emp_name">Loading...</h5>
                         <div id="ld_subtitle" class="opacity-75 small mt-1"></div>
                     </div>
-                    <button type="button" class="btn-close btn-close-white opacity-75" data-bs-dismiss="modal"></button>
+                    <button type="button" class="close text-white" data-dismiss="modal" data-bs-dismiss="modal" aria-label="Close" style="background:transparent; border:none; font-size:1.6rem; color:#fff; cursor:pointer; opacity:0.85; line-height:1;"><span aria-hidden="true">&times;</span></button>
                 </div>
 
                 {{-- Stats Bar --}}
@@ -648,6 +648,11 @@ $(document).ready(function () {
             'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || '{{ csrf_token() }}',
             'Accept': 'application/json'
         }
+    });
+
+    // Global modal close button handler
+    $(document).on('click', '[data-dismiss="modal"], [data-bs-dismiss="modal"], .close, .btn-close', function (e) {
+        $(this).closest('.modal').modal('hide');
     });
 
     // ── Select2 ──

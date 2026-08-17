@@ -201,8 +201,46 @@ class SaleController extends Controller
 
     public function getDcDetails($id)
     {
-        $dc = \App\Models\DeliveryNote::with(['items.product.packings', 'items.saleItem', 'customer', 'sale'])->findOrFail($id);
+        $dc = \App\Models\DeliveryNote::with(['items.product.packings', 'items.saleItem', 'customer', 'sale.employee', 'sale.items.product.packings'])->findOrFail($id);
+        
+        // Format dates cleanly as YYYY-MM-DD
+        $dc->delivery_date_formatted = $dc->delivery_date ? \Carbon\Carbon::parse($dc->delivery_date)->format('Y-m-d') : '';
+        $dc->so_date_formatted = ($dc->sale && ($dc->sale->so_date ?? $dc->sale->sale_date)) ? \Carbon\Carbon::parse($dc->sale->so_date ?? $dc->sale->sale_date)->format('Y-m-d') : '';
+        $dc->sale_date_formatted = ($dc->sale && $dc->sale->sale_date) ? \Carbon\Carbon::parse($dc->sale->sale_date)->format('Y-m-d') : '';
+        
+        $dc->customer_name = $dc->customer->customer_name ?? '';
+        $dc->employee_id = $dc->sale->employee_id ?? '';
+        $dc->employee_name = ($dc->sale && $dc->sale->employee) ? trim(($dc->sale->employee->first_name ?? '') . ' ' . ($dc->sale->employee->last_name ?? '')) : '';
+        $dc->commission_percentage = $dc->sale->commission_percentage ?? 0;
+
+        // If this DC is part of a sale that has multiple DCs, fetch all items across those DCs
+        if ($dc->sale_id) {
+            $allDcs = \App\Models\DeliveryNote::where('sale_id', $dc->sale_id)->with(['items.product.packings', 'items.saleItem'])->get();
+            $allItems = collect();
+            foreach ($allDcs as $d) {
+                $allItems = $allItems->concat($d->items);
+            }
+            $dc->setRelation('items', $allItems);
+            $dc->grouped_dc_no = $allDcs->pluck('dc_no')->implode(', ');
+        } else {
+            $dc->grouped_dc_no = $dc->dc_no;
+        }
+
         return response()->json($dc);
+    }
+
+    public function getDraftDetails($id)
+    {
+        $sale = Sale::with(['items.product.packings', 'customer_relation', 'employee'])->findOrFail($id);
+        
+        $sale->so_date_formatted = ($sale->so_date ?? $sale->sale_date) ? \Carbon\Carbon::parse($sale->so_date ?? $sale->sale_date)->format('Y-m-d') : '';
+        $sale->sale_date_formatted = $sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->format('Y-m-d') : '';
+        $sale->dc_date_formatted = ''; // Draft SO has no DC date
+        
+        $sale->customer_name = $sale->customer_relation->customer_name ?? '';
+        $sale->employee_name = $sale->employee ? trim(($sale->employee->first_name ?? '') . ' ' . ($sale->employee->last_name ?? '')) : '';
+
+        return response()->json($sale);
     }
 
     public function convertFromBooking($id)
@@ -1159,6 +1197,7 @@ class SaleController extends Controller
             $sale->reference             = $request->reference;
             $sale->sale_date             = $request->purchase_date;
             $sale->vendor_bill_no        = $request->vendor_bill_no;
+            $sale->dc_date               = $request->dc_date;
             $sale->order_no              = $request->order_no;
             $sale->sale_order_no         = $request->sale_order_no;
             $sale->so_date               = $request->so_date;

@@ -16,14 +16,15 @@ class EmployeeController extends Controller
         if (! auth()->user()->can('hr.employees.view')) {
             abort(403, 'Unauthorized action.');
         }
-        $employees = Employee::with(['department', 'designation', 'shift', 'leaves' => function ($q) {
+        $employees = Employee::with(['department', 'designation', 'shift', 'user.branch', 'leaves' => function ($q) {
             $q->where('leave_type', 'Casual');
         }])->latest()->paginate(12);
         $departments = Department::all();
         $designations = Designation::all();
         $shifts = \App\Models\Hr\Shift::all();
+        $branches = \App\Models\Branch::where('is_active', true)->orderBy('name')->get();
 
-        return view('hr.employees.index', compact('employees', 'departments', 'designations', 'shifts'));
+        return view('hr.employees.index', compact('employees', 'departments', 'designations', 'shifts', 'branches'));
     }
 
     public function store(Request $request)
@@ -43,6 +44,7 @@ class EmployeeController extends Controller
             'email' => 'required|email|max:255|unique:hr_employees,email,'.$request->edit_id.'|unique:users,email,'.$userId,
             'department_id' => 'required|exists:hr_departments,id',
             'designation_id' => 'required|exists:hr_designations,id',
+            'branch_id' => 'nullable|exists:branches,id',
             'joining_date' => 'required|date',
             'weekly_off' => 'nullable|string',
             'password' => 'nullable|min:6',
@@ -60,7 +62,7 @@ class EmployeeController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $data = $request->except(['document_degree', 'document_certificate', 'document_hsc_marksheet', 'document_ssc_marksheet', 'document_cv', 'password']);
+        $data = $request->except(['document_degree', 'document_certificate', 'document_hsc_marksheet', 'document_ssc_marksheet', 'document_cv', 'password', 'branch_id']);
         $data['is_docs_submitted'] = $request->has('is_docs_submitted') ? 1 : 0;
 
         // Handle Custom Shift Logic
@@ -72,13 +74,21 @@ class EmployeeController extends Controller
             $data['custom_end_time'] = null;
         }
 
+        // Determine branch_id for User Account
+        $branchId = null;
+        if (auth()->user()->isSuperAdmin()) {
+            $branchId = $request->filled('branch_id') ? $request->branch_id : session('super_admin_branch_id');
+        } else {
+            $branchId = auth()->user()->branch_id;
+        }
+
         if ($request->filled('edit_id')) {
             if (! auth()->user()->can('hr.employees.edit')) {
                 return response()->json(['error' => 'Unauthorized action.'], 403);
             }
             $employee = Employee::findOrFail($request->edit_id);
 
-            // Update User email if changed
+            // Update User email and branch if changed
             if ($employee->user_id) {
                 $user = \App\Models\User::find($employee->user_id);
                 if ($user) {
@@ -86,6 +96,11 @@ class EmployeeController extends Controller
                     $user->name = $request->first_name.' '.$request->last_name;
                     if ($request->filled('password')) {
                         $user->password = \Illuminate\Support\Facades\Hash::make($request->password);
+                    }
+                    if (auth()->user()->isSuperAdmin() && $request->has('branch_id')) {
+                        $user->branch_id = $request->branch_id ?: null;
+                    } elseif (!auth()->user()->isSuperAdmin() && empty($user->branch_id)) {
+                        $user->branch_id = auth()->user()->branch_id;
                     }
                     $user->save();
                 }
@@ -96,11 +111,12 @@ class EmployeeController extends Controller
             if (! auth()->user()->can('hr.employees.create')) {
                 return response()->json(['error' => 'Unauthorized action.'], 403);
             }
-            // Create User Account
+            // Create User Account with Auto-Assigned Branch
             $user = \App\Models\User::create([
                 'name' => $request->first_name.' '.$request->last_name,
                 'email' => $request->email,
                 'password' => \Illuminate\Support\Facades\Hash::make($request->password),
+                'branch_id' => $branchId,
             ]);
 
             $data['user_id'] = $user->id;

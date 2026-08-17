@@ -1742,21 +1742,47 @@
                                     `}
 
                                                                                     ${(data.breakdown.earnings.commission > 0 || data.structure_info.salary_type === 'commission' || data.structure_info.salary_type === 'both') ? `
-                                        <div class="detail-row py-2 ${data.structure_info.salary_type === 'commission' ? 'bg-light' : ''}">
-                                            <div class="d-flex flex-column">
-                                                <span class="label ${data.structure_info.salary_type === 'commission' ? 'fw-bold' : ''}">Sales Commission</span>
-                                                ${data.commission_details && data.commission_details.length > 0 ? 
-                                                    `<small class="text-muted" style="font-size: 0.75rem;">${(data.commission_details[0].meta && data.commission_details[0].meta.text_desc) ? data.commission_details[0].meta.text_desc : (data.commission_details[0].name || '')}</small>` 
-                                                    : data.structure_info.commission_percentage > 0 ? 
-                                                    `<small class="text-muted" style="font-size: 0.75rem;">${data.structure_info.commission_percentage}% of sales</small>` : ''}
+                                        ${data.commission_details && data.commission_details.length > 1 ? `
+                                            <div class="expandable-section commission-section my-2 shadow-sm border-0 bg-light">
+                                                <div class="expandable-header py-2 px-3" onclick="toggleExpandable(this)" style="background: transparent;">
+                                                    <div class="d-flex flex-column">
+                                                        <div class="expandable-title small fw-bold text-dark">Sales Commission <span class="badge badge-success bg-success text-white ml-1" style="font-size: 0.65rem;">${data.commission_details.length} Sales</span></div>
+                                                        <small class="text-muted" style="font-size: 0.72rem;">Click to toggle individual sales</small>
+                                                    </div>
+                                                    <div class="d-flex align-items-center gap-2">
+                                                        <span class="expandable-value small fw-bold text-success">Rs. ${parseFloat(data.breakdown.earnings.commission || 0).toFixed(2)}</span>
+                                                        <i class="fa fa-chevron-down expand-icon" style="font-size: 0.7rem;"></i>
+                                                    </div>
+                                                </div>
+                                                <div class="expandable-content px-3 pb-2">
+                                                    ${data.commission_details.map(cd => `
+                                                        <div class="d-flex justify-content-between py-1 border-bottom border-light">
+                                                            <div class="d-flex flex-column">
+                                                                <small class="fw-bold text-dark">${cd.name}</small>
+                                                                <small class="text-muted" style="font-size: 0.7rem;">${(cd.meta && cd.meta.text_desc) ? cd.meta.text_desc : (cd.description || '')}</small>
+                                                            </div>
+                                                            <small class="fw-bold text-success">Rs. ${parseFloat(cd.amount).toFixed(2)}</small>
+                                                        </div>
+                                                    `).join('')}
+                                                </div>
                                             </div>
-                                            <span class="value fw-bold ${data.structure_info.salary_type === 'commission' ? 'text-success' : ''}">Rs. ${parseFloat(data.breakdown.earnings.commission || 0).toFixed(2)}</span>
-                                        </div>
+                                        ` : `
+                                            <div class="detail-row py-2 ${data.structure_info.salary_type === 'commission' ? 'bg-light' : ''}">
+                                                <div class="d-flex flex-column">
+                                                    <span class="label ${data.structure_info.salary_type === 'commission' ? 'fw-bold' : ''}">Sales Commission</span>
+                                                    ${data.commission_details && data.commission_details.length > 0 ? 
+                                                        `<small class="text-muted" style="font-size: 0.75rem;">${(data.commission_details[0].meta && data.commission_details[0].meta.text_desc) ? data.commission_details[0].meta.text_desc : (data.commission_details[0].name || '')}</small>` 
+                                                        : data.structure_info.commission_percentage > 0 ? 
+                                                        `<small class="text-muted" style="font-size: 0.75rem;">${data.structure_info.commission_percentage}% of sales</small>` : ''}
+                                                </div>
+                                                <span class="value fw-bold ${data.structure_info.salary_type === 'commission' ? 'text-success' : ''}">Rs. ${parseFloat(data.breakdown.earnings.commission || 0).toFixed(2)}</span>
+                                            </div>
+                                        `}
                                     ` : ''}
                                                                                     
                                                                                     <div class="expandable-section allowances-section my-2 shadow-sm border-0 bg-light">
                                                                                         <div class="expandable-header py-2 px-3" onclick="toggleExpandable(this)" style="background: transparent;">
-                                                                                            <div class="expandable-title small">Allowances</div>
+                                                                                            <div class="expandable-title small">Allowances & Arrears</div>
                                                                                             <div class="d-flex align-items-center gap-2">
                                                                                                 <span class="expandable-value small">Rs. ${parseFloat(data.breakdown.earnings.allowances).toFixed(2)}</span>
                                                                                                 <i class="fa fa-chevron-down expand-icon" style="font-size: 0.7rem;"></i>
@@ -1766,8 +1792,11 @@
                                                                                             ${data.allowance_details.length > 0 ? 
                                                                                                 data.allowance_details.map(allowance => `
                                                 <div class="d-flex justify-content-between py-1 border-bottom border-light">
-                                                    <small class="text-muted">${allowance.name}</small>
-                                                    <small class="fw-bold">Rs. ${parseFloat(allowance.amount).toFixed(2)}</small>
+                                                    <div class="d-flex flex-column">
+                                                        <small class="${(allowance.type === 'arrear' || (allowance.name && allowance.name.includes('Arrears'))) ? 'fw-bold text-primary' : 'text-muted'}">${allowance.name}</small>
+                                                        ${allowance.description ? `<small class="text-muted" style="font-size: 0.68rem;">${allowance.description}</small>` : ''}
+                                                    </div>
+                                                    <small class="fw-bold ${(allowance.type === 'arrear' || (allowance.name && allowance.name.includes('Arrears'))) ? 'text-primary' : ''}">Rs. ${parseFloat(allowance.amount).toFixed(2)}</small>
                                                 </div>
                                             `).join('') 
                                                                                                 : '<div class="text-center small text-muted py-1">- None -</div>'}

@@ -131,6 +131,49 @@
             box-shadow: 0 0 0 3px rgba(79, 110, 247, .12);
         }
 
+        /* Select2 Custom Matching Styling */
+        .select2-container--default .select2-selection--single {
+            height: 44px !important;
+            border: 1.5px solid #e2e8f0 !important;
+            border-radius: 9px !important;
+            padding: 6px 12px !important;
+            display: flex !important;
+            align-items: center !important;
+            background-color: #fff !important;
+            transition: border-color .2s, box-shadow .2s;
+        }
+        .select2-container--default.select2-container--focus .select2-selection--single,
+        .select2-container--default.select2-container--open .select2-selection--single {
+            border-color: #4f6ef7 !important;
+            box-shadow: 0 0 0 3px rgba(79, 110, 247, .12) !important;
+            outline: none !important;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 30px !important;
+            color: #1a2340 !important;
+            font-size: .9rem !important;
+            padding-left: 0 !important;
+        }
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 42px !important;
+            right: 10px !important;
+        }
+        .select2-dropdown {
+            border: 1.5px solid #4f6ef7 !important;
+            border-radius: 9px !important;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, .08) !important;
+            z-index: 1055 !important;
+        }
+        .select2-container--default .select2-search--dropdown .select2-search__field {
+            border: 1.5px solid #e2e8f0 !important;
+            border-radius: 6px !important;
+            padding: 8px 12px !important;
+            font-size: .88rem !important;
+        }
+        .select2-container--default .select2-results__option--highlighted[aria-selected] {
+            background-color: #4f6ef7 !important;
+        }
+
         .line-table-wrap {
             border-radius: 12px;
             overflow: hidden;
@@ -667,21 +710,9 @@
             }
         });
 
-        // Initialize Select2 on Party Type, Party ID, and Sale ID
-        $('#partyType').select2({
-            placeholder: '— Select Type —',
-            allowClear: true,
-            width: '100%'
-        });
-
+        // Initialize Select2 on Party / Account dropdown
         $('#partyId').select2({
             placeholder: '— Select Party / Account —',
-            allowClear: true,
-            width: '100%'
-        });
-
-        $('#saleId').select2({
-            placeholder: 'General Payment',
             allowClear: true,
             width: '100%'
         });
@@ -693,7 +724,7 @@
             $('#tel').val('');
             $('#openingBal').val('');
             $('#saleSection').hide();
-            $('#saleId').html('<option value="">General Payment</option>').trigger('change.select2');
+            $('#saleId').html('<option value="">General Payment</option>');
 
             if (type === 'vendor' || type === 'customer' || type === 'walkin') {
                 $.get('{{ route('party.list') }}?type=' + type, function(data) {
@@ -702,16 +733,14 @@
                         `<option value="${item.id}" data-phone="${item.mobile||''}" data-bal="${item.closing_balance}">${item.text}</option>`
                     ));
                     $select.trigger('change.select2');
-                    setTimeout(() => { $select.select2('open'); }, 100);
                 });
             } else if (type) {
                 $.get('{{ url('get-accounts-by-head') }}/' + type, function(data) {
                     $select.empty().append('<option disabled selected value="">— Select Account —</option>');
                     data.forEach(acc => $select.append(
-                        `<option value="${acc.id}" data-phone="${acc.account_code}" data-bal="${acc.opening_balance}">${acc.title}</option>`
+                        `<option value="${acc.id}" data-phone="${acc.account_code}" data-bal="${acc.current_balance || acc.opening_balance}">${acc.title}</option>`
                     ));
                     $select.trigger('change.select2');
-                    setTimeout(() => { $select.select2('open'); }, 100);
                 });
             } else {
                 $select.empty().append('<option disabled selected value="">— Select Party / Account —</option>').trigger('change.select2');
@@ -733,11 +762,10 @@
                     if (res.sales && res.sales.length > 0) res.sales.forEach(sale => $s.append(
                         `<option value="${sale.id}">Invoice #${sale.invoice_no} (Total: ${sale.total_net}, Due: ${sale.due_amount})</option>`
                     ));
-                    $s.trigger('change.select2');
                 });
             } else {
                 $('#saleSection').hide();
-                $('#saleId').html('<option value="">General Payment</option>').trigger('change.select2');
+                $('#saleId').html('<option value="">General Payment</option>');
             }
 
             if (id) {
@@ -759,15 +787,22 @@
             $.get('{{ url('get-accounts-by-head') }}/' + headId, function(res) {
                 let html = '<option value="">Select Account</option>';
                 res.forEach(acc => {
-                    html += `<option value="${acc.id}" data-bal="${acc.opening_balance}">${acc.title}</option>`;
+                    let bal = (acc.current_balance !== undefined && acc.current_balance !== null) 
+                        ? acc.current_balance 
+                        : (acc.balance !== undefined ? acc.balance : (acc.opening_balance || 0));
+                    html += `<option value="${acc.id}" data-bal="${bal}">${acc.title}</option>`;
                 });
                 $sub.html(html);
+                if ($sub.val()) {
+                    $sub.trigger('change');
+                }
             });
         });
 
         $(document).on('change', '.rowAccountSub', function() {
             let $row = $(this).closest('tr');
-            let bal = $(this).find(':selected').data('bal');
+            let $opt = $(this).find(':selected');
+            let bal = $opt.attr('data-bal') !== undefined ? $opt.attr('data-bal') : $opt.data('bal');
             let $balDiv = $row.find('.row-balance-display');
             if (bal !== undefined && bal !== null && $(this).val() !== '') {
                 $balDiv.find('.rowBalanceVal').text(parseFloat(bal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));

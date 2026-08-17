@@ -151,6 +151,11 @@
                                             <i class="fa fa-calendar-day me-1"></i>Off: {{ $emp->weekly_off }}
                                         </span>
                                     @endif
+                                    @if ($emp->user && $emp->user->branch)
+                                        <span class="hr-tag primary mb-1" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">
+                                            <i class="fa fa-code-branch me-1"></i>{{ $emp->user->branch->name }}
+                                        </span>
+                                    @endif
                                     @if (!empty($emp->face_encoding) && is_array($emp->face_encoding) && count($emp->face_encoding) > 0)
                                         <span class="badge bg-primary p-2 mb-1"><i class="fa fa-smile me-1"></i>Face ID
                                             Set</span>
@@ -165,6 +170,7 @@
                                 <input type="hidden" class="last_name" value="{{ $emp->last_name }}">
                                 <input type="hidden" class="email" value="{{ $emp->email }}">
                                 <input type="hidden" class="phone" value="{{ $emp->phone }}">
+                                <input type="hidden" class="branch_id" value="{{ $emp->user->branch_id ?? '' }}">
                                 <input type="hidden" class="address" value="{{ $emp->address }}">
                                 <input type="hidden" class="department_id" value="{{ $emp->department_id }}">
                                 <input type="hidden" class="designation_id" value="{{ $emp->designation_id }}">
@@ -262,6 +268,20 @@
                                         placeholder="Enter phone number">
                                 </div>
                             </div>
+                            @if(auth()->user()->isSuperAdmin())
+                                <div class="col-md-6">
+                                    <div class="form-group-modern">
+                                        <label class="form-label"><i class="fa fa-code-branch"></i> Assign Branch</label>
+                                        <select name="branch_id" id="branch_id" class="form-select">
+                                            <option value="">-- No Branch (Head Office / Global) --</option>
+                                            @foreach ($branches as $branch)
+                                                <option value="{{ $branch->id }}">{{ $branch->name }}</option>
+                                            @endforeach
+                                        </select>
+                                        <small class="text-muted">Branch assigned to this employee account</small>
+                                    </div>
+                                </div>
+                            @endif
                             <div class="col-md-6">
                                 <div class="form-group-modern">
                                     <label class="form-label"><i class="fa fa-building"></i> Department</label>
@@ -551,6 +571,9 @@
                 $('#weekly_off_container .weekly-day-option').removeClass('selected');
                 $('#weekly_off').val('');
 
+                // Clear Branch selection
+                $('#branch_id').val('');
+
                 // Clear Leaves
                 $('#casual_leaves_allocated').val('0');
                 $('#sick_leaves_allocated').val('0');
@@ -568,6 +591,7 @@
                 $('#last_name').val(card.find('.last_name').val());
                 $('#email').val(card.find('.email').val());
                 $('#phone').val(card.find('.phone').val());
+                $('#branch_id').val(card.find('.branch_id').val() || '');
                 $('#address').val(card.find('.address').val());
                 $('#department_id').val(card.find('.department_id').val());
                 $('#designation_id').val(card.find('.designation_id').val());

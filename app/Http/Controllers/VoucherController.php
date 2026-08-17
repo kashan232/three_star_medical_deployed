@@ -349,9 +349,13 @@ class VoucherController extends Controller
             ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->get();
 
-        // Format for "Party | Account" display
+        // Format for "Party | Account" display and attach real-time dynamic balance
         foreach ($accounts as $acc) {
             $acc->title = $headName . ' | ' . $acc->title;
+            $bal = (float)($acc->calculated_balance ?? $acc->current_balance ?? $acc->opening_balance ?? 0);
+            $acc->balance = $bal;
+            $acc->current_balance = $bal;
+            $acc->opening_balance = $bal;
         }
 
         return response()->json($accounts);

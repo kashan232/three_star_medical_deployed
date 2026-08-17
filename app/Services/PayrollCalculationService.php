@@ -474,8 +474,36 @@ class PayrollCalculationService
             ];
         })->toArray();
 
-        // Calculate gross salary (includes commission)
-        $grossSalary = $baseSalary + $activeAllowances + $commission;
+        // Check for previous unpaid monthly payrolls for this employee (Arrears Consolidation)
+        $unpaidPreviousPayrolls = Payroll::where('employee_id', $employee->id)
+            ->where('payroll_type', 'monthly')
+            ->where('month', '<', $month)
+            ->where('status', '!=', 'paid')
+            ->orderBy('month', 'asc')
+            ->get();
+
+        $totalArrears = 0;
+        $arrearDetails = [];
+
+        foreach ($unpaidPreviousPayrolls as $prev) {
+            $prevNet = floatval($prev->net_salary);
+            if ($prevNet > 0) {
+                $totalArrears += $prevNet;
+                $formattedMonth = \Carbon\Carbon::parse($prev->month . '-01')->format('F Y');
+                $arrearDetails[] = [
+                    'name' => "Unpaid Arrears ({$formattedMonth})",
+                    'amount' => $prevNet,
+                    'type' => 'allowance',
+                    'description' => "Unpaid salary & commission balance from {$formattedMonth} (Payroll #{$prev->id})",
+                ];
+            }
+        }
+
+        $allAllowanceDetails = array_merge($allowanceDetails, $arrearDetails);
+        $totalAllowancesAndArrears = $activeAllowances + $totalArrears;
+
+        // Calculate gross salary (includes base, allowances, arrears, and commission)
+        $grossSalary = $baseSalary + $totalAllowancesAndArrears + $commission;
 
         // Calculate total deductions
         $totalDeductions = $activeFixedDeductions + $attendanceDeductions + $loanDeductions;
@@ -488,7 +516,7 @@ class PayrollCalculationService
             'month' => $month,
             'basic_salary' => $baseSalary,
             'gross_salary' => $grossSalary,
-            'allowances' => $activeAllowances,
+            'allowances' => $totalAllowancesAndArrears,
             'deductions' => $activeFixedDeductions,
             'attendance_deductions' => $attendanceDeductions,
             'manual_deductions' => 0,
@@ -499,10 +527,10 @@ class PayrollCalculationService
             'net_salary' => $netSalary,
             'auto_generated' => true,
             'status' => 'generated',
-            'allowance_details' => array_merge($allowanceDetails, $mappedCommissionDetails),
+            'allowance_details' => $allAllowanceDetails,
             'deduction_details' => $allDeductionDetails,
             'attendance_breakdown' => $attendanceBreakdown,
-            'commission_details' => $commissionData['commission_details'] ?? [],
+            'commission_details' => $mappedCommissionDetails,
         ];
     }
 
@@ -706,7 +734,19 @@ class PayrollCalculationService
             
             // Tax-exclusive base: Net Amount minus GST & Sale Tax
             $taxExclusiveBase = max(0, $saleTotal - $gst - $advTax);
-            $alreadyPaid      = floatval($sale->commission_paid);
+            // Calculate how much commission has ACTUALLY been disbursed in a PAID payroll for this sale
+            $paidViaPayrolls = \App\Models\Hr\PayrollDetail::where('type', 'commission')
+                ->where(function($q) use ($sale) {
+                    $q->where('name', 'like', "%Sale #{$sale->invoice_no}%")
+                      ->orWhere('name', 'like', "%#{$sale->invoice_no}%")
+                      ->orWhere('description', 'like', "%{$sale->invoice_no}%");
+                })
+                ->whereHas('payroll', function($q) {
+                    $q->where('status', 'paid');
+                })
+                ->sum('amount');
+
+            $alreadyPaid = max(floatval($paidViaPayrolls), 0);
 
             // Determine maximum commission amount for this sale
             $maxCommission = 0;
@@ -720,8 +760,27 @@ class PayrollCalculationService
                 $maxCommission = ($taxExclusiveBase * $structure->commission_percentage) / 100;
             }
 
-            // If no commission or already fully paid — skip
-            if ($maxCommission <= 0 || $alreadyPaid >= $maxCommission) {
+            // Check if this sale's commission was already included in an earlier month's monthly payroll
+            // (If unpaid, it is already accounted for in the previous month's carried-forward Arrears)
+            $includedInPrevMonths = \App\Models\Hr\PayrollDetail::where('type', 'commission')
+                ->where(function($q) use ($sale) {
+                    $q->where('name', 'like', "%Sale #{$sale->invoice_no}%")
+                      ->orWhere('name', 'like', "%#{$sale->invoice_no}%")
+                      ->orWhere('description', 'like', "%{$sale->invoice_no}%");
+                })
+                ->whereHas('payroll', function($q) use ($month, $employee) {
+                    $q->where('employee_id', $employee->id)
+                      ->where('payroll_type', 'monthly')
+                      ->where('month', '<', $month);
+                })
+                ->exists();
+
+            if ($includedInPrevMonths) {
+                continue;
+            }
+
+            // If no commission or already fully paid in a finalized paid payroll — skip
+            if ($maxCommission <= 0 || $alreadyPaid >= ($maxCommission - 0.01)) {
                 continue;
             }
 
@@ -742,7 +801,7 @@ class PayrollCalculationService
                 continue; // Partial or zero payment — commission not eligible yet
             }
 
-            // Full payment received -> Entire remaining commission is earned
+            // Full payment received -> Entire remaining unpaid commission is earned
             $newCommission = max(0, $maxCommission - $alreadyPaid);
 
             if ($newCommission > 0) {
@@ -771,8 +830,9 @@ class PayrollCalculationService
                     ]),
                 ];
                 $salesUpdates[] = [
-                    'sale'        => $sale,
-                    'new_paid'    => $alreadyPaid + $newCommission,
+                    'sale'           => $sale,
+                    'max_commission' => $maxCommission,
+                    'new_paid'       => $alreadyPaid + $newCommission,
                 ];
             }
         }
@@ -803,7 +863,7 @@ class PayrollCalculationService
     {
         $updates = static::$pendingCommissionUpdates[$employeeId] ?? [];
         foreach ($updates as $update) {
-            $update['sale']->update(['commission_paid' => $update['new_paid']]);
+            $update['sale']->update(['total_commission' => $update['max_commission']]);
         }
         unset(static::$pendingCommissionUpdates[$employeeId]);
     }
@@ -971,12 +1031,11 @@ class PayrollCalculationService
                 $payroll->save();
             }
 
-            // Track paid commission on the sale
+            // Track total expected commission on the sale
             \Illuminate\Support\Facades\DB::table('sales')
                 ->where('id', $sale->id)
                 ->update([
                     'total_commission' => $maxCommission,
-                    'commission_paid' => $alreadyPaid + $newCommission
                 ]);
         }
     }

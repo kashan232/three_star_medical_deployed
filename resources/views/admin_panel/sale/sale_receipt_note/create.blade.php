@@ -569,20 +569,19 @@
                                                             class="bg-transparent border-0 text-secondary p-0 w-100 fw-bold"
                                                             style="outline: none;">
                                                     </td>
-                                                    <td class="compact-lbl text-end compact-td" style="width: 25%;">CUSTOMER
-                                                        REF #</td>
+                                                    <td class="compact-lbl text-end compact-td" style="width: 25%;">CUST REF / DC #</td>
                                                     <td style="width: 25%;" class="compact-td"><input type="text"
                                                             name="vendor_bill_no" class="compact-input shadow-sm"></td>
                                                 </tr>
                                                 <tr>
-                                                    <td class="compact-lbl compact-td">ORDER DATE :</td>
-                                                    <td class="compact-td"><input type="date"
+                                                    <td class="compact-lbl compact-td">INVOICE DATE :</td>
+                                                    <td class="compact-td"><input type="date" id="purchase_date_input"
                                                             name="purchase_date" value="{{ date('Y-m-d') }}"
                                                             class="compact-input shadow-sm text-secondary"
                                                             style="max-width: 200px;"></td>
-                                                    <td class="compact-lbl text-end compact-td">ORDER #</td>
-                                                    <td class="compact-td"><input type="text"
-                                                            name="order_no" class="compact-input shadow-sm"></td>
+                                                    <td class="compact-lbl text-end compact-td">DC DATE :</td>
+                                                    <td class="compact-td"><input type="date" id="dc_date_input"
+                                                            name="dc_date" class="compact-input shadow-sm text-secondary"></td>
                                                 </tr>
                                                 <tr>
                                                     <td class="compact-lbl compact-td">SO #</td>
@@ -593,21 +592,26 @@
                                                             style="outline: none;" value="000000">
                                                     </td>
                                                     <td class="compact-lbl text-end compact-td">SO DATE :</td>
-                                                    <td class="compact-td"><input type="date" name="so_date"
+                                                    <td class="compact-td"><input type="date" id="so_date_input" name="so_date"
                                                             value="{{ date('Y-m-d') }}"
                                                             class="compact-input shadow-sm text-secondary"></td>
                                                 </tr>
                                                 <tr>
-                                                    <td class="compact-lbl compact-td">PROJECT :</td>
-                                                    <td class="compact-td">
-                                                        <select name="project"
-                                                            class="compact-select text-secondary shadow-sm">
-                                                            <option value="">(N/A)</option>
-                                                        </select>
-                                                    </td>
+                                                    <td class="compact-lbl compact-td">ORDER #</td>
+                                                    <td class="compact-td"><input type="text"
+                                                            name="order_no" class="compact-input shadow-sm"></td>
                                                     <td class="compact-lbl text-end compact-td">JOB # / REF</td>
                                                     <td class="compact-td"><input type="text" name="reference"
                                                             class="compact-input shadow-sm"></td>
+                                                </tr>
+                                                <tr>
+                                                    <td class="compact-lbl compact-td">PROJECT :</td>
+                                                    <td class="compact-td" colspan="3">
+                                                        <select name="project"
+                                                            class="compact-select text-secondary shadow-sm" style="max-width: 200px;">
+                                                            <option value="">(N/A)</option>
+                                                        </select>
+                                                    </td>
                                                 </tr>
                                             </tbody>
                                         </table>
@@ -1019,6 +1023,7 @@
                                     @foreach ($draftSales as $draft)
                                         @php $hasDraftItems = true; @endphp
                                         <tr class="booked-item-row"
+                                            data-customer-id="{{ $draft->customer_id }}"
                                             data-search="{{ strtolower($draft->invoice_no . ' ' . ($draft->customer_relation->customer_name ?? '')) }}">
                                             <td>
                                                 <i class="bi bi-file-earmark-text text-primary"></i>
@@ -1046,39 +1051,10 @@
                                             <td class="text-end">
                                                 <button type="button"
                                                     class="btn btn-primary btn-sm rounded-pill px-4 btn-import-single"
-                                                    title="Import Sale Order" data-customer-id="{{ $draft->customer_id }}"
-                                                    data-is-advance="0"
-                                                    data-draft-id="{{ $draft->id }}"
-                                                    data-warehouse-id="{{ $draft->warehouse_id }}"
-                                                    data-sale-date="{{ $draft->sale_date ? substr($draft->sale_date, 0, 10) : date('Y-m-d') }}"
-                                                    data-so-date="{{ $draft->so_date ? substr($draft->so_date, 0, 10) : ($draft->sale_date ? substr($draft->sale_date, 0, 10) : date('Y-m-d')) }}"
-                                                    data-vendor-bill="{{ $draft->vendor_bill_no }}"
-                                                    data-sale-order-no="{{ $draft->invoice_no }}"
-                                                    data-grn-no="{{ $draft->grn_no }}" data-note="{{ $draft->note }}"
-                                                    data-discount="{{ $draft->discount ?? 0 }}"
-                                                    data-freight="{{ $draft->freight_charges ?? 0 }}"
-                                                    data-expense="{{ $draft->extra_cost ?? 0 }}"
-                                                    data-is-gst="{{ $draft->is_gst_invoice ? 1 : 0 }}"
-                                                    data-employee="{{ $draft->employee_id }}"
-                                                    data-reference="{{ $draft->reference }}"
-                                                    data-transport="{{ $draft->transport_name }}"
-                                                    data-credit-days="{{ $draft->credit_days ?? 0 }}"
-                                                    data-items="{{ json_encode(
-                                                        $draft->items->map(function ($i) {
-                                                            return [
-                                                                'product_id' => $i->product_id,
-                                                                'product_name' => $i->product->item_name ?? '',
-                                                                'item_code' => $i->product->item_code ?? '',
-                                                                'ppb' => $i->product->pieces_per_box ?? 1,
-                                                                'total_pieces' => $i->total_pieces,
-                                                                'price' => $i->price,
-                                                                'discount_amount' => $i->discount_amount ?? 0,
-                                                                'unit_discount' => $i->total_pieces > 0 ? $i->discount_amount / $i->total_pieces : 0,
-                                                                'batch_no' => $i->batch_no,
-                                                                'uom_name' => $i->uom_name ?? ($i->product->unit->name ?? 'Piece'),
-                                                            ];
-                                                        }),
-                                                    ) }}">
+                                                    title="Import Sale Order"
+                                                    data-type="draft"
+                                                    data-customer-id="{{ $draft->customer_id }}"
+                                                    data-id="{{ $draft->id }}">
                                                     <i class="bi bi-arrow-down-square me-1"></i> Import
                                                 </button>
                                             </td>
@@ -1099,6 +1075,7 @@
                                 @foreach ($isSoMode ? $advanceDcNotes : $dcNotes as $dc)
                                     @php $hasDraftItems = true; @endphp
                                     <tr class="booked-item-row"
+                                        data-customer-id="{{ $dc->customer_id }}"
                                         data-search="{{ strtolower($dc->dc_no . ' ' . ($dc->customer->customer_name ?? '')) }}">
                                         <td>
                                             <i class="bi bi-file-earmark-arrow-down text-warning"></i>
@@ -1127,41 +1104,10 @@
                                             <button type="button"
                                                 class="btn btn-warning btn-sm rounded-pill px-4 btn-import-single"
                                                 title="Import DC Note as Sale Invoice"
+                                                data-type="dc"
                                                 data-customer-id="{{ $dc->customer_id }}"
-                                                data-is-advance="{{ $dc->is_advance ? '1' : '0' }}"
-                                                data-dc-id="{{ $dc->id }}"
-                                                data-draft-id="{{ $dc->sale_id }}"
-                                                data-warehouse-id="{{ $dc->items->first()->warehouse_id ?? '' }}"
-                                                data-delivery-date="{{ $dc->delivery_date }}"
-                                                data-dc-no="{{ $dc->dc_no }}"
-                                                data-sale-order-no="{{ $dc->sale->invoice_no ?? '' }}"
-                                                data-discount="{{ $dc->sale->discount ?? 0 }}"
-                                                data-freight="{{ $dc->sale->freight_charges ?? 0 }}"
-                                                data-expense="{{ $dc->sale->extra_cost ?? 0 }}"
-                                                data-employee="{{ $dc->sale->employee_id ?? '' }}"
-                                                data-reference="{{ $dc->sale->reference ?? '' }}"
-                                                data-transport="{{ $dc->sale->transport_name ?? '' }}"
-                                                data-items="{{ json_encode(
-                                                    $dc->items->map(function ($i) use ($dc) {
-                                                        $sItem = $i->saleItem ?? ($dc->sale ? $dc->sale->items->where('product_id', $i->product_id)->first() : null);
-                                                        $discAmt = $sItem->discount_amount ?? 0;
-                                                        $totPcs = $i->total_pieces > 0 ? $i->total_pieces : ($sItem->total_pieces ?? 1);
-                                                        return [
-                                                            'product_id' => $i->product_id,
-                                                            'product_name' => $i->product->item_name ?? '',
-                                                            'item_code' => $i->product->item_code ?? '',
-                                                            'ppb' => $i->product->pieces_per_box ?? 1,
-                                                            'total_pieces' => $i->total_pieces,
-                                                            'price' => $i->price > 0 ? $i->price : ($sItem->price ?? 0),
-                                                            'discount_amount' => $discAmt,
-                                                            'unit_discount' => $totPcs > 0 ? $discAmt / $totPcs : 0,
-                                                            'batch_id' => $i->batch_id,
-                                                            'lot_no' => $i->lot_number,
-                                                            'warehouse_id' => $i->warehouse_id,
-                                                            'uom_name' => $i->uom->name ?? ($i->product->unit->name ?? 'Piece'),
-                                                        ];
-                                                    }),
-                                                ) }}">
+                                                data-id="{{ $dc->id }}"
+                                                data-is-advance="{{ $dc->is_advance ? '1' : '0' }}">
                                                 <i class="bi bi-arrow-down-square me-1"></i> Import Invoice
                                             </button>
                                         </td>
@@ -1410,8 +1356,8 @@
             $('#btnDeliveryOrderModal').prop('disabled', false);
 
             $('.booked-item-row').each(function() {
-                let btn = $(this).find('.btn-import-single');
-                if (btn.data('customer-id') == id) {
+                let rowCustId = $(this).attr('data-customer-id') || $(this).find('.btn-import-single').attr('data-customer-id') || $(this).find('.btn-import-single').data('customer-id');
+                if (!id || rowCustId == id) {
                     $(this).show();
                 } else {
                     $(this).hide();
@@ -1421,6 +1367,20 @@
         });
 
         $('#btnDeliveryOrderModal').on('click', function() {
+            let currentCustId = $('#customer_id').val();
+            if (currentCustId) {
+                $('.booked-item-row').each(function() {
+                    let rowCustId = $(this).attr('data-customer-id') || $(this).find('.btn-import-single').attr('data-customer-id');
+                    if (rowCustId == currentCustId) {
+                        $(this).show();
+                    } else {
+                        $(this).hide();
+                    }
+                });
+            } else {
+                $('.booked-item-row').show();
+            }
+            $('#searchBookedProducts').val('');
             $('#bookedProductsModal').modal('show');
         });
 
@@ -2419,79 +2379,78 @@
             });
         });
 
-        function importBookedItem(btn) {
-            let $btn = $(btn);
-            let items = $btn.data('items');
-
-            if (typeof items === 'string') {
-                try {
-                    items = JSON.parse(items);
-                } catch (e) {
-                    items = [];
-                }
+        // Helper to reliably set date input values (supporting Native Inputs & Flatpickr instances)
+        function setFormDate(selector, dateStr) {
+            if (!dateStr) return;
+            // Strict YYYY-MM-DD extraction
+            if (typeof dateStr === 'string' && dateStr.length >= 10) {
+                dateStr = dateStr.substring(0, 10);
             }
-            if (!items || !items.length) return;
+            var el = document.querySelector(selector);
+            if (!el) return;
 
-            // Set Form Data
-            if ($btn.data('draft-id')) $('#draft_id_input').val($btn.data('draft-id'));
-            if ($btn.data('dc-id')) $('#dc_id_input').val($btn.data('dc-id')); // Hidden field for DC reference if needed
+            // 1. Direct DOM & jQuery assignment
+            el.value = dateStr;
+            $(el).val(dateStr);
 
-            if ($btn.data('customer-id')) $('#customer_select').val($btn.data('customer-id')).trigger('change');
-            if ($btn.data('warehouse-id')) $('#warehouse_id_header').val($btn.data('warehouse-id')).trigger('change');
-            if ($btn.data('employee')) $('#sales_officer_id').val($btn.data('employee')).trigger('change');
-            
-            if ($btn.data('sale-date')) $('input[name="purchase_date"]').val($btn.data('sale-date'));
-            if ($btn.data('so-date')) $('input[name="so_date"]').val($btn.data('so-date'));
-            if ($btn.data('delivery-date')) $('input[name="purchase_date"]').val($btn.data('delivery-date'));
-            
-            if ($btn.data('vendor-bill')) $('input[name="vendor_bill_no"]').val($btn.data('vendor-bill'));
-            if ($btn.data('dc-no')) $('input[name="vendor_bill_no"]').val($btn.data('dc-no')); // Using DC No as vendor bill ref in SRN
-            
-            if ($btn.data('sale-order-no')) $('input[name="sale_order_no"]').val($btn.data('sale-order-no'));
-            if ($btn.data('note')) $('input[name="note"]').val($btn.data('note'));
-            if ($btn.data('reference')) $('input[name="reference"]').val($btn.data('reference'));
-            if ($btn.data('transport')) $('input[name="transport_name"]').val($btn.data('transport'));
-            
-            if ($btn.data('discount') !== undefined) $('#sum_discount').val($btn.data('discount'));
-            if ($btn.data('freight') !== undefined) $('#sum_freight').val($btn.data('freight'));
-            if ($btn.data('expense') !== undefined) $('#sum_expense').val($btn.data('expense'));
-            if ($btn.data('is-gst') !== undefined) {
-                $('#gst_invoice').prop('checked', $btn.data('is-gst') == 1);
+            // 2. Flatpickr Instance Update (Crucial: Flatpickr hides the original input and uses a cloned visible input)
+            if (el._flatpickr) {
+                el._flatpickr.setDate(dateStr, true, 'Y-m-d');
             }
 
-            // Clear existing table
+            // 3. Dispatch change events
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+
+        // Helper to populate imported items into the sale items table
+        function populateImportedItems(items, defaultWhId) {
             $('#saleItems').empty();
             rowCount = 0;
 
-            // Insert Products
+            if (!items || !items.length) {
+                addBlankRow();
+                recalcSummary();
+                checkEmptyState();
+                return;
+            }
+
             items.forEach(function(item) {
                 addBlankRow();
                 let $lastRow = $('#saleItems tr:last');
+                let prodId = item.product_id;
 
-                // Fetch full product details to use populateProductRow
-                $.getJSON("{{ route('product.details', ':id') }}".replace(':id', item.product_id), function(p) {
+                if (!prodId) return;
+
+                $.getJSON("{{ route('product.details', ':id') }}".replace(':id', prodId), function(p) {
                     populateProductRow($lastRow, p);
 
-                    // NOW set the imported values (after populateProductRow sets defaults)
-                    let ppb = parseInt(item.ppb) || 1;
+                    let ppb = parseInt(p.pieces_per_box) || parseInt(item.ppb) || 1;
                     let totalPieces = parseInt(item.total_pieces) || 0;
+                    if (totalPieces === 0 && item.qty) {
+                        totalPieces = Math.round((parseFloat(item.qty) || 0) * ppb);
+                    }
                     let boxes = Math.floor(totalPieces / ppb);
                     let pcs = totalPieces % ppb;
-                    
+
                     $lastRow.find('.quantity').val(boxes);
                     $lastRow.find('.loose_pieces').val(pcs);
-                    
-                    // Override with imported values if they exist
-                    if (item.price) $lastRow.find('.price').val(item.price);
+
+                    if (item.price && parseFloat(item.price) > 0) {
+                        $lastRow.find('.price').val(parseFloat(item.price).toFixed(2));
+                    }
+
                     if (item.discount_amount !== undefined && parseFloat(item.discount_amount) > 0) {
                         $lastRow.find('.item_disc').val(parseFloat(item.discount_amount));
-                    } else if (item.unit_discount) {
-                        $lastRow.find('.item_disc').val(item.unit_discount);
+                    } else if (item.discount_percent !== undefined && parseFloat(item.discount_percent) > 0) {
+                        $lastRow.find('.item_disc').val(parseFloat(item.discount_percent));
                     }
-                    if (item.lot_no || item.batch_no) $lastRow.find('.lot-no-display').val(item.lot_no || item.batch_no);
 
-                    // Restore warehouse if available from import
-                    let wh_id = item.warehouse_id || $btn.data('warehouse-id');
+                    if (item.lot_number || item.lot_no || item.batch_no) {
+                        $lastRow.find('.lot-no-display').val(item.lot_number || item.lot_no || item.batch_no);
+                    }
+
+                    let wh_id = item.warehouse_id || defaultWhId;
                     if (wh_id) {
                         let $whSelect = $lastRow.find('.item-warehouse');
                         let checkInterval = setInterval(function() {
@@ -2503,36 +2462,165 @@
                         setTimeout(() => clearInterval(checkInterval), 3000);
                     }
 
-                    if (item.batch_id) loadBatches($lastRow, item.product_id, item.batch_id);
+                    if (item.batch_id) {
+                        loadBatches($lastRow, prodId, item.batch_id);
+                    }
+
                     recalcRow($lastRow);
                     recalcSummary();
+                    checkEmptyState();
                 });
             });
-
-            recalcSummary();
-            checkEmptyState();
         }
 
-        $('.btn-import-single').on('click', function() {
-            const $btn = $(this);
-            const isAdvance = $btn.data('is-advance') == '1';
-            const currentMode = $('input[name="mode"]').val();
+        // Consolidated AJAX-driven Import Handler
+        function importBookedItem(btn) {
+            let $btn = $(btn);
+            let importType = $btn.data('type') || 'dc';
+            let id = $btn.data('id');
+            let isAdvance = $btn.data('is-advance') == '1';
+            let currentMode = $('input[name="mode"]').val();
 
-            // If importing an advance DC while in SO mode, auto-switch to SIN (Sale Invoice) mode
+            if (!id) return;
+
             if (isAdvance && currentMode === 'so') {
                 $('input[name="mode"]').val('sin');
-                // Update visible page heading to reflect invoice mode
                 $('h1.page-title').html('<i class="bi bi-box-seam me-2 text-primary"></i> Sale Invoice Note');
                 $('p.page-subtitle').text('Record outward stock to customers efficiently.');
-                // ── Swap action buttons ──
                 $('#btnSaveOnly').hide();
                 $('#btnConfirm').show();
             }
 
             if (window.ERPImportLoader) window.ERPImportLoader.start();
+
+            let endpoint = (importType === 'draft') 
+                ? '{{ url("sales/draft-details") }}/' + id 
+                : '{{ url("sales/dc-details") }}/' + id;
+
+            $.getJSON(endpoint, function(data) {
+                if (importType === 'dc') {
+                    // Delivery Note (DC) Import
+                    if (data.sale_id) $('#draft_id_input').val(data.sale_id);
+                    $('#dc_id_input').val(data.id);
+
+                    if (data.customer_id) {
+                        $('#customer_id').val(data.customer_id);
+                        $('#customer_name_display').val(data.customer_name || (data.customer ? data.customer.customer_name : ''));
+                    }
+
+                    if (data.employee_id) {
+                        $('#sales_officer_id').val(data.employee_id);
+                        $('#sales_officer_display').val(data.employee_name || '');
+                    }
+
+                    if (data.commission_percentage !== undefined && data.commission_percentage !== null) {
+                        $('#commission_percentage').val(data.commission_percentage);
+                    }
+
+                    let headerWh = data.warehouse_id || (data.items && data.items.length ? data.items[0].warehouse_id : '');
+                    if (headerWh) {
+                        $('#warehouse_id_header').val(headerWh).trigger('change');
+                    }
+
+                    $('input[name="vendor_bill_no"]').val(data.grouped_dc_no || data.dc_no || '');
+
+                    if (data.sale) {
+                        $('input[name="sale_order_no"]').val(data.sale.invoice_no || '');
+                        $('input[name="order_no"]').val(data.sale.order_no || '');
+                        $('input[name="note"]').val(data.sale.note || '');
+                        $('input[name="reference"]').val(data.sale.reference || '');
+                        $('input[name="transport_name"]').val(data.sale.transport_name || '');
+                        if (data.sale.discount !== undefined) $('#sum_discount').val(data.sale.discount);
+                        if (data.sale.freight_charges !== undefined) $('#sum_freight').val(data.sale.freight_charges);
+                        if (data.sale.extra_cost !== undefined) $('#sum_expense').val(data.sale.extra_cost);
+                        if (data.sale.is_gst_invoice !== undefined) {
+                            $('#gst_invoice').prop('checked', data.sale.is_gst_invoice == 1);
+                        }
+                    }
+
+                    // Strict Date Population (Flatpickr aware)
+                    if (data.delivery_date_formatted) {
+                        setFormDate('#dc_date_input', data.delivery_date_formatted);
+                        setFormDate('input[name="dc_date"]', data.delivery_date_formatted);
+                    }
+                    if (data.so_date_formatted) {
+                        setFormDate('#so_date_input', data.so_date_formatted);
+                        setFormDate('input[name="so_date"]', data.so_date_formatted);
+                    }
+                    if (data.sale_date_formatted) {
+                        setFormDate('#purchase_date_input', data.sale_date_formatted);
+                        setFormDate('input[name="purchase_date"]', data.sale_date_formatted);
+                    }
+
+                    // Populate Table Rows
+                    populateImportedItems(data.items || [], headerWh);
+
+                } else {
+                    // Draft Sale Import
+                    $('#draft_id_input').val(data.id);
+
+                    if (data.customer_id) {
+                        $('#customer_id').val(data.customer_id);
+                        $('#customer_name_display').val(data.customer_name || (data.customer_relation ? data.customer_relation.customer_name : ''));
+                    }
+
+                    if (data.warehouse_id) {
+                        $('#warehouse_id_header').val(data.warehouse_id).trigger('change');
+                    }
+
+                    if (data.employee_id) {
+                        $('#sales_officer_id').val(data.employee_id);
+                        $('#sales_officer_display').val(data.employee_name || '');
+                    }
+
+                    if (data.commission_percentage !== undefined && data.commission_percentage !== null) {
+                        $('#commission_percentage').val(data.commission_percentage);
+                    }
+
+                    $('input[name="vendor_bill_no"]').val(data.vendor_bill_no || '');
+                    $('input[name="order_no"]').val(data.order_no || '');
+                    $('input[name="sale_order_no"]').val(data.invoice_no || '');
+                    $('input[name="note"]').val(data.note || '');
+                    $('input[name="reference"]').val(data.reference || '');
+                    $('input[name="transport_name"]').val(data.transport_name || '');
+
+                    if (data.discount !== undefined) $('#sum_discount').val(data.discount);
+                    if (data.freight_charges !== undefined) $('#sum_freight').val(data.freight_charges);
+                    if (data.extra_cost !== undefined) $('#sum_expense').val(data.extra_cost);
+                    if (data.is_gst_invoice !== undefined) {
+                        $('#gst_invoice').prop('checked', data.is_gst_invoice == 1);
+                    }
+
+                    // Strict Date Population (Flatpickr aware)
+                    if (data.so_date_formatted) {
+                        setFormDate('#so_date_input', data.so_date_formatted);
+                        setFormDate('input[name="so_date"]', data.so_date_formatted);
+                    }
+                    if (data.sale_date_formatted) {
+                        setFormDate('#purchase_date_input', data.sale_date_formatted);
+                        setFormDate('input[name="purchase_date"]', data.sale_date_formatted);
+                    }
+
+                    // Populate Table Rows
+                    populateImportedItems(data.items || [], data.warehouse_id);
+                }
+
+                $('#bookedProductsModal').modal('hide');
+                if (window.ERPImportLoader) window.ERPImportLoader.success();
+            }).fail(function(err) {
+                console.error("Import Error:", err);
+                if (window.ERPImportLoader) window.ERPImportLoader.stop();
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Import Failed',
+                    text: 'Unable to load invoice details from server. Please try again.'
+                });
+            });
+        }
+
+        // Import Button Click Handler
+        $('.btn-import-single').on('click', function() {
             importBookedItem(this);
-            $('#bookedProductsModal').modal('hide');
-            if (window.ERPImportLoader) window.ERPImportLoader.success();
         });
     });
 </script>

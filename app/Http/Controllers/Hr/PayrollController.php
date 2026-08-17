@@ -161,13 +161,14 @@ class PayrollController extends Controller
             // Format payroll period based on type
             $payrollPeriod = $this->formatPayrollPeriod($payroll);
 
-            // Get allowance details
-            $allowanceDetails = $payroll->details()->where('type', 'allowance')->get()->map(function ($detail) {
+            // Get allowance and arrear details
+            $allowanceDetails = $payroll->details()->whereIn('type', ['allowance', 'arrear'])->get()->map(function ($detail) {
                 return [
                     'name' => $detail->name,
                     'amount' => $detail->amount,
                     'description' => $detail->description,
-                    'calculation_type' => $detail->description ? 'fixed' : 'fixed', // Can enhance this later
+                    'type' => $detail->type,
+                    'calculation_type' => $detail->description ? 'fixed' : 'fixed',
                 ];
             });
 
@@ -692,26 +693,8 @@ class PayrollController extends Controller
             }
 
             if ($existing) {
-                // Get existing commission details from DB (already paid/added previously)
-                $existingCommissionTotal = $existing->details()->where('type', 'commission')->sum('amount');
-                
-                // Remove old non-commission details before re-saving fresh ones
-                // IMPORTANT: DO NOT delete commission details - they were already added by payment triggers
-                $existing->details()->where('type', '!=', 'commission')->delete();
-                
-                // $payrollData['commission'] is freshly calculated from live sales by calculateMonthlyPayroll()
-                // If the service already calculated commission (from sales), use that fresh value.
-                // If service returned 0 (no live calculation), fall back to existing DB commission.
-                // NEVER add both - that causes double commission!
-                $freshCommission = floatval($payrollData['commission'] ?? 0);
-                if ($freshCommission <= 0 && $existingCommissionTotal > 0) {
-                    // Service didn't recalculate commission (e.g., commission_paid already set)
-                    // Restore from DB
-                    $payrollData['commission'] = $existingCommissionTotal;
-                    $payrollData['gross_salary'] = floatval($payrollData['gross_salary'] ?? 0) + $existingCommissionTotal;
-                    $payrollData['net_salary'] = floatval($payrollData['net_salary'] ?? 0) + $existingCommissionTotal;
-                }
-                // else: fresh commission is already in $payrollData - use it as-is (no double-add)
+                // Remove old details before re-saving freshly calculated ones
+                $existing->details()->delete();
 
                 $existing->update(array_merge(
                     ['auto_generated' => false],
@@ -909,26 +892,8 @@ class PayrollController extends Controller
                     }
 
                     if ($existing) {
-                        // Get existing commission details from DB (already paid/added previously)
-                        $existingCommissionTotal = $existing->details()->where('type', 'commission')->sum('amount');
-                        
-                        // Remove old non-commission details before re-saving fresh ones
-                        // IMPORTANT: DO NOT delete commission details - they were already added by payment triggers
-                        $existing->details()->where('type', '!=', 'commission')->delete();
-                        
-                        // $payrollData['commission'] is freshly calculated from live sales by calculateMonthlyPayroll()
-                        // If the service already calculated commission (from sales), use that fresh value.
-                        // If service returned 0 (no live calculation), fall back to existing DB commission.
-                        // NEVER add both - that causes double commission!
-                        $freshCommission = floatval($payrollData['commission'] ?? 0);
-                        if ($freshCommission <= 0 && $existingCommissionTotal > 0) {
-                            // Service didn't recalculate commission (e.g., commission_paid already set)
-                            // Restore from DB
-                            $payrollData['commission'] = $existingCommissionTotal;
-                            $payrollData['gross_salary'] = floatval($payrollData['gross_salary'] ?? 0) + $existingCommissionTotal;
-                            $payrollData['net_salary'] = floatval($payrollData['net_salary'] ?? 0) + $existingCommissionTotal;
-                        }
-                        // else: fresh commission is already in $payrollData - use it as-is (no double-add)
+                        // Remove old details before re-saving freshly calculated ones
+                        $existing->details()->delete();
 
                         $existing->update(array_merge(
                             ['auto_generated' => true],
@@ -1343,6 +1308,30 @@ class PayrollController extends Controller
                 if ($activeLoan->paid_amount >= $activeLoan->amount) {
                     $activeLoan->update(['status' => 'paid']);
                 }
+            }
+
+            // ── Finalize Sales Commission Tracking ──
+            $commissionDetails = $payroll->details()->where('type', 'commission')->get();
+            foreach ($commissionDetails as $cd) {
+                if (preg_match('/(?:Sale\s*#|Invoice\s*#|#)([A-Za-z0-9\-]+)/i', $cd->name . ' ' . $cd->description, $matches)) {
+                    $invNo = trim($matches[1]);
+                    \App\Models\Sale::where('invoice_no', $invNo)
+                        ->increment('commission_paid', floatval($cd->amount));
+                }
+            }
+
+            // ── Clear / Mark as Paid any previous unpaid monthly payrolls consolidated into this payout ──
+            if ($payroll->payroll_type === 'monthly') {
+                Payroll::where('employee_id', $payroll->employee_id)
+                    ->where('payroll_type', 'monthly')
+                    ->where('month', '<', $payroll->month)
+                    ->where('status', '!=', 'paid')
+                    ->update([
+                        'status'        => 'paid',
+                        'paid_amount'   => DB::raw('net_salary'),
+                        'payment_date'  => now(),
+                        'payment_notes' => "Consolidated & paid via {$payroll->month} Payroll (#{$payroll->id})",
+                    ]);
             }
 
             DB::commit();
