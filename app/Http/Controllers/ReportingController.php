@@ -3827,6 +3827,7 @@ class ReportingController extends Controller
             $brandId    = $request->brand_id;
             $productId  = $request->product_id;
             $vendorId   = $request->vendor_id;
+            $branchId   = $this->getBranchId();
 
             $vendorProductIds = [];
             if ($vendorId && $vendorId !== 'all') {
@@ -3852,8 +3853,12 @@ class ReportingController extends Controller
                 'items.saleItem.uom',
             ]);
 
+            if ($branchId) {
+                $query->where('branch_id', $branchId);
+            }
+
             if ($start && $end) {
-                $query->whereBetween('created_at', [$start . ' 00:00:00', $end . ' 23:59:59']);
+                $query->whereBetween(DB::raw('COALESCE(delivery_date, DATE(created_at))'), [$start, $end]);
             }
             if ($customerId && $customerId !== 'all') {
                 $query->where('customer_id', $customerId);
@@ -3885,7 +3890,9 @@ class ReportingController extends Controller
                 });
             }
 
-            $rows = $query->orderBy('created_at', 'desc')->get();
+            $rows = $query->orderBy(DB::raw('COALESCE(delivery_date, DATE(created_at))'), 'desc')
+                          ->orderBy('id', 'desc')
+                          ->get();
 
             $data = $rows->map(function ($r) use ($request, $brandId, $productId, $vendorId, $vendorProductIds) {
                 $totalPieces = 0;
@@ -3944,18 +3951,23 @@ class ReportingController extends Controller
                     $whSummary[] = "$name ($sum pcs)";
                 }
 
+                $dcDateFormatted = $r->delivery_date 
+                    ? \Carbon\Carbon::parse($r->delivery_date)->format('d/m/Y') 
+                    : ($r->created_at ? $r->created_at->format('d/m/Y') : '-');
+
                 return [
-                    'id'           => $r->id,
-                    'created_at'   => $r->created_at,
-                    'dc_no'        => $r->dc_no,
-                    'sale'         => $r->sale,
-                    'customer'     => $r->customer,
-                    'customer_name'=> $r->customer->customer_name ?? 'Walk-in',
+                    'id'            => $r->id,
+                    'created_at'    => $r->created_at,
+                    'delivery_date' => $dcDateFormatted,
+                    'dc_no'         => $r->dc_no,
+                    'sale'          => $r->sale,
+                    'customer'      => $r->customer,
+                    'customer_name' => $r->customer->customer_name ?? 'Walk-in',
                     'customer_phone'=> $r->customer->mobile ?? '-',
-                    'total_pieces' => $totalPieces,
-                    'warehouses'   => implode(', ', $whSummary),
-                    'items_count'  => count($filteredItems),
-                    'items_detail' => $itemsDetail,
+                    'total_pieces'  => $totalPieces,
+                    'warehouses'    => implode(', ', $whSummary),
+                    'items_count'   => count($filteredItems),
+                    'items_detail'  => $itemsDetail,
                 ];
             });
 
@@ -3978,12 +3990,12 @@ class ReportingController extends Controller
         $d = $this->buildDcReportData($request);
         if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
         
-        $data = [['#', 'Date & Time', 'DC No.', 'Invoice No.', 'Customer', 'Items Count', 'Total Pieces', 'Warehouses']];
+        $data = [['#', 'DC Date', 'DC No.', 'Invoice No.', 'Customer', 'Items Count', 'Total Pieces', 'Warehouses']];
 
         foreach ($d['data'] as $i => $r) {
             $data[] = [
                 $i + 1,
-                $r['created_at']->format('Y-m-d H:i:s'),
+                $r['delivery_date'] ?? '-',
                 $r['dc_no'] ?? '-',
                 $r['sale']->invoice_no ?? '-',
                 $r['customer_name'] . ' (' . $r['customer_phone'] . ')',
@@ -4043,7 +4055,7 @@ class ReportingController extends Controller
         $html .= '<table>
                     <tr>
                         <th width="3%">#</th>
-                        <th width="12%">Date & Time</th>
+                        <th width="12%">DC Date</th>
                         <th width="10%">DC No.</th>
                         <th width="10%">Invoice No.</th>
                         <th width="25%">Customer</th>
@@ -4055,7 +4067,7 @@ class ReportingController extends Controller
         foreach ($d['data'] as $i => $r) {
             $html .= '<tr class="master-row">
                         <td>'.($i+1).'</td>
-                        <td>'.$r['created_at']->format('Y-m-d H:i:s').'</td>
+                        <td>'.($r['delivery_date'] ?? '-').'</td>
                         <td>'.($r['dc_no'] ?? '-').'</td>
                         <td>'.($r['sale']->invoice_no ?? '-').'</td>
                         <td>'.$r['customer_name'].' ('.$r['customer_phone'].')</td>

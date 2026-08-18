@@ -464,7 +464,7 @@
                     let customerAmount = 0;
 
                     customerRows.forEach((r) => {
-                        const formattedDate = new Date(r.created_at).toLocaleDateString('en-GB');
+                        const formattedDate = r.delivery_date || (r.created_at ? new Date(r.created_at).toLocaleDateString('en-GB') : '-');
                         let dcAmount = 0;
                         let dcPieces = 0;
 
@@ -640,10 +640,12 @@
                 const formData = new URLSearchParams({
                     start_date: document.getElementById('start_date').value,
                     end_date: document.getElementById('end_date').value,
-                    customer_id: document.getElementById('customer_id').value,
-                    brand_id: document.getElementById('brand_id').value,
-                    product_id: document.getElementById('product_id').value,
-                    vendor_id: document.getElementById('vendor_id').value
+                    customer_id: document.getElementById('filterCustomer').value,
+                    brand_id: document.getElementById('filterBrand').value,
+                    category_id: document.getElementById('filterCategory').value,
+                    sub_category_id: document.getElementById('filterSubCategory').value,
+                    product_id: document.getElementById('filterProduct').value,
+                    vendor_id: document.getElementById('filterVendor') ? document.getElementById('filterVendor').value : 'all'
                 }).toString();
                 window.location.href = `{{ route('report.dc.export.excel') }}?${formData}`;
             });
@@ -652,10 +654,12 @@
                 const formData = new URLSearchParams({
                     start_date: document.getElementById('start_date').value,
                     end_date: document.getElementById('end_date').value,
-                    customer_id: document.getElementById('customer_id').value,
-                    brand_id: document.getElementById('brand_id').value,
-                    product_id: document.getElementById('product_id').value,
-                    vendor_id: document.getElementById('vendor_id').value
+                    customer_id: document.getElementById('filterCustomer').value,
+                    brand_id: document.getElementById('filterBrand').value,
+                    category_id: document.getElementById('filterCategory').value,
+                    sub_category_id: document.getElementById('filterSubCategory').value,
+                    product_id: document.getElementById('filterProduct').value,
+                    vendor_id: document.getElementById('filterVendor') ? document.getElementById('filterVendor').value : 'all'
                 }).toString();
                 window.location.href = `{{ route('report.dc.export.pdf') }}?${formData}`;
             });
