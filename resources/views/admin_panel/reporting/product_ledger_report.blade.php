@@ -260,6 +260,62 @@
         background-color: #fff !important;
     }
 
+    /* Product Filter Button & Tag Tray */
+    .product-filter-btn {
+        border-radius: 6px !important;
+        background-color: #f8fafc !important;
+        border: 1px solid #cbd5e1 !important;
+        transition: all 0.2s ease;
+    }
+    .product-filter-btn:hover, .product-filter-btn:focus {
+        border-color: #0ea5e9 !important;
+        background-color: #fff !important;
+        box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
+    }
+    .btn-browse-badge {
+        background: #e0f2fe;
+        color: #0369a1;
+        border: 1px solid #bae6fd;
+        font-size: 0.72rem;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 6px;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+    }
+    .selected-tags-tray {
+        max-height: 120px;
+        overflow-y: auto;
+        background: #f8fafc;
+        padding: 6px 8px;
+        border-radius: 6px;
+        border: 1px dashed #cbd5e1;
+    }
+    .prod-chip {
+        background: #eff6ff;
+        color: #1e40af;
+        border: 1px solid #bfdbfe;
+        border-radius: 14px;
+        padding: 2px 8px;
+        font-size: 0.73rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        max-width: 100%;
+    }
+    .prod-chip .chip-remove {
+        cursor: pointer;
+        color: #93c5fd;
+        font-size: 0.8rem;
+        line-height: 1;
+        transition: color 0.15s;
+    }
+    .prod-chip .chip-remove:hover {
+        color: #ef4444;
+    }
+
     /* ── Product profile card ────────────────────────────────────────────── */
     .prod-profile {
         background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #38bdf8 100%);
@@ -582,21 +638,32 @@
                         @endforeach
                     </select>
                 </div>
-                <div class="filter-group" style="flex: 2; min-width: 250px;">
-                    <label>Product</label>
-                    <select id="sel_product" class="form-control select2-product" multiple="multiple">
-                        <option value=""></option>
-                        @foreach($products as $p)
-                            <option value="{{ $p->id }}"
-                                data-cat="{{ $p->category_id }}"
-                                data-sub="{{ $p->sub_category_id }}"
-                                data-brand="{{ $p->brand_id }}"
-                                data-code="{{ $p->item_code }}"
-                                data-name="{{ $p->item_name }}">
-                                {{ $p->item_code }} — {{ $p->item_name }} {{ $p->brand->name ?? '' }}
-                            </option>
-                        @endforeach
-                    </select>
+                <div class="filter-group" style="flex: 2; min-width: 280px;">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <label class="m-0">Product</label>
+                        <span id="productSelectCountBadge" class="badge bg-primary text-white" style="display:none; font-size:0.72rem; padding: 2px 7px; border-radius: 12px;">0 Selected</span>
+                    </div>
+                    <div class="product-selector-box">
+                        <button type="button" id="btnOpenProductModal" class="product-filter-btn form-control d-flex align-items-center justify-content-between text-start" style="height: auto; min-height: 32px; padding: 4px 10px; cursor: pointer;">
+                            <span id="productFilterText" class="text-truncate text-secondary" style="font-size: 0.8rem;">
+                                <i class="bi bi-boxes text-primary me-1"></i> — Select Product(s) / All —
+                            </span>
+                            <span class="btn-browse-badge">
+                                <i class="bi bi-search me-1"></i>Select Products
+                            </span>
+                        </button>
+                        <input type="hidden" id="sel_product_ids" value="">
+                        
+                        <!-- Selected Product Tags Tray -->
+                        <div id="selectedProductsTagTray" class="selected-tags-tray mt-1" style="display: none;">
+                            <div id="selectedProductsTags" class="d-flex flex-wrap gap-1"></div>
+                            <div class="d-flex justify-content-end mt-1">
+                                <button type="button" id="btnClearSelectedProducts" class="btn btn-link btn-sm text-danger p-0 text-decoration-none" style="font-size: 0.72rem;">
+                                    <i class="bi bi-trash3"></i> Clear Selected
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -750,6 +817,8 @@
         </div>
     </div>
 </div>
+
+@include('admin_panel.components.product_select_modal')
 @endsection
 
 @section('js')
@@ -776,14 +845,82 @@
     // ── Select2 ─────────────────────────────────────────────────────────────
     $(document).ready(function(){
         $('.select2-global').select2({ width: '100%' });
-        $('.select2-product').select2({
-            placeholder: '— Select Product —',
-            allowClear: true,
-            width: '100%'
-        });
     });
 
-    // ── Dynamic Dropdown Logic: Cat -> Sub -> Brand -> Product ──────────
+    // ── Product Selection Modal Logic ──────────────────────────────────────────
+    let selectedProductsMap = new Map();
+
+    function updateSelectedProductsUI() {
+        const ids = Array.from(selectedProductsMap.keys());
+        const count = ids.length;
+        
+        $('#sel_product_ids').val(ids.join(','));
+        
+        if (count === 0) {
+            $('#productFilterText').html('<i class="bi bi-boxes me-1 text-primary"></i> <span class="text-muted">— Select Product(s) / All —</span>');
+            $('#productSelectCountBadge').hide();
+            $('#selectedProductsTagTray').hide();
+            $('#selectedProductsTags').empty();
+        } else {
+            $('#productFilterText').html('<i class="bi bi-check2-circle me-1 text-success fw-bold"></i> <strong class="text-dark">' + count + ' Product' + (count > 1 ? 's' : '') + ' Selected</strong>');
+            $('#productSelectCountBadge').text(count + ' Selected').show();
+            
+            let tagsHtml = '';
+            selectedProductsMap.forEach((p, id) => {
+                const code = p.item_code || '';
+                const name = p.item_name || '';
+                const label = (code ? code + ' — ' : '') + name;
+                tagsHtml += `<span class="prod-chip" title="${escHtml(name)}">
+                    <span class="text-truncate" style="max-width: 220px;">${escHtml(label)}</span>
+                    <i class="bi bi-x-circle-fill chip-remove ms-1" data-id="${id}" title="Remove"></i>
+                </span>`;
+            });
+            
+            $('#selectedProductsTags').html(tagsHtml);
+            $('#selectedProductsTagTray').show();
+        }
+    }
+
+    $('#btnOpenProductModal').on('click', function(e) {
+        e.preventDefault();
+        const catId = $('#filterCategory').val();
+        const brandId = $('#filterBrand').val();
+
+        if (window.ERPProductModal) {
+            window.ERPProductModal.open({
+                singleSelect: false,
+                selectedIds: Array.from(selectedProductsMap.keys()),
+                categoryId: (catId && catId !== 'all') ? catId : '',
+                brandId: (brandId && brandId !== 'all') ? brandId : '',
+                onSelect: function(products) {
+                    selectedProductsMap.clear();
+                    if (Array.isArray(products)) {
+                        products.forEach(p => {
+                            if (p && p.id) {
+                                selectedProductsMap.set(parseInt(p.id), p);
+                            }
+                        });
+                    }
+                    updateSelectedProductsUI();
+                }
+            });
+        }
+    });
+
+    $(document).on('click', '.chip-remove', function(e) {
+        e.stopPropagation();
+        const id = parseInt($(this).data('id'));
+        selectedProductsMap.delete(id);
+        updateSelectedProductsUI();
+    });
+
+    $('#btnClearSelectedProducts').on('click', function(e) {
+        e.preventDefault();
+        selectedProductsMap.clear();
+        updateSelectedProductsUI();
+    });
+
+    // ── Dynamic Dropdown Logic: Cat -> Sub -> Brand ──────────
     function updateFilters() {
         var catId   = $('#filterCategory').val();
         var subId   = $('#filterSubCategory').val();
@@ -809,61 +946,8 @@
             subId = 'all';
         }
 
-        // 2. Build map of valid Brands and Products based on Cat/Sub selection
-        var validBrands = new Set();
-        var validProds  = new Set();
-
-        $('#sel_product option').each(function() {
-            var $opt = $(this);
-            if (!$opt.val()) return; // Skip placeholder
-
-            var pCat   = $opt.attr('data-cat');
-            var pSub   = $opt.attr('data-sub');
-            var pBrand = $opt.attr('data-brand');
-
-            // A product is valid if it matches Cat/Sub selection
-            var matchCat = (catId === 'all' || pCat == catId);
-            var matchSub = (subId === 'all' || pSub == subId);
-
-            if (matchCat && matchSub) {
-                if (pBrand) validBrands.add(pBrand);
-                
-                // Visible if matches brand selection
-                if (brandId === 'all' || pBrand == brandId) {
-                    validProds.add($opt.val());
-                }
-            }
-        });
-
-        // 3. Filter Brands based on validBrands set
-        $('#filterBrand option').each(function() {
-            var $opt = $(this);
-            if ($opt.val() === 'all') return;
-            if (validBrands.has($opt.val())) {
-                $opt.show().prop('disabled', false);
-            } else {
-                $opt.hide().prop('disabled', true);
-            }
-        });
-        // Reset Brand if no longer valid
-        if (brandId !== 'all' && !validBrands.has(brandId)) {
-            $('#filterBrand').val('all').trigger('change.select2');
-            brandId = 'all';
-        }
-
-        // 4. Filter Products based on validProds set
-        $('#sel_product option').each(function() {
-            var $opt = $(this);
-            if (!$opt.val()) return;
-            if (validProds.has($opt.val())) {
-                $opt.show().prop('disabled', false);
-            } else {
-                $opt.hide().prop('disabled', true);
-            }
-        });
-
-        // 5. Refresh Select2 state
-        $('.select2-global, .select2-product').trigger('change.select2');
+        // 2. Refresh Select2 state
+        $('.select2-global').trigger('change.select2');
     }
 
     // Bind change events
@@ -891,7 +975,8 @@
 
     // ── Reset ────────────────────────────────────────────────────────────────
     document.getElementById('btnReset').addEventListener('click', function(){
-        $('#sel_product').val('').trigger('change.select2');
+        selectedProductsMap.clear();
+        updateSelectedProductsUI();
         $('#filterCategory').val('all').trigger('change.select2');
         $('#filterSubCategory').val('all').trigger('change.select2');
         $('#filterBrand').val('all').trigger('change.select2');
@@ -907,9 +992,9 @@
         updateFilters();
     });
 
-        // ── Generate ────────────────────────────────────────────────────────────
+    // ── Generate ────────────────────────────────────────────────────────────
     document.getElementById('btnGenerate').addEventListener('click', function(){
-        const pids  = $('#sel_product').val();
+        const pids  = $('#sel_product_ids').val();
         const catId = document.getElementById('filterCategory').value;
         const subId = document.getElementById('filterSubCategory').value;
         const bndId = document.getElementById('filterBrand').value;
@@ -923,12 +1008,8 @@
         document.getElementById('pledResult').style.display  = 'none';
 
         const qs = new URLSearchParams({ start_date: sd, end_date: ed });
-        if (pids && pids.length > 0) {
-            if (Array.isArray(pids)) {
-                qs.set('product_id', pids.join(','));
-            } else {
-                qs.set('product_id', pids);
-            }
+        if (pids && pids.trim() !== '') {
+            qs.set('product_id', pids.trim());
         }
         if (catId && catId !== 'all') qs.set('category_id', catId);
         if (subId && subId !== 'all') qs.set('sub_category_id', subId);
@@ -1179,40 +1260,44 @@
 
     // ── Server-Side Excel Export ─────────────────────────────────────────────────────────
     document.getElementById('btnExportExcel')?.addEventListener('click', function() {
-        const product_id = document.getElementById('filterProduct').value;
-        const start_date = document.getElementById('filterStartDate').value;
-        const end_date = document.getElementById('filterEndDate').value;
+        const product_id = document.getElementById('sel_product_ids')?.value || '';
+        const start_date = document.getElementById('sel_start')?.value || '';
+        const end_date = document.getElementById('sel_end')?.value || '';
 
-        if (!product_id || !start_date || !end_date) {
-            Swal.fire('Warning', 'Please select a product and generate the ledger first.', 'warning');
-            return;
-        }
-
-        const params = new URLSearchParams({ product_id, start_date, end_date });
+        const params = new URLSearchParams({ start_date, end_date });
+        if (product_id) params.append('product_id', product_id);
+        const cat_id = document.getElementById('filterCategory')?.value;
+        const sub_id = document.getElementById('filterSubCategory')?.value;
+        const brand_id = document.getElementById('filterBrand')?.value;
         const branch_id = document.getElementById('filterBranch')?.value;
-        const warehouse_id = document.getElementById('filterWarehouse')?.value;
+        const warehouse_id = document.getElementById('sel_warehouse')?.value;
+        if (cat_id && cat_id !== 'all') params.append('category_id', cat_id);
+        if (sub_id && sub_id !== 'all') params.append('sub_category_id', sub_id);
+        if (brand_id && brand_id !== 'all') params.append('brand_id', brand_id);
         if (branch_id && branch_id !== 'all') params.append('branch_id', branch_id);
-        if (warehouse_id && warehouse_id !== 'all') params.append('warehouse_id', warehouse_id);
+        if (warehouse_id) params.append('warehouse_id', warehouse_id);
 
         window.location.href = `{{ route('report.product.ledger.export.excel') }}?${params}`;
     });
 
     // ── Server-Side PDF Export ─────────────────────────────────────────────────────────
     document.getElementById('btnExportPdf')?.addEventListener('click', function() {
-        const product_id = document.getElementById('filterProduct').value;
-        const start_date = document.getElementById('filterStartDate').value;
-        const end_date = document.getElementById('filterEndDate').value;
+        const product_id = document.getElementById('sel_product_ids')?.value || '';
+        const start_date = document.getElementById('sel_start')?.value || '';
+        const end_date = document.getElementById('sel_end')?.value || '';
 
-        if (!product_id || !start_date || !end_date) {
-            Swal.fire('Warning', 'Please select a product and generate the ledger first.', 'warning');
-            return;
-        }
-
-        const params = new URLSearchParams({ product_id, start_date, end_date });
+        const params = new URLSearchParams({ start_date, end_date });
+        if (product_id) params.append('product_id', product_id);
+        const cat_id = document.getElementById('filterCategory')?.value;
+        const sub_id = document.getElementById('filterSubCategory')?.value;
+        const brand_id = document.getElementById('filterBrand')?.value;
         const branch_id = document.getElementById('filterBranch')?.value;
-        const warehouse_id = document.getElementById('filterWarehouse')?.value;
+        const warehouse_id = document.getElementById('sel_warehouse')?.value;
+        if (cat_id && cat_id !== 'all') params.append('category_id', cat_id);
+        if (sub_id && sub_id !== 'all') params.append('sub_category_id', sub_id);
+        if (brand_id && brand_id !== 'all') params.append('brand_id', brand_id);
         if (branch_id && branch_id !== 'all') params.append('branch_id', branch_id);
-        if (warehouse_id && warehouse_id !== 'all') params.append('warehouse_id', warehouse_id);
+        if (warehouse_id) params.append('warehouse_id', warehouse_id);
 
         window.location.href = `{{ route('report.product.ledger.export.pdf') }}?${params}`;
     });

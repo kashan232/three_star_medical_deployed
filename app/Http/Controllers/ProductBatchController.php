@@ -55,9 +55,9 @@ class ProductBatchController extends Controller
             'rows'                   => 'required|array|min:1',
             'rows.*.product_id'      => 'required|exists:products,id',
             'rows.*.warehouse_id'    => 'required|exists:warehouses,id',
-            'rows.*.batch_number'    => 'required|string|max:100',
+            'rows.*.batch_number'    => 'nullable|string|max:100',
             'rows.*.mfg_date'        => 'nullable|date',
-            'rows.*.exp_date'        => 'required|date',
+            'rows.*.exp_date'        => 'nullable|date',
             'rows.*.qty'             => 'required|numeric|min:0.01',
         ]);
 
@@ -66,14 +66,22 @@ class ProductBatchController extends Controller
             foreach ($request->rows as $row) {
                 $batchBranchId = $branchId ?: (\App\Models\Warehouse::where('id', $row['warehouse_id'])->value('branch_id') ?: 1);
                 
+                $rawBatch = trim((string)($row['batch_number'] ?? ''));
+                $isNoBatch = !empty($row['is_no_batch']) || empty($rawBatch) || in_array(strtoupper($rawBatch), ['NO-BATCH', 'NO BATCH', 'DEFAULT', 'N/A', 'NONE']);
+                $batchNumber = $isNoBatch ? 'NO-BATCH' : $rawBatch;
+
+                $rawExp = trim((string)($row['exp_date'] ?? ''));
+                $isNoExp = !empty($row['is_no_expiry']) || empty($rawExp) || $rawExp === '2099-12-31';
+                $expDate = $isNoExp ? '2099-12-31' : $rawExp;
+
                 $batch = ProductBatch::create([
                     'product_id'      => $row['product_id'],
                     'warehouse_id'    => $row['warehouse_id'],
                     'branch_id'       => $batchBranchId,
                     'purchase_item_id' => null,
-                    'batch_number'    => $row['batch_number'],
-                    'mfg_date'        => $row['mfg_date'] ?? null,
-                    'exp_date'        => $row['exp_date'],
+                    'batch_number'    => $batchNumber,
+                    'mfg_date'        => !empty($row['mfg_date']) ? $row['mfg_date'] : null,
+                    'exp_date'        => $expDate,
                     'qty_received'    => $row['qty'],
                     'qty_remaining'   => $row['qty'],
                     'source_type'     => 'opening_stock',
@@ -90,13 +98,15 @@ class ProductBatchController extends Controller
                 );
 
                 // Insert into stock_movements ledger
+                $batchLabel = $isNoBatch ? 'No Batch' : "Batch: {$batchNumber}";
+                $expLabel = $isNoExp ? 'No Expiry' : "EXP: {$expDate}";
                 $movementData = [
                     'product_id' => $row['product_id'],
                     'type'       => 'in',
                     'qty'        => $row['qty'],
                     'ref_type'   => 'INIT',
                     'ref_id'     => $batch->id,
-                    'note'       => 'Opening stock batch entry (Batch: ' . $row['batch_number'] . ')',
+                    'note'       => "Opening stock batch entry ({$batchLabel}, {$expLabel})",
                     'created_at' => now(),
                     'updated_at' => now(),
                 ];
@@ -153,18 +163,20 @@ class ProductBatchController extends Controller
             $isNoExp = $b->exp_date && $b->exp_date->year >= 2090;
             $expDisp = $isNoExp ? 'No Expiry' : $b->exp_date->format('M Y');
             $expLabel = $isNoExp ? 'No Expiry' : $b->exp_date->format('d M Y');
+            $isNoBatch = in_array(strtoupper(trim((string)$b->batch_number)), ['NO-BATCH', 'NO BATCH', 'DEFAULT', 'N/A', 'NONE', '']);
+            $batchDisp = $isNoBatch ? 'No Batch' : "Batch {$b->batch_number}";
 
             return [
-            'id'            => $b->id,
-            'label'         => "Batch {$b->batch_number} | EXP: {$expDisp} | Qty: {$qtyStr}",
-            'batch_number'  => $b->batch_number,
-            'exp_date'      => $b->exp_date->format('Y-m-d'),
-            'exp_label'     => $expLabel,
-            'qty_remaining' => $b->qty_remaining,
-            'days_to_expiry' => $b->days_to_expiry,
-            'expiry_status' => $b->expiry_status,
-            'warehouse_id' => $b->warehouse_id,
-        ];
+                'id'            => $b->id,
+                'label'         => "{$batchDisp} | EXP: {$expDisp} | Qty: {$qtyStr}",
+                'batch_number'  => $isNoBatch ? 'No Batch' : $b->batch_number,
+                'exp_date'      => $b->exp_date ? $b->exp_date->format('Y-m-d') : '',
+                'exp_label'     => $expLabel,
+                'qty_remaining' => $b->qty_remaining,
+                'days_to_expiry'=> $b->days_to_expiry,
+                'expiry_status' => $b->expiry_status,
+                'warehouse_id'  => $b->warehouse_id,
+            ];
         }));
     }
 

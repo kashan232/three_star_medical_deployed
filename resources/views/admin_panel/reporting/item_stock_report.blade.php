@@ -562,6 +562,62 @@
             font-weight: 600;
         }
 
+        /* Product Filter Button & Tag Tray */
+        .product-filter-btn {
+            border-radius: 6px !important;
+            background-color: #f8fafc !important;
+            border: 1px solid #cbd5e1 !important;
+            transition: all 0.2s ease;
+        }
+        .product-filter-btn:hover, .product-filter-btn:focus {
+            border-color: #0ea5e9 !important;
+            background-color: #fff !important;
+            box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.15);
+        }
+        .btn-browse-badge {
+            background: #e0f2fe;
+            color: #0369a1;
+            border: 1px solid #bae6fd;
+            font-size: 0.72rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 6px;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+        }
+        .selected-tags-tray {
+            max-height: 120px;
+            overflow-y: auto;
+            background: #f8fafc;
+            padding: 6px 8px;
+            border-radius: 6px;
+            border: 1px dashed #cbd5e1;
+        }
+        .prod-chip {
+            background: #eff6ff;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
+            border-radius: 14px;
+            padding: 2px 8px;
+            font-size: 0.73rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 100%;
+        }
+        .prod-chip .chip-remove {
+            cursor: pointer;
+            color: #93c5fd;
+            font-size: 0.8rem;
+            line-height: 1;
+            transition: color 0.15s;
+        }
+        .prod-chip .chip-remove:hover {
+            color: #ef4444;
+        }
+
         @media(max-width:1000px) {
             .kpi-grid {
                 grid-template-columns: repeat(3, 1fr);
@@ -722,19 +778,32 @@
                                     @endforeach
                                 </select>
                             </div>
-                            <div class="filter-group" style="flex: 1; min-width: 150px; max-width: 350px;">
-                                <label>Product</label>
-                                <select id="product_id" class="form-control select2-product">
-                                    <option value="all">— All Products —</option>
-                                    @foreach ($products as $prod)
-                                        <option value="{{ $prod->id }}" 
-                                            data-cat="{{ $prod->category_id }}" 
-                                            data-sub="{{ $prod->sub_category_id }}" 
-                                            data-brand="{{ $prod->brand_id }}">
-                                            {{ $prod->item_code }} — {{ $prod->item_name }} {{ $prod->brand->name ?? '' }}
-                                        </option>
-                                    @endforeach
-                                </select>
+                                      <div class="filter-group" style="flex: 1; min-width: 220px; max-width: 350px;">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label class="m-0">Product</label>
+                                    <span id="productSelectCountBadge" class="badge bg-primary text-white" style="display:none; font-size:0.7rem; padding: 2px 6px; border-radius: 10px;">0 Selected</span>
+                                </div>
+                                <div class="product-selector-box">
+                                    <button type="button" id="btnOpenProductModal" class="product-filter-btn form-control d-flex align-items-center justify-content-between text-start" style="height: auto; min-height: 32px; padding: 4px 10px; cursor: pointer;">
+                                        <span id="productFilterText" class="text-truncate text-secondary" style="font-size: 0.8rem;">
+                                            <i class="bi bi-boxes text-primary me-1"></i> — All Products —
+                                        </span>
+                                        <span class="btn-browse-badge">
+                                            <i class="bi bi-search me-1"></i>Select
+                                        </span>
+                                    </button>
+                                    <input type="hidden" id="product_id" value="all">
+                                    
+                                    <!-- Selected Product Tags Tray -->
+                                    <div id="selectedProductsTagTray" class="selected-tags-tray mt-1" style="display: none;">
+                                        <div id="selectedProductsTags" class="d-flex flex-wrap gap-1"></div>
+                                        <div class="d-flex justify-content-end mt-1">
+                                            <button type="button" id="btnClearSelectedProducts" class="btn btn-link btn-sm text-danger p-0 text-decoration-none" style="font-size: 0.72rem;">
+                                                <i class="bi bi-trash3"></i> Clear
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                             <div class="filter-group" style="flex: 1; min-width: 150px;">
                                 <label>Location (Shop / Warehouse)</label>
@@ -897,17 +966,26 @@
             <div style="font-size:12px;font-weight:bold;margin-bottom:1px;">THREE STARS MEDICAL SUPPLIES</div>
             <div style="font-size:10px;line-height:1.65;margin-bottom:16px;">
                 <strong>{{ $activeBranch->name ?? 'Head Office' }} :</strong> {{ $activeBranch->address ?? 'M17-18 Mezanine Floor Seth Centre 10 Syed Mouj Darya Road (Edward Road) Lahore.' }}<br>
-                <strong>Phone :</strong> {{ $activeBranch->number ?? '0092-42-37353433' }}
-            </div>
-            <div style="font-size:19px;font-weight:bold;border-bottom:2px solid #000;padding-bottom:4px;margin-bottom:0;">Product Ledger</div>
-            <div id="pdfReportPeriod" style="text-align:right;font-size:10.5px;font-weight:bold;color:#1a56a0;margin-top:4px;margin-bottom:1px;">— — —</div>
-            <div style="display:flex;justify-content:space-between;font-size:10.5px;margin-bottom:6px;">
-                <span>Location : &nbsp;<strong>{{ strtoupper($activeBranch->name ?? 'Head Office') }}</strong></span>
-                <span id="pdfPageLabel"></span>
+        <div class="pdf-container">
+            <!-- Header matching old software -->
+            <div id="pdfHeader">
+                <div class="header-table">
+                    <div class="col-logo">
+                        <img src="{{ asset('admin_panel/assets/images/logo/logo.png') }}" style="max-height:45px;" alt="Logo">
+                    </div>
+                    <div class="col-center">
+                        <div class="main-title">THREE STAR MEDICAL SUPPLIES</div>
+                        <div class="sub-title">Product Stock Ledger</div>
+                    </div>
+                    <div class="col-meta" style="text-align:right;">
+                        <div>Page : &nbsp; 1 of 1</div>
+                        <div>Date Range: &nbsp; <span id="pdfDateRangeHeader"></span></div>
+                    </div>
+                </div>
             </div>
 
-            <!-- Main Table -->
-            <table id="pdfLedgerTable" style="width:100%;border-collapse:collapse;font-size:10.5px;">
+            <!-- Detail Table matching exact classic layout -->
+            <table class="pdf-table" id="pdfLedgerTable">
                 <thead>
                     <tr>
                         <th style="background:#4472c4;color:#fff;border:1px solid #2f569e;padding:3px 5px;text-align:left;font-weight:bold;width:30px;">SR #</th>
@@ -933,7 +1011,7 @@
         </div>
     </div>
 
-    </div>
+    @include('admin_panel.components.product_select_modal')
 @endsection
 
 @section('js')
@@ -957,11 +1035,84 @@
 
             // ── Select2 ─────────────────────────────────────────────────────────
             $('.select2-global').select2({ width: '100%', dropdownCssClass: 'select2-custom-dropdown' });
-            $('.select2-product').select2({
-                placeholder: '— All Products —',
-                allowClear: true,
-                width: '100%',
-                dropdownCssClass: 'select2-custom-dropdown'
+
+            // ── Product Selection Modal Logic ──────────────────────────────────────────
+            let selectedProductsMap = new Map();
+
+            function updateSelectedProductsUI() {
+                const ids = Array.from(selectedProductsMap.keys());
+                const count = ids.length;
+                
+                $('#product_id').val(count === 0 ? 'all' : ids.join(','));
+                
+                if (count === 0) {
+                    $('#productFilterText').html('<i class="bi bi-boxes me-1 text-primary"></i> <span class="text-muted">— All Products —</span>');
+                    $('#productSelectCountBadge').hide();
+                    $('#selectedProductsTagTray').hide();
+                    $('#selectedProductsTags').empty();
+                } else {
+                    $('#productFilterText').html('<i class="bi bi-check2-circle me-1 text-success fw-bold"></i> <strong class="text-dark">' + count + ' Product' + (count > 1 ? 's' : '') + ' Selected</strong>');
+                    $('#productSelectCountBadge').text(count + ' Selected').show();
+                    
+                    let tagsHtml = '';
+                    selectedProductsMap.forEach((p, id) => {
+                        const code = p.item_code || '';
+                        const name = p.item_name || '';
+                        const label = (code ? code + ' — ' : '') + name;
+                        tagsHtml += `<span class="prod-chip" title="${escHtml(name)}">
+                            <span class="text-truncate" style="max-width: 180px;">${escHtml(label)}</span>
+                            <i class="bi bi-x-circle-fill chip-remove ms-1" data-id="${id}" title="Remove"></i>
+                        </span>`;
+                    });
+                    
+                    $('#selectedProductsTags').html(tagsHtml);
+                    $('#selectedProductsTagTray').show();
+                }
+            }
+
+            function escHtml(str) {
+                const d = document.createElement('div');
+                d.appendChild(document.createTextNode(str || ''));
+                return d.innerHTML;
+            }
+
+            $('#btnOpenProductModal').on('click', function(e) {
+                e.preventDefault();
+                const catId = $('#filterCategory').val();
+                const brandId = $('#filterBrand').val();
+
+                if (window.ERPProductModal) {
+                    window.ERPProductModal.open({
+                        singleSelect: false,
+                        selectedIds: Array.from(selectedProductsMap.keys()),
+                        categoryId: (catId && catId !== 'all') ? catId : '',
+                        brandId: (brandId && brandId !== 'all') ? brandId : '',
+                        onSelect: function(products) {
+                            selectedProductsMap.clear();
+                            if (Array.isArray(products)) {
+                                products.forEach(p => {
+                                    if (p && p.id) {
+                                        selectedProductsMap.set(parseInt(p.id), p);
+                                    }
+                                });
+                            }
+                            updateSelectedProductsUI();
+                        }
+                    });
+                }
+            });
+
+            $(document).on('click', '.chip-remove', function(e) {
+                e.stopPropagation();
+                const id = parseInt($(this).data('id'));
+                selectedProductsMap.delete(id);
+                updateSelectedProductsUI();
+            });
+
+            $('#btnClearSelectedProducts').on('click', function(e) {
+                e.preventDefault();
+                selectedProductsMap.clear();
+                updateSelectedProductsUI();
             });
 
             // ── DataTable ────────────────────────────────────────────────────────
@@ -1518,8 +1669,11 @@
                 $('#end_date').val(todayStr);
                 $('#filterStatus').val('all');
 
+                // Reset Selected Products
+                selectedProductsMap.clear();
+                updateSelectedProductsUI();
+
                 // Reset Select2s
-                $('#product_id').val('all').trigger('change.select2');
                 $('#filterWarehouse').val('all').trigger('change.select2');
                 $('#filterCategory').val('all').trigger('change.select2');
                 $('#filterSubCategory').val('all').trigger('change.select2');
@@ -1543,7 +1697,7 @@
                 }
 
                 const params = new URLSearchParams({
-                    product_id: $('#filterProduct').val() || 'all',
+                    product_id: $('#product_id').val() || 'all',
                     category_id: $('#filterCategory').val() || 'all',
                     sub_category_id: $('#filterSubCategory').val() || 'all',
                     brand_id: $('#filterBrand').val() || 'all',
@@ -1567,7 +1721,7 @@
                 }
 
                 const params = new URLSearchParams({
-                    product_id: $('#filterProduct').val() || 'all',
+                    product_id: $('#product_id').val() || 'all',
                     category_id: $('#filterCategory').val() || 'all',
                     sub_category_id: $('#filterSubCategory').val() || 'all',
                     brand_id: $('#filterBrand').val() || 'all',

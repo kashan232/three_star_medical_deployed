@@ -52,7 +52,7 @@ Route::get('/', function () {
 // Employee Login Routes
 Route::get('employee-login', [\App\Http\Controllers\Hr\EmployeeLoginController::class, 'showLoginForm'])->name('employee.login');
 Route::post('employee-login', [\App\Http\Controllers\Hr\EmployeeLoginController::class, 'login'])->name('employee.login.submit');
-Route::post('employee-logout', [\App\Http\Controllers\Hr\EmployeeLoginController::class, 'logout'])->name('employee.logout');
+Route::match(['get', 'post'], 'employee-logout', [\App\Http\Controllers\Hr\EmployeeLoginController::class, 'logout'])->name('employee.logout');
 
 Route::get('/home', [HomeController::class, 'index'])->middleware('auth')->name('home');
 

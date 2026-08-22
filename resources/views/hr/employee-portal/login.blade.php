@@ -241,6 +241,11 @@
                     <i class="fas fa-exclamation-circle"></i>
                     <div>{{ $errors->first() }}</div>
                 </div>
+            @elseif(session('error'))
+                <div class="alert-error">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <div>{{ session('error') }}</div>
+                </div>
             @endif
 
             <form action="{{ route('employee.login.submit') }}" method="POST">

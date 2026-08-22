@@ -31,11 +31,13 @@ class EmployeeLoginController extends Controller
         $loginId = $request->login_id;
         $password = $request->password;
 
+        $user = null;
+
         // Try to authenticate using Email
         if (filter_var($loginId, FILTER_VALIDATE_EMAIL)) {
-            if (Auth::attempt(['email' => $loginId, 'password' => $password], $request->boolean('remember'))) {
-                $request->session()->regenerate();
-                return redirect()->intended(route('employee.portal.index'));
+            $candidate = User::where('email', $loginId)->first();
+            if ($candidate && Hash::check($password, $candidate->password)) {
+                $user = $candidate;
             }
         } else {
             // Treat as Phone Number
@@ -43,13 +45,39 @@ class EmployeeLoginController extends Controller
             $employee = Employee::where('phone', $loginId)->whereNotNull('user_id')->first();
             
             if ($employee) {
-                $user = User::find($employee->user_id);
-                if ($user && Hash::check($password, $user->password)) {
-                    Auth::login($user, $request->boolean('remember'));
-                    $request->session()->regenerate();
-                    return redirect()->intended(route('employee.portal.index'));
+                $candidate = User::find($employee->user_id);
+                if ($candidate && Hash::check($password, $candidate->password)) {
+                    $user = $candidate;
                 }
             }
+        }
+
+        if ($user) {
+            // Check if user/employee account is active
+            if (method_exists($user, 'isEmployeeActive') && ! $user->isEmployeeActive()) {
+                return back()->withErrors([
+                    'login_id' => 'Your account has been deactivated. Please contact HR department.',
+                ])->onlyInput('login_id');
+            }
+
+            // Check if branch is assigned (unless super admin)
+            if (! $user->isSuperAdmin()) {
+                if (! $user->branch_id || ! $user->branch) {
+                    return back()->withErrors([
+                        'login_id' => 'Contact to admin: No branch assigned.',
+                    ])->onlyInput('login_id');
+                }
+
+                if (! $user->branch->is_active) {
+                    return back()->withErrors([
+                        'login_id' => 'Your branch is inactive. Please contact the administrator.',
+                    ])->onlyInput('login_id');
+                }
+            }
+
+            Auth::login($user, $request->boolean('remember'));
+            $request->session()->regenerate();
+            return redirect()->intended(route('employee.portal.index'));
         }
 
         return back()->withErrors([

@@ -357,9 +357,16 @@ class ReportingController extends Controller
             // Normalise "all" to null
             $warehouseId = ($warehouseId && $warehouseId !== 'all') ? (int)$warehouseId : null;
 
-            // ── 1. Product base query ────────────────────────────────────────
-            $query = Product::with(['brand', 'category_relation', 'sub_category_relation', 'unit', 'packings']);
-            $query->when($productId && $productId !== 'all', fn($q) => $q->where('id', $productId));
+            $query->when($productId && $productId !== 'all', function ($q) use ($productId) {
+                if (is_array($productId)) {
+                    $q->whereIn('id', $productId);
+                } elseif (is_string($productId) && strpos($productId, ',') !== false) {
+                    $ids = array_filter(array_map('intval', explode(',', $productId)));
+                    $q->whereIn('id', $ids);
+                } else {
+                    $q->where('id', $productId);
+                }
+            });
             $query->when($catId    && $catId    !== 'all', fn($q) => $q->where('category_id',     $catId));
             $query->when($subId    && $subId    !== 'all', fn($q) => $q->where('sub_category_id', $subId));
             $query->when($brandId  && $brandId  !== 'all', fn($q) => $q->where('brand_id',        $brandId));

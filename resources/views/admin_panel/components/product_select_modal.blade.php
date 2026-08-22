@@ -206,6 +206,9 @@
             S.existingIds  = opts.existingIds  || [];
             S.targetRow    = opts.targetRow    || null;
             S.singleSelect = !!(opts.targetRow || opts.singleSelect);
+            S.categoryId   = (opts.categoryId && opts.categoryId !== 'all') ? opts.categoryId : '';
+            S.brandId      = (opts.brandId && opts.brandId !== 'all') ? opts.brandId : '';
+            S.query        = opts.query        || '';
             S.selected.clear();
 
             if (opts.selectedIds && Array.isArray(opts.selectedIds)) {
@@ -373,10 +376,9 @@
     function _open() {
         S.page = 1; S.hasMore = true; S.loading = false;
         S.selected.clear();
-        S.query = ''; S.categoryId = ''; S.brandId = '';
-        $('#psmSearchInput').val('');
-        $('#psmCategoryFilter').val('');
-        $('#psmBrandFilter').val('');
+        $('#psmSearchInput').val(S.query || '');
+        $('#psmCategoryFilter').val(S.categoryId || '');
+        $('#psmBrandFilter').val(S.brandId || '');
 
         // Set initial multi-import state
         // If opened for a specific row, default to single-select (multiImport = false)

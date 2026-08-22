@@ -147,13 +147,23 @@
                     <tbody>
                         @forelse ($batches as $batch)
                             <tr>
-                                <td><strong>{{ $batch->batch_number }}</strong></td>
+                                <td>
+                                    @if ($batch->is_no_batch)
+                                        <span class="badge bg-secondary-subtle text-secondary fw-semibold">No Batch</span>
+                                    @else
+                                        <strong>{{ $batch->batch_number }}</strong>
+                                    @endif
+                                </td>
                                 <td>{{ $batch->mfg_date ? $batch->mfg_date->format('d M Y') : '—' }}</td>
                                 <td>
-                                    {{ $batch->exp_date->format('d M Y') }}
-                                    @php $days = $batch->days_to_expiry @endphp
-                                    @if ($days >= 0)
-                                        <small class="text-muted">({{ $days }}d)</small>
+                                    @if ($batch->is_non_expiring)
+                                        <span class="badge bg-success-subtle text-success fw-semibold">♾️ No Expiry</span>
+                                    @else
+                                        {{ $batch->exp_date->format('d M Y') }}
+                                        @php $days = $batch->days_to_expiry @endphp
+                                        @if ($days >= 0)
+                                            <small class="text-muted">({{ $days }}d)</small>
+                                        @endif
                                     @endif
                                 </td>
                                 <td>{{ $batch->warehouse->warehouse_name ?? '—' }}</td>
@@ -164,7 +174,7 @@
                                 </td>
                                 <td>
                                     <span class="badge {{ $batch->expiry_badge_class }} badge-exp">
-                                        {{ ucfirst($batch->expiry_status) }}
+                                        {{ $batch->is_non_expiring ? 'No Expiry' : ucfirst($batch->expiry_status) }}
                                     </span>
                                 </td>
                             </tr>

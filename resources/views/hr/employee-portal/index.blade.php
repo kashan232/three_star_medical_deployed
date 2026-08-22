@@ -483,6 +483,327 @@
             border-radius: 50%;
             animation: spin 0.8s linear infinite;
         }
+
+        /* ═══════════════════════════════════════════
+           HEADER ACTIONS & PROFILE DROPDOWN
+        ═══════════════════════════════════════════ */
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .emp-info-wrap {
+            position: relative;
+        }
+        .portal-header .emp-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 24px;
+            transition: all 0.2s ease;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .portal-header .emp-info:hover {
+            background: rgba(255, 255, 255, 0.09);
+            border-color: var(--border-glow);
+        }
+        .emp-dropdown-icon {
+            font-size: 10px;
+            color: var(--muted);
+            transition: transform 0.2s ease;
+            margin-left: 2px;
+        }
+        .emp-info-wrap.open .emp-dropdown-icon {
+            transform: rotate(180deg);
+        }
+
+        .btn-logout-header {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 14px;
+            background: rgba(239, 68, 68, 0.12);
+            border: 1px solid rgba(239, 68, 68, 0.35);
+            color: #fca5a5;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+        .btn-logout-header:hover {
+            background: rgba(239, 68, 68, 0.25);
+            border-color: #ef4444;
+            color: #ffffff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+        }
+        .btn-logout-header i {
+            font-size: 12px;
+            color: #ef4444;
+            transition: color 0.2s;
+        }
+        .btn-logout-header:hover i {
+            color: #fff;
+        }
+        @media (max-width: 440px) {
+            .btn-logout-header .logout-text { display: none; }
+            .btn-logout-header { padding: 8px 10px; }
+            .portal-header .emp-dept-sm { display: none; }
+        }
+
+        /* Profile Dropdown */
+        .profile-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            width: 250px;
+            background: rgba(18, 18, 36, 0.98);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+            padding: 14px;
+            z-index: 150;
+            display: none;
+        }
+        .profile-dropdown-menu.show {
+            display: block;
+            animation: dropDownSlide 0.2s ease;
+        }
+        @keyframes dropDownSlide {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .profile-dropdown-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 8px;
+        }
+        .profile-dropdown-avatar {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--purple), var(--blue));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .profile-dropdown-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 170px;
+        }
+        .profile-dropdown-role {
+            font-size: 11px;
+            color: var(--muted);
+            margin-top: 2px;
+        }
+        .profile-dropdown-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .profile-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-radius: var(--radius-sm);
+            color: var(--text);
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            background: transparent;
+            border: none;
+            width: 100%;
+            text-align: left;
+        }
+        .profile-dropdown-item:hover {
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+        }
+        .profile-dropdown-item.item-logout {
+            color: #fca5a5;
+            margin-top: 4px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            padding-top: 10px;
+        }
+        .profile-dropdown-item.item-logout:hover {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ef4444;
+        }
+        .profile-dropdown-backdrop {
+            position: fixed;
+            inset: 0;
+            z-index: 140;
+            display: none;
+        }
+        .profile-dropdown-backdrop.show {
+            display: block;
+        }
+
+        /* Profile Tab Section */
+        .profile-hero-card {
+            text-align: center;
+            padding: 24px 20px;
+        }
+        .profile-hero-avatar {
+            width: 68px;
+            height: 68px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--purple), var(--blue));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 24px;
+            margin: 0 auto 12px;
+            box-shadow: 0 8px 24px rgba(108, 99, 255, 0.35);
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+        .profile-hero-name {
+            font-size: 18px;
+            font-weight: 700;
+        }
+        .profile-hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 8px;
+            padding: 4px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            background: rgba(108,99,255,0.15);
+            border: 1px solid rgba(108,99,255,0.35);
+            color: var(--purple-light);
+        }
+        .profile-info-list {
+            display: flex;
+            flex-direction: column;
+        }
+        .profile-info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            font-size: 13px;
+        }
+        .profile-info-row:last-child {
+            border-bottom: none;
+        }
+        .profile-info-label {
+            color: var(--muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .profile-info-label i {
+            width: 16px;
+            text-align: center;
+            color: var(--purple-light);
+        }
+        .profile-info-val {
+            font-weight: 600;
+            color: var(--text);
+            text-align: right;
+        }
+        .btn-erp-switch {
+            width: 100%;
+            padding: 12px 18px;
+            background: rgba(59, 130, 246, 0.15);
+            border: 1px solid rgba(59, 130, 246, 0.4);
+            color: #93c5fd;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .btn-erp-switch:hover {
+            background: rgba(59, 130, 246, 0.25);
+            border-color: #3b82f6;
+            color: #fff;
+        }
+        .btn-logout-full {
+            width: 100%;
+            padding: 14px 20px;
+            background: linear-gradient(135deg, rgba(239,68,68,0.2), rgba(220,38,38,0.35));
+            border: 1px solid rgba(239,68,68,0.5);
+            color: #fff;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.25s ease;
+            box-shadow: 0 4px 16px rgba(239,68,68,0.2);
+        }
+        .btn-logout-full:hover {
+            background: linear-gradient(135deg, rgba(239,68,68,0.35), rgba(220,38,38,0.55));
+            border-color: #ef4444;
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(239,68,68,0.35);
+        }
+
+        /* SweetAlert2 Custom Dark Theme */
+        div:where(.swal2-container).swal2-backdrop-show {
+            background: rgba(13, 13, 26, 0.78) !important;
+            backdrop-filter: blur(8px) !important;
+        }
+        .swal2-popup.swal2-dark-card {
+            background: #151528 !important;
+            border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-radius: 22px !important;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.75) !important;
+            padding: 24px !important;
+        }
+        .swal2-popup.swal2-dark-card .swal2-title {
+            color: #fff !important;
+            font-size: 20px !important;
+            font-weight: 700 !important;
+        }
+        .swal2-popup.swal2-dark-card .swal2-html-container {
+            color: var(--muted) !important;
+            font-size: 13px !important;
+            line-height: 1.5 !important;
+        }
+        .swal2-popup.swal2-dark-card .swal2-actions {
+            gap: 10px !important;
+            margin-top: 20px !important;
+        }
+        .swal2-popup.swal2-dark-card .swal2-styled {
+            border-radius: 12px !important;
+            padding: 10px 22px !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+        }
     </style>
 </head>
 <body>
@@ -495,16 +816,57 @@
 <!-- TOP HEADER -->
 <header class="portal-header">
     <div class="logo"><i class="fas fa-star"></i> Three Star</div>
-    <div class="emp-info">
-        <div>
-            <div class="emp-name-sm">{{ $employee->full_name ?? $employee->first_name.' '.$employee->last_name }}</div>
-            <div class="emp-dept-sm">{{ $employee->designation->name ?? 'Employee' }}</div>
+    <div class="header-actions">
+        <div class="emp-info-wrap" id="empInfoWrap">
+            <div class="emp-info" onclick="toggleProfileDropdown()" title="Account Menu">
+                <div>
+                    <div class="emp-name-sm">{{ $employee->full_name ?? $employee->first_name.' '.$employee->last_name }}</div>
+                    <div class="emp-dept-sm">{{ $employee->designation->name ?? 'Employee' }}</div>
+                </div>
+                <div class="emp-avatar">
+                    {{ strtoupper(substr($employee->first_name ?? 'E', 0, 1)) }}{{ strtoupper(substr($employee->last_name ?? '', 0, 1)) }}
+                </div>
+                <i class="fas fa-chevron-down emp-dropdown-icon"></i>
+            </div>
+
+            <!-- Profile Dropdown Menu -->
+            <div class="profile-dropdown-menu" id="profileDropdown">
+                <div class="profile-dropdown-header">
+                    <div class="profile-dropdown-avatar">
+                        {{ strtoupper(substr($employee->first_name ?? 'E', 0, 1)) }}{{ strtoupper(substr($employee->last_name ?? '', 0, 1)) }}
+                    </div>
+                    <div>
+                        <div class="profile-dropdown-name">{{ $employee->full_name ?? $employee->first_name.' '.$employee->last_name }}</div>
+                        <div class="profile-dropdown-role">{{ $employee->designation->name ?? 'Employee' }}</div>
+                    </div>
+                </div>
+                <div class="profile-dropdown-list">
+                    <button type="button" class="profile-dropdown-item" onclick="switchTab('profile'); closeProfileDropdown();">
+                        <i class="fas fa-user-circle" style="color:var(--purple-light);"></i>
+                        <span>My Profile</span>
+                    </button>
+                    @if(auth()->check() && (auth()->user()->role === 'super_admin' || auth()->user()->role === 'admin' || (method_exists(auth()->user(), 'roles') && auth()->user()->roles()->count() > 0)))
+                    <a href="{{ url('/home') }}" class="profile-dropdown-item">
+                        <i class="fas fa-desktop" style="color:var(--blue);"></i>
+                        <span>ERP Dashboard</span>
+                    </a>
+                    @endif
+                    <button type="button" class="profile-dropdown-item item-logout" onclick="closeProfileDropdown(); confirmLogout();">
+                        <i class="fas fa-arrow-right-from-bracket" style="color:#ef4444;"></i>
+                        <span>Log Out</span>
+                    </button>
+                </div>
+            </div>
         </div>
-        <div class="emp-avatar">
-            {{ strtoupper(substr($employee->first_name ?? 'E', 0, 1)) }}{{ strtoupper(substr($employee->last_name ?? '', 0, 1)) }}
-        </div>
+
+        <!-- Quick Header Logout Button -->
+        <button type="button" class="btn-logout-header" onclick="confirmLogout()" title="Log Out">
+            <i class="fas fa-arrow-right-from-bracket"></i>
+            <span class="logout-text">Logout</span>
+        </button>
     </div>
 </header>
+<div class="profile-dropdown-backdrop" id="dropdownBackdrop" onclick="closeProfileDropdown()"></div>
 
 <!-- MAIN BODY -->
 <div class="portal-body">
@@ -759,7 +1121,108 @@
         </div>
     </div>
 
+    <!-- ══════════════ SECTION: PROFILE ══════════════ -->
+    <div class="portal-section" id="section-profile">
+        <div class="greeting-strip">
+            <div class="greeting">My Profile</div>
+            <div class="subline">Account & employment details</div>
+        </div>
+
+        <!-- Profile Hero Card -->
+        <div class="glass-card profile-hero-card">
+            <div class="profile-hero-avatar">
+                {{ strtoupper(substr($employee->first_name ?? 'E', 0, 1)) }}{{ strtoupper(substr($employee->last_name ?? '', 0, 1)) }}
+            </div>
+            <div class="profile-hero-name">{{ $employee->full_name ?? $employee->first_name.' '.$employee->last_name }}</div>
+            <div class="profile-hero-badge">
+                <i class="fas fa-shield-alt"></i> {{ $employee->designation->name ?? 'Employee' }}
+            </div>
+            <div style="font-size:12px;color:var(--muted);margin-top:6px;">
+                {{ $employee->department->name ?? 'General Department' }}
+            </div>
+        </div>
+
+        <!-- Employee Info Card -->
+        <div class="glass-card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="card-icon icon-purple"><i class="fas fa-id-card"></i></div>
+                    Employment Info
+                </div>
+            </div>
+            <div class="profile-info-list">
+                @if($employee->id)
+                <div class="profile-info-row">
+                    <span class="profile-info-label"><i class="fas fa-hashtag"></i> Employee ID</span>
+                    <span class="profile-info-val">#EMP-{{ str_pad($employee->id, 4, '0', STR_PAD_LEFT) }}</span>
+                </div>
+                @endif
+                @if($employee->phone)
+                <div class="profile-info-row">
+                    <span class="profile-info-label"><i class="fas fa-phone-alt"></i> Phone</span>
+                    <span class="profile-info-val">{{ $employee->phone }}</span>
+                </div>
+                @endif
+                @if($employee->email)
+                <div class="profile-info-row">
+                    <span class="profile-info-label"><i class="fas fa-envelope"></i> Email</span>
+                    <span class="profile-info-val">{{ $employee->email }}</span>
+                </div>
+                @endif
+                @if($employee->joining_date)
+                <div class="profile-info-row">
+                    <span class="profile-info-label"><i class="fas fa-calendar-check"></i> Joining Date</span>
+                    <span class="profile-info-val">{{ \Carbon\Carbon::parse($employee->joining_date)->format('d M Y') }}</span>
+                </div>
+                @endif
+                @if($employee->custom_start_time && $employee->custom_end_time)
+                <div class="profile-info-row">
+                    <span class="profile-info-label"><i class="fas fa-clock"></i> Shift Timings</span>
+                    <span class="profile-info-val">{{ \Carbon\Carbon::parse($employee->custom_start_time)->format('h:i A') }} - {{ \Carbon\Carbon::parse($employee->custom_end_time)->format('h:i A') }}</span>
+                </div>
+                @endif
+                @if($employee->status)
+                <div class="profile-info-row">
+                    <span class="profile-info-label"><i class="fas fa-user-check"></i> Status</span>
+                    <span class="profile-info-val" style="color:var(--green-light);text-transform:capitalize;">
+                        <i class="fas fa-circle" style="font-size:8px;vertical-align:middle;margin-right:4px;"></i>{{ $employee->status }}
+                    </span>
+                </div>
+                @endif
+            </div>
+        </div>
+
+        <!-- Quick Access & Logout Card -->
+        <div class="glass-card">
+            <div class="card-header">
+                <div class="card-title">
+                    <div class="card-icon icon-red"><i class="fas fa-cog"></i></div>
+                    Account Actions
+                </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column;gap:12px;">
+                @if(auth()->check() && (auth()->user()->role === 'super_admin' || auth()->user()->role === 'admin' || (method_exists(auth()->user(), 'roles') && auth()->user()->roles()->count() > 0)))
+                <a href="{{ url('/home') }}" class="btn-erp-switch">
+                    <i class="fas fa-desktop"></i>
+                    <span>Switch to ERP Admin Panel</span>
+                </a>
+                @endif
+
+                <button type="button" class="btn-logout-full" onclick="confirmLogout()">
+                    <i class="fas fa-arrow-right-from-bracket"></i>
+                    <span>Log Out from Account</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
 </div><!-- end portal-body -->
+
+<!-- HIDDEN LOGOUT FORM -->
+<form id="employeeLogoutForm" method="POST" action="{{ route('employee.logout') }}" style="display:none;">
+    @csrf
+</form>
 
 <!-- BOTTOM NAV -->
 <nav class="bottom-nav">
@@ -778,6 +1241,10 @@
     <button class="nav-btn" id="nav-loans" onclick="switchTab('loans')">
         <i class="fas fa-hand-holding-usd"></i>
         <span>Loans</span>
+    </button>
+    <button class="nav-btn" id="nav-profile" onclick="switchTab('profile')">
+        <i class="fas fa-user-circle"></i>
+        <span>Profile</span>
     </button>
 </nav>
 
@@ -1223,6 +1690,58 @@ async function loadLoans() {
                 <div class="empty-state"><i class="fas fa-exclamation-triangle"></i><p>Could not load loan data.</p></div>
             </div>`;
     }
+}
+
+// ═══════════════════════════════════════════
+//   PROFILE DROPDOWN & LOGOUT
+// ═══════════════════════════════════════════
+function toggleProfileDropdown() {
+    const wrap = document.getElementById('empInfoWrap');
+    const dropdown = document.getElementById('profileDropdown');
+    const backdrop = document.getElementById('dropdownBackdrop');
+    const isOpen = dropdown.classList.contains('show');
+
+    if (isOpen) {
+        closeProfileDropdown();
+    } else {
+        dropdown.classList.add('show');
+        backdrop.classList.add('show');
+        wrap.classList.add('open');
+    }
+}
+
+function closeProfileDropdown() {
+    const wrap = document.getElementById('empInfoWrap');
+    const dropdown = document.getElementById('profileDropdown');
+    const backdrop = document.getElementById('dropdownBackdrop');
+    if (dropdown) dropdown.classList.remove('show');
+    if (backdrop) backdrop.classList.remove('show');
+    if (wrap) wrap.classList.remove('open');
+}
+
+function confirmLogout() {
+    Swal.fire({
+        title: 'Log Out?',
+        text: 'Are you sure you want to log out from your account?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        cancelButtonColor: '#334155',
+        confirmButtonText: '<i class="fas fa-arrow-right-from-bracket"></i> Yes, Log Out',
+        cancelButtonText: 'Cancel',
+        background: '#151528',
+        color: '#f1f5f9',
+        iconColor: '#ef4444',
+        reverseButtons: true,
+        customClass: {
+            popup: 'swal2-dark-card',
+            confirmButton: 'swal2-danger-btn'
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            document.getElementById('employeeLogoutForm').submit();
+        }
+    });
 }
 
 // ═══════════════════════════════════════════

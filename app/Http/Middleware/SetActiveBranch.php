@@ -34,6 +34,12 @@ class SetActiveBranch
                 if (! $user->branch_id) {
                     auth()->logout();
 
+                    $isEmployeeRequest = $request->is('employee/*') || $request->is('employee-login') || $request->is('employee-logout') || $request->is('my-attendance*') || $user->employee;
+                    if ($isEmployeeRequest) {
+                        return redirect()->route('employee.login')
+                            ->withErrors(['login_id' => 'Contact to admin: No branch assigned.']);
+                    }
+
                     return redirect()->route('login')
                         ->withErrors(['email' => 'Your account is not assigned to any branch. Please contact the administrator.']);
                 }
@@ -42,6 +48,12 @@ class SetActiveBranch
 
                 if (! $branch || ! $branch->is_active) {
                     auth()->logout();
+
+                    $isEmployeeRequest = $request->is('employee/*') || $request->is('employee-login') || $request->is('employee-logout') || $request->is('my-attendance*') || $user->employee;
+                    if ($isEmployeeRequest) {
+                        return redirect()->route('employee.login')
+                            ->withErrors(['login_id' => 'Your branch is inactive. Please contact the administrator.']);
+                    }
 
                     return redirect()->route('login')
                         ->withErrors(['email' => 'Your branch is inactive. Please contact the administrator.']);

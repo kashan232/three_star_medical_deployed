@@ -290,6 +290,13 @@ class SalaryStructureController extends Controller
 
             $salaryStructure->update($updateData);
 
+            // Cascade update all assigned employee copies linked to this template
+            if ($hasAssignments || $salaryStructure->children()->exists()) {
+                foreach ($salaryStructure->children as $child) {
+                    $child->update($updateData);
+                }
+            }
+
             DB::commit();
 
             return response()->json([

@@ -17,7 +17,17 @@
         <div class="icon">👤</div>
         <h2>No Employee Profile</h2>
         <p>Your account is not linked to an employee record. Please contact HR to set up your profile.</p>
-        <a href="{{ url('/home') }}" style="display:inline-block;margin-top:20px;padding:10px 24px;background:#6c63ff;color:#fff;border-radius:10px;text-decoration:none;">Go to Dashboard</a>
+        <div style="display:flex;gap:12px;justify-content:center;margin-top:24px;flex-wrap:wrap;">
+            <a href="{{ url('/home') }}" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:#6c63ff;color:#fff;border-radius:10px;text-decoration:none;font-weight:600;font-size:14px;">
+                Dashboard
+            </a>
+            <form method="POST" action="{{ route('employee.logout') }}" style="display:inline;">
+                @csrf
+                <button type="submit" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.4);color:#ef4444;border-radius:10px;cursor:pointer;font-weight:600;font-size:14px;">
+                    Log Out
+                </button>
+            </form>
+        </div>
     </div>
 </body>
 </html>

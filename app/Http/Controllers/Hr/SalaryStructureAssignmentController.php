@@ -139,31 +139,31 @@ class SalaryStructureAssignmentController extends Controller
                     continue;
                 }
 
-                // Check if already assigned to THIS structure (via child copy)
-                $existingAssignment = SalaryStructure::where('employee_id', $employeeId)
-                    ->where('parent_structure_id', $salaryStructure->id)
-                    ->exists();
-
-                if ($existingAssignment) {
-                    $skipped[] = [
-                        'id' => $employeeId,
-                        'name' => $employee->full_name,
-                        'reason' => 'This employee already has this salary structure assigned',
-                    ];
-                    continue;
-                }
-
-                // Create new assignment (Clone Structure)
                 $newStructureData = $salaryStructure->toArray();
-                // Remove ID and timestamps to create clean copy
                 unset($newStructureData['id'], $newStructureData['created_at'], $newStructureData['updated_at']);
-                
                 $newStructureData['employee_id'] = $employeeId;
                 $newStructureData['parent_structure_id'] = $salaryStructure->id;
                 $newStructureData['effective_date'] = $startDate;
-                
-                SalaryStructure::create($newStructureData);
 
+                // Check if already assigned to THIS structure (via child copy)
+                $existingAssignment = SalaryStructure::where('employee_id', $employeeId)
+                    ->where('parent_structure_id', $salaryStructure->id)
+                    ->first();
+
+                if ($existingAssignment) {
+                    $existingAssignment->update($newStructureData);
+                    $assigned++;
+                    continue;
+                }
+
+                // If assigned to a different structure, remove older assignments for this employee
+                $hadPrevious = SalaryStructure::where('employee_id', $employeeId)->exists();
+                if ($hadPrevious) {
+                    SalaryStructure::where('employee_id', $employeeId)->delete();
+                    $replaced++;
+                }
+
+                SalaryStructure::create($newStructureData);
                 $assigned++;
             }
 

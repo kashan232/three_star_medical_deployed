@@ -779,12 +779,13 @@ class PayrollController extends Controller
         
         /** @var Employee $employee */
         foreach ($employees as $employee) {
-            $exists = Payroll::where('employee_id', $employee->id)
+            $existsPaid = Payroll::where('employee_id', $employee->id)
                 ->where('month', $request->month)
                 ->where('payroll_type', 'monthly')
+                ->where('status', 'paid')
                 ->exists();
 
-            if ($exists) {
+            if ($existsPaid) {
                 continue;
             }
 

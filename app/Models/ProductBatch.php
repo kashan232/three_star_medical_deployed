@@ -97,6 +97,17 @@ class ProductBatch extends Model
         return 'ok';
     }
 
+    public function getIsNoBatchAttribute(): bool
+    {
+        $b = strtoupper(trim($this->batch_number ?? ''));
+        return in_array($b, ['NO-BATCH', 'NO BATCH', 'DEFAULT', 'N/A', 'NONE', '']);
+    }
+
+    public function getFormattedBatchNumberAttribute(): string
+    {
+        return $this->is_no_batch ? 'No Batch' : ($this->batch_number ?? 'No Batch');
+    }
+
     public function getExpiryBadgeClassAttribute(): string
     {
         return match ($this->expiry_status) {
