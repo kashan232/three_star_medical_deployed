@@ -1706,20 +1706,9 @@ class VoucherController extends Controller
         return view('admin_panel.vochers.expense_vochers.print', compact('voucher', 'rows', 'party', 'previousBalance'));
     }
 
-    public function journal_voucher()
+    public function journal_voucher(Request $request)
     {
-        $AccountHeads = AccountHead::all();
-
-        // Only show accounts that are properly in the COA (have a head/category assigned)
-        $accounts = Account::with('head')
-            ->where('status', 1)
-            ->whereNotNull('head_id')
-            ->get();
-
-        $lastId   = \App\Models\VoucherMaster::where('voucher_type', 'journal')->max('id') ?? 0;
-        $nextJVID = 'JVID-' . str_pad($lastId + 1, 4, '0', STR_PAD_LEFT);
-
-        return view('admin_panel.vochers.journal_voucher', compact('AccountHeads', 'accounts', 'nextJVID'));
+        return redirect()->route('vouchers.create_page', ['type' => 'jv']);
     }
 
     public function store_journal_voucher(Request $request)
@@ -1792,5 +1781,526 @@ class VoucherController extends Controller
         return response()->json([
             'accounts' => $accounts,
         ]);
+    }
+
+    // =========================================================================
+    // UNIFIED ERP VOUCHERS: CRV, BRV, CPV, BPV, JV
+    // =========================================================================
+
+    public function voucherList($type = 'all')
+    {
+        $branchId = $this->getBranchId();
+        $query = \App\Models\VoucherMaster::with(['details.account', 'party', 'createdBy', 'modifiedBy'])
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->orderByDesc('id');
+
+        if ($type !== 'all') {
+            $mappedTypes = match(strtolower($type)) {
+                'crv' => ['crv', 'receipt'],
+                'brv' => ['brv'],
+                'cpv' => ['cpv', 'payment', 'expense'],
+                'bpv' => ['bpv'],
+                'jv'  => ['jv', 'journal'],
+                default => [$type],
+            };
+            $query->whereIn('voucher_type', $mappedTypes);
+        }
+
+        $vouchers = $query->get();
+        $currentType = strtolower($type);
+
+        return view('admin_panel.vochers.unified_index', compact('vouchers', 'currentType'));
+    }
+
+    public function createVoucherPage($type = 'crv')
+    {
+        $branchId = $this->getBranchId();
+        $type = strtolower($type);
+
+        // Fetch Cash Accounts (1-02-040)
+        $cashAccounts = Account::where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->where(function($q) {
+                $q->where('account_code', 'like', '1-02-040%')
+                  ->orWhere('title', 'like', '%Cash%');
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->get();
+
+        // Fetch Bank Accounts (1-02-052)
+        $bankAccounts = Account::where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->where(function($q) {
+                $q->where('account_code', 'like', '1-02-052%')
+                  ->orWhere('title', 'like', '%Bank%');
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->get();
+
+        // Fetch Expense Accounts (5-01, 5-02)
+        $expenseAccounts = Account::where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->where(function($q) {
+                $q->where('account_code', 'like', '5-%')
+                  ->orWhereHas('head', fn($h) => $h->where('type', 'Expense')->orWhere('name', 'like', '%Expense%'));
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->get();
+
+        // Fetch Customers & Vendors (Active Only)
+        $customers = Customer::where(function($q) {
+                $q->whereNull('status')->orWhere('status', 1)->orWhere('status', 'active');
+            })
+            ->where(function($q) {
+                $q->whereNull('is_active')->orWhere('is_active', 1);
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->orderBy('customer_name')
+            ->get();
+
+        $vendors = Vendor::where(function($q) {
+                $q->whereNull('is_active')->orWhere('is_active', 1);
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->orderBy('name')
+            ->get();
+
+        // Fetch All Accounts (Active Only)
+        $allAccounts = Account::with('head')
+            ->where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->orderBy('title')
+            ->get();
+
+        $isSuperAdmin = auth()->check() && (auth()->user()->usertype === 'super_admin' || auth()->user()->hasRole('Super Admin') || (method_exists(auth()->user(), 'isSuperAdmin') && auth()->user()->isSuperAdmin()));
+        $branches = $isSuperAdmin ? \App\Models\Branch::all() : [];
+        $userBranch = auth()->user()?->branch ?? \App\Models\Branch::find($branchId ?? 1);
+
+        return view('admin_panel.vochers.unified_create', compact(
+            'type', 'cashAccounts', 'bankAccounts', 'expenseAccounts', 'customers', 'vendors', 'allAccounts',
+            'branches', 'isSuperAdmin', 'userBranch'
+        ));
+    }
+
+    public function storeVoucherAction(Request $request, $type)
+    {
+        $selectedBranchId = $request->branch_id ?? $this->getBranchId() ?? 1;
+        $branchId = (int)$selectedBranchId;
+        $branch = \App\Models\Branch::find($branchId);
+        $locationName = $branch ? $branch->name : ($request->location ?? 'HEAD OFFICE');
+        $type = strtolower($type);
+        $voucherService = app(\App\Services\VoucherService::class);
+        $balanceService = app(\App\Services\BalanceService::class);
+
+        $firstAccountId = Account::first()?->id ?? 1;
+        $arAccountId = $balanceService->getAccountsReceivableId($branchId) ?: $firstAccountId;
+        $apAccountId = $balanceService->getAccountsPayableId($branchId) ?: $firstAccountId;
+
+        $headerData = [
+            'voucher_type' => $type,
+            'date'         => $request->date ?? date('Y-m-d'),
+            'location'     => $locationName,
+            'cheque_no'    => $request->cheque_no ?? null,
+            'cheque_date'  => $request->cheque_date ?? null,
+            'remarks'      => $request->remarks,
+            'branch_id'    => $branchId,
+            'status'       => 'posted',
+        ];
+
+        $lines = [];
+
+        if ($type === 'crv') {
+            $amount = (float)$request->amount;
+            $partyType = $request->party_type ?? 'customer';
+            $targetStr = $request->party_id ?? $request->customer_id ?? '';
+
+            if ($partyType === 'vendor' || str_starts_with((string)$targetStr, 'vendor_')) {
+                $vId = (int)str_replace('vendor_', '', (string)$targetStr);
+                $headerData['party_type'] = Vendor::class;
+                $headerData['party_id']   = $vId;
+                $creditAccountId          = $apAccountId;
+            } else {
+                $cId = (int)str_replace('customer_', '', (string)$targetStr);
+                $headerData['party_type'] = Customer::class;
+                $headerData['party_id']   = $cId;
+                $creditAccountId          = $arAccountId;
+            }
+
+            $lines[] = [
+                'account_id' => $request->cash_account_id,
+                'debit'      => $amount,
+                'credit'     => 0,
+                'narration'  => $request->line_narration ?? $request->remarks,
+            ];
+            $lines[] = [
+                'account_id' => $creditAccountId,
+                'party_type' => $headerData['party_type'],
+                'party_id'   => $headerData['party_id'],
+                'debit'      => 0,
+                'credit'     => $amount,
+                'narration'  => $request->line_narration ?? $request->remarks,
+            ];
+        } elseif ($type === 'brv') {
+            $amount = (float)$request->amount;
+            $partyType = $request->party_type ?? 'customer';
+            $targetStr = $request->party_id ?? $request->customer_id ?? '';
+
+            if ($partyType === 'vendor' || str_starts_with((string)$targetStr, 'vendor_')) {
+                $vId = (int)str_replace('vendor_', '', (string)$targetStr);
+                $headerData['party_type'] = Vendor::class;
+                $headerData['party_id']   = $vId;
+                $creditAccountId          = $apAccountId;
+            } else {
+                $cId = (int)str_replace('customer_', '', (string)$targetStr);
+                $headerData['party_type'] = Customer::class;
+                $headerData['party_id']   = $cId;
+                $creditAccountId          = $arAccountId;
+            }
+
+            $lines[] = [
+                'account_id' => $request->bank_account_id,
+                'debit'      => $amount,
+                'credit'     => 0,
+                'narration'  => $request->line_narration ?? $request->remarks,
+            ];
+            $lines[] = [
+                'account_id' => $creditAccountId,
+                'party_type' => $headerData['party_type'],
+                'party_id'   => $headerData['party_id'],
+                'debit'      => 0,
+                'credit'     => $amount,
+                'narration'  => $request->line_narration ?? $request->remarks,
+            ];
+        } elseif ($type === 'cpv') {
+            $amount = (float)$request->amount;
+            $cashAccount = Account::find($request->cash_account_id);
+            if ($cashAccount && (float)$cashAccount->calculated_balance < $amount) {
+                $avail = number_format((float)$cashAccount->calculated_balance, 2);
+                $reqAmt = number_format($amount, 2);
+                return back()->withInput()->with('error', "Insufficient Cash Balance! '{$cashAccount->title}' has available balance of Rs. {$avail}, but requested payment is Rs. {$reqAmt}. Payment cannot exceed available balance.");
+            }
+
+            $targetStr = $request->target_id;
+            
+            if (str_starts_with($targetStr, 'vendor_')) {
+                $vId = (int)str_replace('vendor_', '', $targetStr);
+                $headerData['party_type'] = Vendor::class;
+                $headerData['party_id']   = $vId;
+                $targetAccountId = $apAccountId;
+            } elseif (str_starts_with($targetStr, 'customer_')) {
+                $cId = (int)str_replace('customer_', '', $targetStr);
+                $headerData['party_type'] = Customer::class;
+                $headerData['party_id']   = $cId;
+                $targetAccountId = $arAccountId;
+            } else {
+                $targetAccountId = (int)str_replace('account_', '', $targetStr);
+            }
+
+            $lines[] = [
+                'account_id' => $targetAccountId,
+                'debit'      => $amount,
+                'credit'     => 0,
+                'narration'  => $request->line_narration ?? $request->remarks,
+            ];
+            $lines[] = [
+                'account_id' => $request->cash_account_id,
+                'debit'      => 0,
+                'credit'     => $amount,
+                'narration'  => $request->line_narration ?? $request->remarks,
+            ];
+        } elseif ($type === 'bpv') {
+            $amount = (float)$request->amount;
+            $bankAccount = Account::find($request->bank_account_id);
+            if ($bankAccount && (float)$bankAccount->calculated_balance < $amount) {
+                $avail = number_format((float)$bankAccount->calculated_balance, 2);
+                $reqAmt = number_format($amount, 2);
+                return back()->withInput()->with('error', "Insufficient Bank Balance! '{$bankAccount->title}' has available balance of Rs. {$avail}, but requested payment is Rs. {$reqAmt}. Payment cannot exceed available balance.");
+            }
+
+            $targetStr = $request->target_id;
+            
+            if (str_starts_with($targetStr, 'vendor_')) {
+                $vId = (int)str_replace('vendor_', '', $targetStr);
+                $headerData['party_type'] = Vendor::class;
+                $headerData['party_id']   = $vId;
+                $targetAccountId = $apAccountId;
+            } elseif (str_starts_with($targetStr, 'customer_')) {
+                $cId = (int)str_replace('customer_', '', $targetStr);
+                $headerData['party_type'] = Customer::class;
+                $headerData['party_id']   = $cId;
+                $targetAccountId = $arAccountId;
+            } else {
+                $targetAccountId = (int)str_replace('account_', '', $targetStr);
+            }
+
+            $lines[] = [
+                'account_id' => $targetAccountId,
+                'debit'      => $amount,
+                'credit'     => 0,
+                'narration'  => $request->line_narration ?? $request->remarks,
+            ];
+            $lines[] = [
+                'account_id' => $request->bank_account_id,
+                'debit'      => 0,
+                'credit'     => $amount,
+                'narration'  => $request->line_narration ?? $request->remarks,
+            ];
+        } elseif ($type === 'jv') {
+            foreach ($request->rows as $r) {
+                $itemType = $r['item_type'] ?? 'account';
+                $targetId = $r['account_id'] ?? $r['target_id'] ?? '';
+                $partyType = null;
+                $partyId = null;
+                $lineAccountId = null;
+
+                $debit = (float)($r['debit'] ?? 0);
+                $credit = (float)($r['credit'] ?? 0);
+
+                if ($itemType === 'customer' || str_starts_with($targetId, 'customer_')) {
+                    $cId = (int)str_replace('customer_', '', $targetId);
+                    $partyType = Customer::class;
+                    $partyId = $cId;
+                    $lineAccountId = $arAccountId;
+                } elseif ($itemType === 'vendor' || str_starts_with($targetId, 'vendor_')) {
+                    $vId = (int)str_replace('vendor_', '', $targetId);
+                    $partyType = Vendor::class;
+                    $partyId = $vId;
+                    $lineAccountId = $apAccountId;
+                } else {
+                    $accId = (int)str_replace('account_', '', $targetId);
+                    $lineAccountId = $accId;
+
+                    // Restriction Check: If Cash or Bank account or Debit asset is Credited (deducted/paid) in JV
+                    if ($credit > 0 && $accId) {
+                        $deductAcc = Account::find($accId);
+                        if ($deductAcc && $deductAcc->type === 'Debit' && (float)$deductAcc->calculated_balance < $credit) {
+                            $avail = number_format((float)$deductAcc->calculated_balance, 2);
+                            $reqAmt = number_format($credit, 2);
+                            return back()->withInput()->with('error', "Insufficient Balance in '{$deductAcc->title}'! Available balance is Rs. {$avail}, but requested deduction is Rs. {$reqAmt}. Cannot withdraw more than available balance.");
+                        }
+                    }
+                }
+
+                if ($lineAccountId || $partyId) {
+                    $lines[] = [
+                        'account_id' => $lineAccountId ?: ($arAccountId ?? 1),
+                        'party_type' => $partyType,
+                        'party_id'   => $partyId,
+                        'debit'      => $debit,
+                        'credit'     => $credit,
+                        'narration'  => $r['narration'] ?? $request->remarks,
+                    ];
+                }
+            }
+        }
+
+        $voucher = $voucherService->createVoucher($headerData, $lines, auth()->id());
+
+        return redirect()->route('vouchers.list', ['type' => $type])
+            ->with('success', strtoupper($type) . " voucher ({$voucher->voucher_no}) created and posted successfully!");
+    }
+
+    public function editVoucherPage($id)
+    {
+        $branchId = $this->getBranchId();
+        $voucher = \App\Models\VoucherMaster::with(['details.account', 'details.party', 'party'])->findOrFail($id);
+
+        $cashAccounts = Account::where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->where(function($q) {
+                $q->where('account_code', 'like', '1-02-040%')
+                  ->orWhere('title', 'like', '%Cash%');
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->get();
+
+        $bankAccounts = Account::where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->where(function($q) {
+                $q->where('account_code', 'like', '1-02-052%')
+                  ->orWhere('title', 'like', '%Bank%');
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->get();
+
+        $expenseAccounts = Account::where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->where(function($q) {
+                $q->where('account_code', 'like', '5-%')
+                  ->orWhereHas('head', fn($h) => $h->where('type', 'Expense')->orWhere('name', 'like', '%Expense%'));
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->get();
+
+        $customers = Customer::where(function($q) {
+                $q->whereNull('status')->orWhere('status', 1)->orWhere('status', 'active');
+            })
+            ->where(function($q) {
+                $q->whereNull('is_active')->orWhere('is_active', 1);
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->orderBy('customer_name')
+            ->get();
+
+        $vendors = Vendor::where(function($q) {
+                $q->whereNull('is_active')->orWhere('is_active', 1);
+            })
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->orderBy('name')
+            ->get();
+
+        $allAccounts = Account::with('head')
+            ->where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->orderBy('title')
+            ->get();
+
+        $isSuperAdmin = auth()->check() && (auth()->user()->usertype === 'super_admin' || auth()->user()->hasRole('Super Admin') || (method_exists(auth()->user(), 'isSuperAdmin') && auth()->user()->isSuperAdmin()));
+        $branches = $isSuperAdmin ? \App\Models\Branch::all() : [];
+        $userBranch = $voucher->branch ?? auth()->user()?->branch ?? \App\Models\Branch::find($branchId ?? 1);
+
+        return view('admin_panel.vochers.unified_edit', compact(
+            'voucher', 'allAccounts', 'cashAccounts', 'bankAccounts', 'expenseAccounts', 'customers', 'vendors',
+            'branches', 'isSuperAdmin', 'userBranch'
+        ));
+    }
+
+    public function updateVoucherAction(Request $request, $id)
+    {
+        $voucher = \App\Models\VoucherMaster::findOrFail($id);
+        $voucherService = app(\App\Services\VoucherService::class);
+        $balanceService = app(\App\Services\BalanceService::class);
+
+        $selectedBranchId = $request->branch_id ?? $voucher->branch_id ?? $this->getBranchId() ?? 1;
+        $branch = \App\Models\Branch::find($selectedBranchId);
+        $locationName = $branch ? $branch->name : ($request->location ?? $voucher->location ?? 'HEAD OFFICE');
+
+        $firstAccountId = Account::first()?->id ?? 1;
+        $arAccountId = $balanceService->getAccountsReceivableId((int)$selectedBranchId) ?: $firstAccountId;
+        $apAccountId = $balanceService->getAccountsPayableId((int)$selectedBranchId) ?: $firstAccountId;
+
+        $headerData = [
+            'voucher_type' => $request->voucher_type ?? $voucher->voucher_type,
+            'date'         => $request->date,
+            'location'     => $locationName,
+            'branch_id'    => $selectedBranchId,
+            'cheque_no'    => $request->cheque_no ?? null,
+            'cheque_date'  => $request->cheque_date ?? null,
+            'remarks'      => $request->remarks,
+            'status'       => 'posted',
+        ];
+
+        $lines = [];
+        foreach ($request->rows as $r) {
+            $itemType = $r['item_type'] ?? 'account';
+            $targetId = $r['account_id'] ?? $r['target_id'] ?? '';
+            $partyType = null;
+            $partyId = null;
+            $lineAccountId = null;
+
+            if ($itemType === 'customer' || str_starts_with($targetId, 'customer_')) {
+                $cId = (int)str_replace('customer_', '', $targetId);
+                $partyType = Customer::class;
+                $partyId = $cId;
+                $lineAccountId = $arAccountId;
+            } elseif ($itemType === 'vendor' || str_starts_with($targetId, 'vendor_')) {
+                $vId = (int)str_replace('vendor_', '', $targetId);
+                $partyType = Vendor::class;
+                $partyId = $vId;
+                $lineAccountId = $apAccountId;
+            } else {
+                $accId = (int)str_replace('account_', '', $targetId);
+                $lineAccountId = $accId;
+            }
+
+            $debit = (float)($r['debit'] ?? 0);
+            $credit = (float)($r['credit'] ?? 0);
+
+            if ($lineAccountId || $partyId) {
+                if ($lineAccountId && $credit > 0) {
+                    $deductAcc = Account::find($lineAccountId);
+                    if ($deductAcc && $deductAcc->type === 'Debit') {
+                        $existingLineCredit = $voucher->details->where('account_id', $lineAccountId)->sum('credit');
+                        $effectiveAvail = (float)$deductAcc->calculated_balance + $existingLineCredit;
+                        if ($credit > $effectiveAvail) {
+                            $avail = number_format($effectiveAvail, 2);
+                            $reqAmt = number_format($credit, 2);
+                            return back()->withInput()->with('error', "Insufficient Balance in '{$deductAcc->title}'! Available balance is Rs. {$avail}, but requested deduction is Rs. {$reqAmt}.");
+                        }
+                    }
+                }
+
+                $lines[] = [
+                    'account_id' => $lineAccountId ?: ($arAccountId ?? 1),
+                    'party_type' => $partyType,
+                    'party_id'   => $partyId,
+                    'debit'      => $debit,
+                    'credit'     => $credit,
+                    'narration'  => $r['narration'] ?? $request->remarks,
+                ];
+            }
+        }
+
+        $voucherService->updateVoucher($voucher, $headerData, $lines, auth()->id());
+
+        return redirect()->route('vouchers.list', ['type' => $voucher->voucher_type])
+            ->with('success', "Voucher {$voucher->voucher_no} updated and re-posted successfully with full ledger synchronization!");
+    }
+
+    public function destroyVoucherAction($id)
+    {
+        $voucher = \App\Models\VoucherMaster::findOrFail($id);
+        $type = $voucher->voucher_type;
+        $vNo = $voucher->voucher_no;
+
+        $voucherService = app(\App\Services\VoucherService::class);
+        $voucherService->deleteVoucher($voucher);
+
+        return redirect()->route('vouchers.list', ['type' => $type])
+            ->with('success', "Voucher {$vNo} deleted and all accounting entries cleanly reversed!");
+    }
+
+    public function unifiedPrint($id)
+    {
+        $voucher = \App\Models\VoucherMaster::with(['details.account', 'details.party', 'party', 'createdBy', 'modifiedBy', 'verifiedBy', 'branch'])
+            ->findOrFail($id);
+
+        $locationName = $voucher->location ?? ($voucher->branch->name ?? 'HEAD OFFICE');
+
+        $rows = [];
+        foreach ($voucher->details as $d) {
+            $acc = $d->account;
+            $code = $acc->account_code ?? '-';
+            $title = $acc->title ?? '-';
+
+            // Check if this line is linked to a line-level Party (Customer / Vendor) or header Party
+            $lineParty = $d->party ?? $voucher->party;
+            if ($lineParty) {
+                if ($lineParty instanceof Customer) {
+                    $code = '1-02-051-' . str_pad($lineParty->id, 5, '0', STR_PAD_LEFT);
+                    $title = $lineParty->customer_name;
+                } elseif ($lineParty instanceof Vendor) {
+                    $code = '2-02-010-' . str_pad($lineParty->id, 5, '0', STR_PAD_LEFT);
+                    $title = $lineParty->name;
+                }
+            }
+
+            // Append Location to Title for official look
+            if (!empty($locationName) && !str_contains($title, "({$locationName})")) {
+                $title .= " ({$locationName})";
+            }
+
+            $rows[] = [
+                'account_code' => $code,
+                'account_name' => $title,
+                'narration'    => $d->narration ?? $voucher->remarks ?? '-',
+                'debit'        => (float)$d->debit,
+                'credit'       => (float)$d->credit,
+            ];
+        }
+
+        return view('admin_panel.vochers.unified_print', compact('voucher', 'rows'));
     }
 }

@@ -13,135 +13,186 @@ class AccountsHeadController extends Controller
     {
         $branchId = $this->getBranchId();
         
-        $heads = \App\Models\AccountHead::when($branchId, fn($q) => $q->where('branch_id', $branchId))->get();
-        $accounts = \App\Models\Account::with('head')
+        $heads = \App\Models\AccountHead::with('parent')
             ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->orderBy('code')
             ->get();
 
+        $accounts = \App\Models\Account::with(['head.parent', 'branch'])
+            ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+            ->orderBy('account_code')
+            ->get();
 
-        // Define the 5 critical accounts and check if they exist with a valid head
-        $criticalDefs = [
-            [
-                'key' => 'cash',
-                'title' => 'Cash in Hand',
-                'code' => 'CASH',
-                'type' => 'Debit',
-                'nature' => 'Asset',
-                'head' => 'Current Assets',
-                'search' => ['title', 'like', '%Cash%'],
-            ],
-            [
-                'key' => 'ar',
-                'title' => 'Accounts Receivable',
-                'code' => 'AR',
-                'type' => 'Debit',
-                'nature' => 'Asset',
-                'head' => 'Current Assets',
-                'search' => ['title', 'like', '%Receivable%'],
-            ],
-            [
-                'key' => 'ap',
-                'title' => 'Accounts Payable',
-                'code' => 'AP',
-                'type' => 'Credit',
-                'nature' => 'Liability',
-                'head' => 'Current Liabilities',
-                'search' => ['title', 'like', '%Payable%'],
-            ],
-            [
-                'key' => 'sales',
-                'title' => 'Sales Revenue',
-                'code' => 'SALES',
-                'type' => 'Credit',
-                'nature' => 'Income',
-                'head' => 'Income',
-                'search' => ['account_code', '=', 'SALES'],
-            ],
-            [
-                'key' => 'purchase',
-                'title' => 'Purchase',
-                'code' => 'PURCHASE',
-                'type' => 'Debit',
-                'nature' => 'Expense',
-                'head' => 'Expenses',
-                'search' => ['account_code', '=', 'PURCHASE'],
-            ],
-            [
-                'key' => 'purchase_expensive',
-                'title' => 'Purchase Expensive',
-                'code' => 'PURCHASE_EXP',
-                'type' => 'Debit',
-                'nature' => 'Expense',
-                'head' => 'Expenses',
-                'search' => ['account_code', '=', 'PURCHASE_EXP'],
-            ],
-        ];
-
-        $criticalCOA = collect($criticalDefs)->map(function ($def) use ($branchId) {
-            $existing = \App\Models\Account::where($def['search'][0], $def['search'][1], $def['search'][2])
-                ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
-                ->first();
-
-            $def['exists'] = (bool) $existing;
-            $def['has_head'] = $existing && ! is_null($existing->head_id);
-            $def['complete'] = $def['exists'] && $def['has_head'];
-            $def['account'] = $existing;
-            $def['head_name'] = $existing?->head?->name ?? null;
-
-            return $def;
-        });
-
-        $anyMissing = $criticalCOA->contains('complete', false);
         $branches = $this->isSuperAdmin() ? \App\Models\Branch::all() : [];
-
         $isSuperAdmin = $this->isSuperAdmin();
 
-        return view('admin_panel.chart_of_accounts', compact('heads', 'accounts', 'criticalCOA', 'anyMissing', 'branches', 'isSuperAdmin'));
+        return view('admin_panel.chart_of_accounts', compact('heads', 'accounts', 'branches', 'isSuperAdmin'));
+    }
+
+    public function getNextAccountCode($headId)
+    {
+        $head = \App\Models\AccountHead::find($headId);
+        if (!$head) {
+            return response()->json(['code' => '', 'type' => 'Debit']);
+        }
+
+        $headCode = $head->code;
+        $defaultType = (str_starts_with($headCode ?? '', '1-') || str_starts_with($headCode ?? '', '5-') || strtolower($head->type ?? '') === 'asset' || strtolower($head->type ?? '') === 'expense') ? 'Debit' : 'Credit';
+
+        if ($headCode) {
+            $highestAcc = \App\Models\Account::where('head_id', $head->id)
+                ->orWhere('account_code', 'like', "{$headCode}-%")
+                ->orderByDesc('account_code')
+                ->first();
+
+            $nextSeq = 1;
+            if ($highestAcc && preg_match('/-(\d+)$/', $highestAcc->account_code, $matches)) {
+                $nextSeq = ((int)$matches[1]) + 1;
+            } else {
+                $count = \App\Models\Account::where('head_id', $head->id)->count();
+                $nextSeq = $count + 1;
+            }
+            $accountCode = $headCode . '-' . str_pad($nextSeq, 5, '0', STR_PAD_LEFT);
+        } else {
+            $accountCode = 'ACC-' . str_pad(\App\Models\Account::max('id') + 1, 4, '0', STR_PAD_LEFT);
+        }
+
+        return response()->json([
+            'code' => $accountCode,
+            'type' => $defaultType,
+            'head' => $head
+        ]);
     }
 
     public function storeHead(Request $request)
     {
-        $request->validate([
-            'name' => 'required|unique:account_heads,name',
+        $rules = [
+            'name' => 'required|string|max:255',
+            'parent_id' => 'nullable',
+            'code' => 'nullable|string|max:50',
+        ];
+
+        if ($this->isSuperAdmin()) {
+            $rules['branch_id'] = 'required|exists:branches,id';
+        }
+
+        $request->validate($rules, [
+            'branch_id.required' => 'Please select a Target Branch before saving the category.',
         ]);
+
+        $parent = $request->parent_id ? \App\Models\AccountHead::find($request->parent_id) : null;
+        $level = $parent ? ($parent->level + 1) : 1;
+        $type = $request->type ?? ($parent->type ?? 'Asset');
+
+        $code = $request->code;
+        if (empty($code)) {
+            if ($parent) {
+                $childCount = \App\Models\AccountHead::where('parent_id', $parent->id)->count() + 1;
+                $code = $parent->code . '-' . str_pad($childCount, 2, '0', STR_PAD_LEFT);
+            } else {
+                $code = 'HEAD-' . str_pad((\App\Models\AccountHead::max('id') ?? 0) + 1, 3, '0', STR_PAD_LEFT);
+            }
+        }
+
+        $branchId = $request->input('branch_id') ?? $this->getBranchId() ?? 1;
+
+        // Check for duplicate category name within this branch
+        $existsName = \App\Models\AccountHead::where('branch_id', $branchId)
+            ->whereRaw('LOWER(TRIM(name)) = ?', [strtolower(trim($request->name))])
+            ->exists();
+
+        if ($existsName) {
+            return back()->withInput()->with('error', "A category named '{$request->name}' already exists in this branch.");
+        }
+
+        // Check for duplicate category code within this branch (if code provided)
+        if (!empty($code)) {
+            $existsCode = \App\Models\AccountHead::where('branch_id', $branchId)
+                ->where('code', trim($code))
+                ->exists();
+
+            if ($existsCode) {
+                return back()->withInput()->with('error', "A category with code '{$code}' already exists in this branch.");
+            }
+        }
 
         \App\Models\AccountHead::create([
             'name' => $request->name,
-            'branch_id' => $request->input('branch_id') ?? $this->getBranchId() ?? 1,
+            'code' => $code,
+            'parent_id' => $request->parent_id ?? null,
+            'level' => $level,
+            'type' => $type,
+            'branch_id' => $branchId,
         ]);
 
-
-        return back()->with('success', 'Account Head added successfully!');
+        return back()->with('success', "Account Category '{$request->name}' added successfully!");
     }
 
     public function storeAccount(Request $request)
     {
-        $request->validate([
+        $rules = [
             'head_id' => 'required|exists:account_heads,id',
-            'title' => 'required',
+            'title' => 'required|string|max:255',
             'opening_balance' => 'required|numeric',
-            'type' => 'required',
+        ];
+
+        if ($this->isSuperAdmin()) {
+            $rules['branch_id'] = 'required|exists:branches,id';
+        }
+
+        $request->validate($rules, [
+            'branch_id.required' => 'Please select a Target Branch before saving the account.',
         ]);
 
-        // Generate Account Code (Simple auto-increment logic or similar)
-        // For now, let's keep it simple or auto-generate if nullable.
-        // Migration said account_code is nullable. I'll rely on ID or generate one.
-        // Let's generate a basic one: ACC-{ID}
+        $head = \App\Models\AccountHead::findOrFail($request->head_id);
+        $headCode = $head->code ?? null;
+
+        // Auto-generate standard account code:
+        if ($headCode) {
+            $highestAcc = \App\Models\Account::where('head_id', $head->id)
+                ->orWhere('account_code', 'like', "{$headCode}-%")
+                ->orderByDesc('account_code')
+                ->first();
+
+            $nextSeq = 1;
+            if ($highestAcc && preg_match('/-(\d+)$/', $highestAcc->account_code, $matches)) {
+                $nextSeq = ((int)$matches[1]) + 1;
+            } else {
+                $count = \App\Models\Account::where('head_id', $head->id)->count();
+                $nextSeq = $count + 1;
+            }
+            $accountCode = $headCode . '-' . str_pad($nextSeq, 5, '0', STR_PAD_LEFT);
+        } else {
+            $accountCode = 'ACC-' . str_pad((\App\Models\Account::max('id') ?? 0) + 1, 4, '0', STR_PAD_LEFT);
+        }
+
+        $type = $request->type;
+        if (empty($type)) {
+            $type = (str_starts_with($headCode ?? '', '1-') || str_starts_with($headCode ?? '', '5-') || strtolower($head->type ?? '') === 'asset' || strtolower($head->type ?? '') === 'expense') ? 'Debit' : 'Credit';
+        }
+
+        $branchId = $request->input('branch_id') ?? $this->getBranchId() ?? 1;
+
+        // Check if an account with the same title already exists in this branch
+        $existsAcc = \App\Models\Account::where('branch_id', $branchId)
+            ->whereRaw('LOWER(TRIM(title)) = ?', [strtolower(trim($request->title))])
+            ->exists();
+
+        if ($existsAcc) {
+            return back()->withInput()->with('error', "An account titled '{$request->title}' already exists in this branch.");
+        }
 
         $account = \App\Models\Account::create([
-            'head_id' => $request->head_id,
-            'title' => $request->title,
-            'opening_balance' => $request->opening_balance, // This will serve as initial debit/credit context usually
-            'type' => $request->type,
+            'head_id' => $head->id,
+            'title' => strtoupper(trim($request->title)),
+            'account_code' => $accountCode,
+            'opening_balance' => (float)$request->opening_balance,
+            'type' => $type,
             'status' => $request->has('status') ? 1 : 0,
-            'branch_id' => $request->input('branch_id') ?? $this->getBranchId() ?? 1,
+            'branch_id' => $branchId,
         ]);
 
-
-        $account->account_code = 'ACC-'.str_pad($account->id, 4, '0', STR_PAD_LEFT);
-        $account->save();
-
-        return back()->with('success', 'Account added successfully!');
+        return back()->with('success', "Account '{$account->title}' ({$account->account_code}) created successfully!");
     }
 
     public function showLedger($id, Request $request)

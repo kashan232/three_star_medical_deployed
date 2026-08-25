@@ -316,208 +316,58 @@
         color: #ef4444;
     }
 
-    /* ── Product profile card ────────────────────────────────────────────── */
-    .prod-profile {
-        background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 55%, #38bdf8 100%);
-        border-radius: 12px;
-        padding: 20px 24px;
-        margin-bottom: 20px;
-        color: white;
-        display: grid;
-        grid-template-columns: 1fr auto;
-        gap: 16px;
-        align-items: center;
-        box-shadow: 0 6px 24px rgba(37, 99, 235, .2);
-    }
-
-    .prod-profile h5 {
-        font-size: 1.2rem;
-        font-weight: 800;
-        margin: 0 0 4px;
-        color: #fff;
-    }
-
-    .prod-meta {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 14px;
-        margin-top: 8px;
-    }
-
-    .prod-meta span {
-        font-size: .82rem;
-        opacity: .9;
-        display: flex;
-        align-items: center;
-        gap: 5px;
-    }
-
-    .period-badge {
-        background: rgba(255, 255, 255, .18);
+    /* ── Classic Ledger Sheet (Matching ERP & PDF Print Layout) ──────── */
+    .ledger-report-sheet {
+        background: #ffffff;
         border-radius: 8px;
-        padding: 6px 14px;
-        font-size: .8rem;
-        font-weight: 600;
-        border: 1px solid rgba(255, 255, 255, .25);
-        white-space: nowrap;
-        color: #fff;
+        padding: 24px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+        border: 1px solid #e2e8f0;
+        margin-bottom: 25px;
     }
-
-    /* ── Table card ──────────────────────────────────────────────────────── */
-    .table-card {
-        background: #fff;
-        border-radius: 12px;
-        padding: 20px 20px 14px;
-        box-shadow: var(--card-shadow);
+    .sheet-header {
+        border-bottom: 2px solid #000000;
+        padding-bottom: 8px;
+        margin-bottom: 12px;
     }
-
-    #ledgerTable {
+    .classic-ledger-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: .82rem;
+        border: 1px solid #94a3b8;
+        font-size: 0.84rem;
     }
-
-    #ledgerTable thead th {
-        background: #1e3a8a;
-        color: #fff;
-        font-size: .73rem;
+    .classic-ledger-table thead th {
+        background-color: #2e62a6 !important;
+        color: #ffffff !important;
         font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: .4px;
+        font-size: 0.82rem;
+        padding: 7px 6px;
+        border: 1px solid #234d85 !important;
         white-space: nowrap;
-        padding: 10px 11px;
-        border: 1px solid #1e3a8a;
     }
-
-    #ledgerTable thead th:first-child { border-radius: 8px 0 0 0; }
-    #ledgerTable thead th:last-child  { border-radius: 0 8px 0 0; }
-
-    #ledgerTable tbody tr {
-        font-size: .82rem;
-        transition: background .1s;
-    }
-
-    #ledgerTable tbody tr:hover td {
-        background: #eff6ff !important;
-    }
-
-    #ledgerTable tbody td {
-        padding: 8px 11px;
+    .classic-ledger-table tbody td {
+        border: 1px solid #cbd5e1;
+        padding: 6px 8px;
+        font-size: 0.82rem;
         vertical-align: middle;
-        border: 1px solid #f1f5f9;
     }
-
-    /* Striped alternating rows like DataTables */
-    #ledgerTable tbody tr:nth-child(odd) td  { background: #fff; }
-    #ledgerTable tbody tr:nth-child(even) td { background: #f8fafc; }
-
-    /* Left-border accent per row type (subtle, like item_stock status coloring) */
-    .row-opening td:first-child  { border-left: 3px solid #2563eb !important; }
-    .row-purchase td:first-child { border-left: 3px solid #16a34a !important; }
-    .row-sale td:first-child     { border-left: 3px solid #dc2626 !important; }
-    .row-dc td:first-child       { border-left: 3px solid #d97706 !important; }
-    .row-sr td:first-child       { border-left: 3px solid #0891b2 !important; }
-    .row-pr td:first-child       { border-left: 3px solid #7c3aed !important; }
-    .row-closing td              { background: #f8fafc !important; font-weight: 700 !important; border-top: 2px solid #e2e8f0 !important; }
-    .row-closing td:first-child  { border-left: 3px solid #1e3a8a !important; }
-    .row-opening td              { font-weight: 700 !important; }
-
-    /* tfoot totals row — same as item_stock_report #stockTable tfoot th */
-    #ledgerTable tfoot th {
-        background: #f8fafc;
-        font-size: .8rem;
+    .product-banner-row td {
+        background-color: #dce6f7 !important;
+        border: 1px solid #b8cce4 !important;
         font-weight: 700;
-        color: #1e293b;
-        padding: 9px 11px;
-        border-top: 2px solid #e2e8f0;
-        border: 1px solid #e2e8f0;
-    }
-    #ledgerTable tfoot th.tr { text-align: right; }
-
-    #ledgerTable tbody td.tr,
-    #ledgerTable thead th.tr {
-        text-align: right;
-    }
-
-    /* ── Transaction type badges ─────────────────────────────────────────── */
-    .tx-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 5px;
-        padding: 3px 9px;
-        border-radius: 18px;
-        font-size: .7rem;
-        font-weight: 700;
-        white-space: nowrap;
-    }
-
-    .tx-opening  { background: #dbeafe; color: #1e40af; }
-    .tx-purchase { background: #d1fae5; color: #065f46; }
-    .tx-sale     { background: #fee2e2; color: #991b1b; }
-    .tx-dc       { background: #fef3c7; color: #92400e; }
-    .tx-sr       { background: #ccfbf1; color: #0f766e; }
-    .tx-pr       { background: #ede9fe; color: #5b21b6; }
-
-    /* ── Amounts ─────────────────────────────────────────────────────────── */
-    .qty-in    { color: #16a34a; font-weight: 700; }
-    .qty-out   { color: #dc2626; font-weight: 700; }
-    .qty-nil   { color: #cbd5e1; }
-    .bal-pos   { color: #16a34a; font-weight: 700; }
-    .bal-neg   { color: #dc2626; font-weight: 700; }
-    .bal-zero  { color: #64748b; }
-
-    /* ── Ref badge ───────────────────────────────────────────────────────── */
-    .ref-badge {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 6px;
-        padding: 2px 8px;
-        font-size: .73rem;
         color: #0f172a;
-        font-weight: 600;
-        font-family: monospace;
+        padding: 7px 10px;
     }
-
-    /* ── Total strip (below table, like item_stock grand totals bar) ─────── */
-    .total-strip {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin-top: 12px;
-        padding: 10px 14px;
-        background: #f8fafc;
-        border-radius: 8px;
-        border: 1px solid #e2e8f0;
-        font-size: .8rem;
+    .ledger-row-opening td {
+        background-color: #ffffff;
     }
-    .total-strip .ts-item {
-        display: flex;
-        align-items: center;
-        gap: 6px;
+    .ledger-row-tx:hover td {
+        background-color: #f1f5f9;
     }
-    .total-strip .ts-label { color: #64748b; font-weight: 600; }
-    .total-strip .ts-val   { color: #1e293b; font-weight: 700; }
-    .total-strip .ts-val.green { color: #16a34a; }
-    .total-strip .ts-val.red   { color: #dc2626; }
-    .total-strip .ts-val.blue  { color: #1e3a8a; }
-    .total-strip .ts-sep { color: #e2e8f0; }
-
-    /* ── Empty state ─────────────────────────────────────────────────────── */
-    .empty-state { text-align: center; padding: 60px; color: #64748b; }
-    .empty-state svg { width: 52px; opacity: .3; margin-bottom: 12px; }
-
-    /* ── Bottom bar ──────────────────────────────────────────────────────── */
-    .bottom-bar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-top: 14px;
-        flex-wrap: wrap;
-        gap: 8px;
+    .ledger-row-closing td {
+        background-color: #ffffff;
+        border-bottom: 2px solid #94a3b8 !important;
     }
-
-    .bottom-bar small { font-size: .78rem; color: #64748b; }
-
 
     /* ── Loader overlay (full screen matching item stock report) ────────── */
     .loader-overlay {
@@ -554,29 +404,51 @@
 
     /* ── Print ───────────────────────────────────────────────────────────── */
     @media print {
+        @page {
+            size: A4 portrait;
+            margin: 12mm 15mm;
+        }
+        body * {
+            visibility: hidden;
+        }
+        #ledgerReportSheet, #ledgerReportSheet * {
+            visibility: visible;
+        }
+        #ledgerReportSheet {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100% !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
         .filter-card,
+        .rpt-header,
         .btn-srp,
-        .rpt-header {
+        .sidebar,
+        .header-area,
+        .footer-area {
             display: none !important;
         }
-
-        .main-content,
-        .main-content-inner,
-        .container-fluid {
-            display: block !important;
-            width: 100% !important;
-        }
-
-        .print-header {
-            display: block !important;
-        }
-
-        #ledgerTable thead th {
-            background: #f1f5f9 !important;
-            color: #000 !important;
+        .classic-ledger-table thead th {
+            background-color: #2e62a6 !important;
+            color: #ffffff !important;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             border: 1px solid #000 !important;
+        }
+        .product-banner-row td {
+            background-color: #dce6f7 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+            border: 1px solid #b8cce4 !important;
+        }
+        .classic-ledger-table td {
+            border: 1px solid #cbd5e1 !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
     }
 </style>
@@ -737,80 +609,53 @@
 
     {{-- Result --}}
     <div id="pledResult" style="display:none;">
+        <div class="ledger-report-sheet" id="ledgerReportSheet">
+            <!-- Classic Header identical to PDF -->
+            <div class="sheet-header">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div style="font-size:1.15rem; font-weight:800; color:#000; text-transform:uppercase; letter-spacing:0.3px;">THREE STARS MEDICAL SUPPLIES</div>
+                        <div style="font-size:0.82rem; color:#333; margin-top:2px;">Three Stars Medical Supplies : <span id="hdrBranchName">Lahore</span></div>
+                        <div style="font-size:0.82rem; color:#333;">Phone : 0321-4208158</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div style="font-size:0.85rem; font-weight:700; color:#1e3a8a;" id="hdrDateRange">2026-04-01 -TO- 2026-04-30</div>
+                        <div style="font-size:0.75rem; color:#666; margin-top:3px;">Print Date : {{ now()->format('d M Y') }}</div>
+                    </div>
+                </div>
 
-        {{-- Product Profile --}}
-        <div class="prod-profile" id="prodProfile"></div>
+                <div class="d-flex justify-content-between align-items-end" style="margin-top:14px;">
+                    <div style="font-size:1.4rem; font-weight:800; color:#000;">Product Ledger</div>
+                    <div style="font-size:0.85rem; font-weight:700; color:#000;">
+                        Location : <span id="hdrLocation" style="font-weight:600;">THREE STARS MEDICAL SUPPLIES</span>
+                    </div>
+                </div>
+            </div>
 
-        {{-- KPI Grid --}}
-        <div class="kpi-grid" id="kpiRow"></div>
-
-        {{-- Ledger Table --}}
-        <div class="table-card">
+            <!-- Table -->
             <div class="table-responsive">
-                <table id="ledgerTable" class="table table-bordered" style="width:100%;">
+                <table id="ledgerTable" class="classic-ledger-table">
                     <thead>
                         <tr>
-                            <th style="width:100px;">Date</th>
-                            <th>Description</th>
-                            <th style="width:130px;">Ref / Doc #</th>
-                            <th class="tr" style="width:90px;">Qty IN</th>
-                            <th class="tr" style="width:90px;">Qty OUT</th>
-                            <th class="tr" style="width:110px;">Sale Price</th>
-                            <th class="tr" style="width:110px;">Cost Price</th>
-                            <th class="tr" style="width:120px;">Balance (Pcs)</th>
+                            <th style="width:45px; text-align:center;">SR #</th>
+                            <th style="width:115px; text-align:left;">Date</th>
+                            <th style="text-align:left;">Description</th>
+                            <th style="width:90px; text-align:left;">REF #</th>
+                            <th style="width:105px; text-align:right;">Rate</th>
+                            <th style="width:95px; text-align:right;">Debit</th>
+                            <th style="width:95px; text-align:right;">Credit</th>
+                            <th style="width:105px; text-align:right;">Balance</th>
                         </tr>
                     </thead>
                     <tbody id="ledgerBody"></tbody>
-                    <tfoot>
-                        <tr>
-                            <th colspan="3" class="text-end">Grand Totals:</th>
-                            <th class="tr" id="ftQtyIn">0</th>
-                            <th class="tr" id="ftQtyOut">0</th>
-                            <th class="tr" id="ftSaleVal">—</th>
-                            <th class="tr" id="ftCostVal">—</th>
-                            <th class="tr" id="ftBalance">0</th>
-                        </tr>
-                    </tfoot>
                 </table>
             </div>
-            {{-- Total strip below table --}}
-            <div class="total-strip" id="totalStrip" style="display:none;">
-                <div class="ts-item">
-                    <span class="ts-label">Opening Stock:</span>
-                    <span class="ts-val blue" id="tsOpening">—</span>
-                </div>
-                <span class="ts-sep">|</span>
-                <div class="ts-item">
-                    <span class="ts-label">Total IN:</span>
-                    <span class="ts-val green" id="tsIn">—</span>
-                </div>
-                <span class="ts-sep">|</span>
-                <div class="ts-item">
-                    <span class="ts-label">Total OUT:</span>
-                    <span class="ts-val red" id="tsOut">—</span>
-                </div>
-                <span class="ts-sep">|</span>
-                <div class="ts-item">
-                    <span class="ts-label">Closing Stock:</span>
-                    <span class="ts-val blue" id="tsClosing">—</span>
-                </div>
-                <span class="ts-sep">|</span>
-                <div class="ts-item">
-                    <span class="ts-label">Sale Revenue:</span>
-                    <span class="ts-val" id="tsSaleVal">—</span>
-                </div>
-                <span class="ts-sep">|</span>
-                <div class="ts-item">
-                    <span class="ts-label">Transactions:</span>
-                    <span class="ts-val" id="tsTxCount">—</span>
-                </div>
-            </div>
-        </div>
 
-        {{-- Bottom Bar --}}
-        <div class="bottom-bar">
-            <small id="genTime"></small>
-            <small id="txCount"></small>
+            <!-- Footer -->
+            <div class="d-flex justify-content-between align-items-center mt-3 pt-2" style="border-top:1px solid #cbd5e1; font-size:0.75rem; color:#64748b;">
+                <span>ProWaves ver.8.0.1.4592 Copyrights &copy; {{ date('Y') }} Cybernetic Technologies. All rights reserved. &nbsp;&nbsp; rptItemLedger</span>
+                <span><strong>Print Date :</strong> {{ now()->format('d M Y') }}</span>
+            </div>
         </div>
     </div>
 
@@ -830,9 +675,25 @@
 <script>
 (function () {
     // ── Helpers ────────────────────────────────────────────────────────────
-    const fmtQty = n => n == null ? '' : parseFloat(n).toLocaleString('en-PK', {minimumFractionDigits:0, maximumFractionDigits:2});
-    const fmtAmt = n => n == null ? '' : 'Rs ' + parseFloat(n).toLocaleString('en-PK', {minimumFractionDigits:2, maximumFractionDigits:2});
-    const fmtDate = d => { if (!d) return '-'; const p = d.split('-'); return p[2]+'/'+p[1]+'/'+p[0]; };
+    const fmt3 = n => {
+        if (n == null || isNaN(n)) return '0.000';
+        return parseFloat(n).toLocaleString('en-PK', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+    };
+    const fmt2 = n => {
+        if (n == null || isNaN(n)) return '0.00';
+        return parseFloat(n).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    };
+    const fmtDateWithTime = dt => {
+        if (!dt) return '';
+        const parts = dt.split(' ');
+        const dateParts = parts[0].split('-');
+        if (dateParts.length === 3) {
+            const dStr = dateParts[2] + '/' + dateParts[1] + '/' + dateParts[0];
+            const tStr = parts[1] ? parts[1].substring(0, 5) : '';
+            return tStr ? (dStr + '<br>' + tStr) : dStr;
+        }
+        return dt;
+    };
 
     // ── Date defaults ───────────────────────────────────────────────────────
     const now = new Date();
@@ -920,332 +781,217 @@
         updateSelectedProductsUI();
     });
 
-    // ── Dynamic Dropdown Logic: Cat -> Sub -> Brand ──────────
-    function updateFilters() {
-        var catId   = $('#filterCategory').val();
-        var subId   = $('#filterSubCategory').val();
-        var brandId = $('#filterBrand').val();
+    // ── Filter reset ────────────────────────────────────────────────────────
+    $('#btnReset').on('click', function() {
+        $('#sel_start').val(firstOfYear);
+        $('#sel_end').val(today);
+        $('#filterStatus').val('all');
 
-        // 1. Filter Sub-Categories based on Category
-        var validSubs = new Set();
-        $('#filterSubCategory option').each(function() {
-            var $opt = $(this);
-            if ($opt.val() === 'all') return;
-            
-            var matchCat = (catId === 'all' || $opt.attr('data-cat') == catId);
-            if (matchCat) {
-                $opt.show().prop('disabled', false);
-                validSubs.add($opt.val());
-            } else {
-                $opt.hide().prop('disabled', true);
-            }
-        });
-        // Reset Sub-Cat if no longer valid
-        if (subId !== 'all' && !validSubs.has(subId)) {
-            $('#filterSubCategory').val('all').trigger('change.select2');
-            subId = 'all';
-        }
-
-        // 2. Refresh Select2 state
-        $('.select2-global').trigger('change.select2');
-    }
-
-    // Bind change events
-    $('#filterCategory').on('change', updateFilters);
-    $('#filterSubCategory').on('change', updateFilters);
-    $('#filterBrand').on('change', updateFilters);
-
-    // ── Transaction type map ────────────────────────────────────────────────
-    const txInfo = {
-        opening:          { label:'📋 Opening Balance', cls:'tx-opening',  rowCls:'row-opening'  },
-        purchase:         { label:'📦 Purchase GRN',    cls:'tx-purchase', rowCls:'row-purchase' },
-        sale:             { label:'🧾 Sale Invoice',    cls:'tx-sale',     rowCls:'row-sale'     },
-        delivery_challan: { label:'🚚 Delivery Challan',cls:'tx-dc',       rowCls:'row-dc'       },
-        sale_return:      { label:'↩ Sale Return',      cls:'tx-sr',       rowCls:'row-sr'       },
-        purchase_return:  { label:'↩ Purchase Return',  cls:'tx-pr',       rowCls:'row-pr'       },
-        closing:          { label:'🏁 Closing Balance',  cls:'tx-opening',  rowCls:'row-closing'  },
-    };
-
-    function balClass(b) {
-        if (Math.abs(b) < 0.001) return 'bal-zero';
-        return b > 0 ? 'bal-pos' : 'bal-neg';
-    }
-
-    let lastData = null;
-
-    // ── Reset ────────────────────────────────────────────────────────────────
-    document.getElementById('btnReset').addEventListener('click', function(){
         selectedProductsMap.clear();
         updateSelectedProductsUI();
+
         $('#filterCategory').val('all').trigger('change.select2');
         $('#filterSubCategory').val('all').trigger('change.select2');
         $('#filterBrand').val('all').trigger('change.select2');
-        $('#filterStatus').val('all');
+        $('#sel_warehouse').val('all').trigger('change.select2');
         if (document.getElementById('filterBranch')) {
             $('#filterBranch').val('all').trigger('change.select2');
         }
-        document.getElementById('sel_start').value = firstOfYear;
-        document.getElementById('sel_end').value   = today;
-        document.getElementById('sel_warehouse').value = '';
-        document.getElementById('pledResult').style.display = 'none';
-        lastData = null;
-        updateFilters();
+
+        $('#pledResult').hide();
     });
 
-    // ── Generate ────────────────────────────────────────────────────────────
-    document.getElementById('btnGenerate').addEventListener('click', function(){
-        const pids  = $('#sel_product_ids').val();
-        const catId = document.getElementById('filterCategory').value;
-        const subId = document.getElementById('filterSubCategory').value;
-        const bndId = document.getElementById('filterBrand').value;
-        const stId  = document.getElementById('filterStatus').value;
-        const sd    = document.getElementById('sel_start').value;
-        const ed    = document.getElementById('sel_end').value;
-        const wid   = document.getElementById('sel_warehouse').value;
-        const bid   = document.getElementById('filterBranch') ? document.getElementById('filterBranch').value : 'all';
+    // ── Cascading SubCategory by Category ────────────────────────────────────
+    $('#filterCategory').on('change', function() {
+        const catId = $(this).val();
+        const $sub  = $('#filterSubCategory');
+        $sub.find('option').each(function() {
+            if ($(this).val() === 'all') return;
+            const c = $(this).data('cat');
+            if (catId === 'all' || !c || c == catId) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+        $sub.val('all').trigger('change.select2');
+    });
 
-        document.getElementById('pledLoader').style.display  = 'flex';
-        document.getElementById('pledResult').style.display  = 'none';
+    // ── Generate Ledger (AJAX) ───────────────────────────────────────────────
+    let lastData = null;
 
-        const qs = new URLSearchParams({ start_date: sd, end_date: ed });
-        if (pids && pids.trim() !== '') {
-            qs.set('product_id', pids.trim());
+    document.getElementById('btnGenerate').addEventListener('click', function () {
+        const product_id = document.getElementById('sel_product_ids').value;
+        const start_date = document.getElementById('sel_start').value;
+        const end_date   = document.getElementById('sel_end').value;
+
+        if (!start_date || !end_date) {
+            Swal.fire({ icon: 'warning', title: 'Dates Required', text: 'Please select both start and end dates.' });
+            return;
         }
-        if (catId && catId !== 'all') qs.set('category_id', catId);
-        if (subId && subId !== 'all') qs.set('sub_category_id', subId);
-        if (bndId && bndId !== 'all') qs.set('brand_id', bndId);
-        if (stId  && stId  !== 'all') qs.set('status', stId);
-        if (wid)                      qs.set('warehouse_id', wid);
-        if (bid   && bid   !== 'all') qs.set('branch_id', bid);
 
-        fetch('{{ route("report.product.ledger.fetch") }}?' + qs.toString(), {
-            headers: { 'X-CSRF-TOKEN': '{{ csrf_token() }}', 'Accept': 'application/json' }
+        const params = new URLSearchParams({ start_date, end_date });
+        if (product_id) params.append('product_id', product_id);
+        const cat_id = document.getElementById('filterCategory')?.value;
+        const sub_id = document.getElementById('filterSubCategory')?.value;
+        const brand_id = document.getElementById('filterBrand')?.value;
+        const branch_id = document.getElementById('filterBranch')?.value;
+        const warehouse_id = document.getElementById('sel_warehouse')?.value;
+        if (cat_id && cat_id !== 'all') params.append('category_id', cat_id);
+        if (sub_id && sub_id !== 'all') params.append('sub_category_id', sub_id);
+        if (brand_id && brand_id !== 'all') params.append('brand_id', brand_id);
+        if (branch_id && branch_id !== 'all') params.append('branch_id', branch_id);
+        if (warehouse_id) params.append('warehouse_id', warehouse_id);
+
+        document.getElementById('pledLoader').style.display = 'flex';
+
+        fetch(`{{ route('report.product.ledger.fetch') }}?${params}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
         })
         .then(r => r.json())
         .then(res => {
             document.getElementById('pledLoader').style.display = 'none';
-            if (!res.success) { alert(res.message || 'Error'); return; }
+            if (!res.success) { 
+                Swal.fire({ icon: 'error', title: 'Error', text: res.message || 'Failed to load ledger data.' }); 
+                return; 
+            }
             lastData = res;
             renderLedger(res);
         })
         .catch(err => {
             document.getElementById('pledLoader').style.display = 'none';
-            alert('Network error: ' + err.message);
+            Swal.fire({ icon: 'error', title: 'Network Error', text: err.message });
         });
     });
 
     function renderLedger(res) {
         const { rows, summary, is_consolidated, product_count, products_data } = res;
-        const p = summary.product;
 
-        // ── Product profile ─────────────────────────────────────────────────
-        const headerTitle = is_consolidated ? `📦 Consolidated Product Ledger (${product_count} Products)` : `📦 ${p.item_name}`;
-        document.getElementById('prodProfile').innerHTML = `
-            <div>
-                <h5>${headerTitle}</h5>
-                <div class="prod-meta">
-                    <span>🏷 Code: <b>${p.item_code || '-'}</b></span>
-                    <span>🏷 Company: <b>${p.brand_name || '-'}</b></span>
-                    <span>📂 Category: <b>${p.category_name || '-'}</b></span>
-                    <span>📏 Unit: <b>${p.unit_name || 'pcs'}</b></span>
-                </div>
-            </div>
-            <div>
-                <div class="period-badge">
-                    ${summary.period_start ? fmtDate(summary.period_start) : 'All time'}
-                    ${summary.period_start ? ' → ' + fmtDate(summary.period_end) : ''}
-                </div>
-            </div>`;
+        // Meta headers
+        const sd = summary.period_start || document.getElementById('sel_start').value || '2026-04-01';
+        const ed = summary.period_end   || document.getElementById('sel_end').value || '2026-04-30';
+        document.getElementById('hdrDateRange').textContent = `${sd} -TO- ${ed}`;
 
-        // ── KPI tiles ────────────────────────────────────────────────────────
-        document.getElementById('kpiRow').innerHTML = `
-            <div class="kpi-card blue">
-                <span class="kpi-icon"><i class="fas fa-boxes"></i></span>
-                <span class="kpi-label">Opening Stock</span>
-                <span class="kpi-value">${fmtQty(summary.opening_balance)} <span style="font-size:.75rem;font-weight:400;color:#64748b">pcs</span></span>
-                <span class="kpi-sub">Before period start</span>
-            </div>
-            <div class="kpi-card green">
-                <span class="kpi-icon"><i class="fas fa-arrow-circle-down"></i></span>
-                <span class="kpi-label">Total IN</span>
-                <span class="kpi-value">${fmtQty(summary.total_qty_in)} <span style="font-size:.75rem;font-weight:400;color:#64748b">pcs</span></span>
-                <span class="kpi-sub">Purchases + Returns</span>
-            </div>
-            <div class="kpi-card red">
-                <span class="kpi-icon"><i class="fas fa-arrow-circle-up"></i></span>
-                <span class="kpi-label">Total OUT</span>
-                <span class="kpi-value">${fmtQty(summary.total_qty_out)} <span style="font-size:.75rem;font-weight:400;color:#64748b">pcs</span></span>
-                <span class="kpi-sub">Sales + DCs + Returns</span>
-            </div>
-            <div class="kpi-card purple">
-                <span class="kpi-icon"><i class="fas fa-flag-checkered"></i></span>
-                <span class="kpi-label">Closing Stock</span>
-                <span class="kpi-value ${summary.closing_balance < 0 ? 'text-danger' : ''}">${fmtQty(summary.closing_balance)} <span style="font-size:.75rem;font-weight:400;color:#64748b">pcs</span></span>
-                <span class="kpi-sub">End of period</span>
-            </div>
-            <div class="kpi-card amber">
-                <span class="kpi-icon"><i class="fas fa-wallet"></i></span>
-                <span class="kpi-label">Total Sale Value</span>
-                <span class="kpi-value" style="font-size:1.3rem;">${fmtAmt(summary.total_sale_value)}</span>
-                <span class="kpi-sub">Revenue in period</span>
-            </div>`;
+        const branchText = $('#filterBranch option:selected').text();
+        if (branchText && branchText !== 'All Branches') {
+            document.getElementById('hdrBranchName').textContent = branchText.replace(/^[^\w\s]+/, '').trim();
+        }
 
-        // ── Ledger rows ──────────────────────────────────────────────────────
+        const whText = $('#sel_warehouse option:selected').text();
+        if (whText && whText !== 'All Locations') {
+            document.getElementById('hdrLocation').textContent = whText.replace(/^[^\w\s]+/, '').trim();
+        } else {
+            document.getElementById('hdrLocation').textContent = 'THREE STARS MEDICAL SUPPLIES';
+        }
+
         const tbody = document.getElementById('ledgerBody');
         tbody.innerHTML = '';
 
-        if ((!rows || rows.length === 0) && (!products_data || products_data.length === 0)) {
-            tbody.innerHTML = `<tr><td colspan="8" class="empty-state">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                <div>No transactions found for the selected filters.</div>
-            </td></tr>`;
-            document.getElementById('totalStrip').style.display = 'none';
-        } else if (products_data && products_data.length > 0 && is_consolidated) {
-            // ── GROUPED PRODUCT VIEW (MULTI-PRODUCT) ──────────────────────────
-            let grandIn = 0, grandOut = 0, grandSaleVal = 0;
-
-            products_data.forEach((pData, idx) => {
-                const prod = pData.product;
-
-                // Section Header Row
-                const headTr = document.createElement('tr');
-                headTr.className = 'product-group-header';
-                headTr.innerHTML = `
-                    <td colspan="8" style="background:#1e3a8a; color:#ffffff; padding:10px 16px; font-size:0.95rem; font-weight:700; border-top: 3px solid #0f172a;">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span>📦 Product #${idx+1}: [${escHtml(prod.item_code)}] ${escHtml(prod.item_name)}
-                                <span style="font-weight:400; font-size:0.82rem; margin-left:12px; color:#cbd5e1;">
-                                    Company: <b>${escHtml(prod.brand_name)}</b> | Category: <b>${escHtml(prod.category_name)}</b> | Unit: <b>${escHtml(prod.unit_name)}</b>
-                                </span>
-                            </span>
-                            <span style="background:rgba(255,255,255,0.2); padding:3px 12px; border-radius:12px; font-size:0.82rem;">
-                                Closing Stock: <b>${fmtQty(pData.closing_balance)} pcs</b>
-                            </span>
-                        </div>
-                    </td>`;
-                tbody.appendChild(headTr);
-
-                // Transaction Rows for this Product
-                pData.rows.forEach(r => {
-                    const info       = txInfo[r.type] || txInfo.purchase;
-                    const qtyInHtml  = r.qty_in  ? `<span class="qty-in">+${fmtQty(r.qty_in)}</span>`  : `<span class="qty-nil">—</span>`;
-                    const qtyOutHtml = r.qty_out ? `<span class="qty-out">-${fmtQty(r.qty_out)}</span>` : `<span class="qty-nil">—</span>`;
-                    const salePriceHtml = r.sale_price ? `<span style="color:#0f172a;">${fmtAmt(r.sale_price)}</span>` : `<span class="qty-nil">—</span>`;
-                    const costPriceHtml = r.cost_price ? `<span style="color:#64748b;">${fmtAmt(r.cost_price)}</span>` : `<span class="qty-nil">—</span>`;
-                    const bal = parseFloat(r.balance ?? 0);
-                    const balHtml = `<span class="${balClass(bal)}">${fmtQty(bal)}</span>`;
-                    const descHtml = r.type === 'opening'
-                        ? `<span class="tx-badge ${info.cls}">${info.label}</span>`
-                        : `<span class="tx-badge ${info.cls}">${info.label}</span>
-                           <span style="margin-left:6px;color:#334155;font-weight:500;font-size:.82rem;">${escHtml(r.description)}</span>`;
-
-                    const tr = document.createElement('tr');
-                    tr.className = info.rowCls;
-                    tr.innerHTML = `
-                        <td style="white-space:nowrap;">${fmtDate(r.date)}</td>
-                        <td>${descHtml}</td>
-                        <td><span class="ref-badge">${escHtml(r.ref || '—')}</span></td>
-                        <td class="tr">${qtyInHtml}</td>
-                        <td class="tr">${qtyOutHtml}</td>
-                        <td class="tr">${salePriceHtml}</td>
-                        <td class="tr">${costPriceHtml}</td>
-                        <td class="tr">${balHtml}</td>`;
-                    tbody.appendChild(tr);
-
-                    if (r.type !== 'opening') {
-                        grandIn  += parseFloat(r.qty_in  ?? 0);
-                        grandOut += parseFloat(r.qty_out ?? 0);
-                        if (r.sale_price && r.qty_out) grandSaleVal += r.sale_price * r.qty_out;
-                    }
-                });
-
-                // Product Subtotal Row
-                const subTr = document.createElement('tr');
-                subTr.style.background = '#f1f5f9';
-                subTr.style.fontWeight = '700';
-                subTr.style.borderBottom = '2px solid #cbd5e1';
-                subTr.innerHTML = `
-                    <td colspan="3" style="color:#334155; font-size:0.85rem; text-align:right;">Subtotal for [${escHtml(prod.item_code)}] ${escHtml(prod.item_name)}:</td>
-                    <td class="tr" style="color:#16a34a;">+${fmtQty(pData.total_qty_in)}</td>
-                    <td class="tr" style="color:#dc2626;">-${fmtQty(pData.total_qty_out)}</td>
-                    <td class="tr" colspan="2"></td>
-                    <td class="tr" style="color:#1e3a8a; font-weight:700;">${fmtQty(pData.closing_balance)} pcs</td>`;
-                tbody.appendChild(subTr);
-            });
-
-            // Update footer totals
-            const closingBal = parseFloat(summary.closing_balance ?? 0);
-            document.getElementById('ftQtyIn').innerHTML   = `<span class="qty-in">${fmtQty(grandIn)}</span>`;
-            document.getElementById('ftQtyOut').innerHTML  = `<span class="qty-out">${fmtQty(grandOut)}</span>`;
-            document.getElementById('ftSaleVal').innerHTML = grandSaleVal ? fmtAmt(grandSaleVal) : '—';
-            document.getElementById('ftCostVal').innerHTML = '—';
-            document.getElementById('ftBalance').innerHTML = `<span class="${balClass(closingBal)}">${fmtQty(closingBal)}</span>`;
-        } else {
-            // ── SINGLE PRODUCT VIEW ──────────────────────────────────────────
-            let grandIn = 0, grandOut = 0, grandSaleVal = 0;
-            rows.forEach(r => {
-                const info     = txInfo[r.type] || txInfo.purchase;
-                const qtyInHtml  = r.qty_in  ? `<span class="qty-in">+${fmtQty(r.qty_in)}</span>`  : `<span class="qty-nil">—</span>`;
-                const qtyOutHtml = r.qty_out ? `<span class="qty-out">-${fmtQty(r.qty_out)}</span>` : `<span class="qty-nil">—</span>`;
-                const salePriceHtml = r.sale_price ? `<span style="color:#0f172a;">${fmtAmt(r.sale_price)}</span>` : `<span class="qty-nil">—</span>`;
-                const costPriceHtml = r.cost_price ? `<span style="color:#64748b;">${fmtAmt(r.cost_price)}</span>` : `<span class="qty-nil">—</span>`;
-                const bal = parseFloat(r.balance ?? 0);
-                const balHtml = `<span class="${balClass(bal)}">${fmtQty(bal)}</span>`;
-                const descHtml = r.type === 'opening'
-                    ? `<span class="tx-badge ${info.cls}">${info.label}</span>`
-                    : `<span class="tx-badge ${info.cls}">${info.label}</span>
-                       <span style="margin-left:6px;color:#334155;font-weight:500;font-size:.82rem;">${escHtml(r.description)}</span>`;
-
-                const tr = document.createElement('tr');
-                tr.className = info.rowCls;
-                tr.innerHTML = `
-                    <td style="white-space:nowrap;">${fmtDate(r.date)}</td>
-                    <td>${descHtml}</td>
-                    <td><span class="ref-badge">${escHtml(r.ref || '—')}</span></td>
-                    <td class="tr">${qtyInHtml}</td>
-                    <td class="tr">${qtyOutHtml}</td>
-                    <td class="tr">${salePriceHtml}</td>
-                    <td class="tr">${costPriceHtml}</td>
-                    <td class="tr">${balHtml}</td>`;
-                tbody.appendChild(tr);
-
-                if (r.type !== 'opening') {
-                    grandIn  += parseFloat(r.qty_in  ?? 0);
-                    grandOut += parseFloat(r.qty_out ?? 0);
-                    if (r.sale_price && r.qty_out) grandSaleVal += r.sale_price * r.qty_out;
-                }
-            });
-
-            // Closing balance row
-            const closingBal = parseFloat(summary.closing_balance ?? 0);
-            const closingTr = document.createElement('tr');
-            closingTr.className = 'row-closing';
-            closingTr.innerHTML = `
-                <td style="white-space:nowrap;">${fmtDate(summary.period_end || today)}</td>
-                <td><span class="tx-badge tx-opening">🏁 Closing Balance</span></td>
-                <td>—</td>
-                <td class="tr"><span class="qty-nil">—</span></td>
-                <td class="tr"><span class="qty-nil">—</span></td>
-                <td class="tr"><span class="qty-nil">—</span></td>
-                <td class="tr"><span class="qty-nil">—</span></td>
-                <td class="tr"><span class="${balClass(closingBal)}" style="font-size:1rem;">${fmtQty(closingBal)}</span></td>`;
-            tbody.appendChild(closingTr);
-
-            document.getElementById('ftQtyIn').innerHTML   = `<span class="qty-in">${fmtQty(grandIn)}</span>`;
-            document.getElementById('ftQtyOut').innerHTML  = `<span class="qty-out">${fmtQty(grandOut)}</span>`;
-            document.getElementById('ftSaleVal').innerHTML = grandSaleVal ? fmtAmt(grandSaleVal) : '—';
-            document.getElementById('ftCostVal').innerHTML = '—';
-            document.getElementById('ftBalance').innerHTML = `<span class="${balClass(closingBal)}">${fmtQty(closingBal)}</span>`;
+        let listToRender = (products_data && products_data.length > 0) ? products_data : [];
+        if (listToRender.length === 0 && summary.product) {
+            listToRender = [{
+                product: summary.product,
+                opening_balance: summary.opening_balance,
+                closing_balance: summary.closing_balance,
+                rows: rows || []
+            }];
         }
 
-                // ── Update total strip
-        document.getElementById('tsOpening').textContent = fmtQty(summary.opening_balance) + ' pcs';
-        document.getElementById('tsIn').textContent      = fmtQty(summary.total_qty_in)  + ' pcs';
-        document.getElementById('tsOut').textContent     = fmtQty(summary.total_qty_out) + ' pcs';
-        document.getElementById('tsClosing').textContent = fmtQty(summary.closing_balance) + ' pcs';
-        document.getElementById('tsSaleVal').textContent = fmtAmt(summary.total_sale_value);
-        document.getElementById('tsTxCount').textContent = (rows ? rows.length : 0) + ' transactions';
-        document.getElementById('totalStrip').style.display = 'flex';
+        if (listToRender.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-5 text-muted">
+                <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary opacity-50"></i>
+                <b>No records found for the selected filters.</b>
+            </td></tr>`;
+            document.getElementById('pledResult').style.display = 'block';
+            return;
+        }
+
+        listToRender.forEach((pData, pIdx) => {
+            const prod = pData.product || {};
+            const pNum = pIdx + 1;
+            const brandStr = (prod.brand_name && prod.brand_name !== '-' && prod.brand_name !== 'None') ? prod.brand_name : '';
+            const packStr = (prod.pieces_per_box && prod.pieces_per_box > 1) ? ` ${prod.pieces_per_box}PCS` : '';
+            const brandTag = brandStr ? ` (${brandStr.toUpperCase()})` : '';
+
+            let titleName = prod.item_name || 'Product';
+            if (brandStr && !titleName.toUpperCase().includes(brandStr.toUpperCase())) {
+                titleName = brandStr + ' ' + titleName;
+            }
+            titleName = titleName + packStr + brandTag;
+
+            // 1. Product Title Banner Row
+            const bannerTr = document.createElement('tr');
+            bannerTr.className = 'product-banner-row';
+            bannerTr.innerHTML = `
+                <td style="text-align:center; font-weight:700; vertical-align:middle; background:#e4edfa; border:1px solid #b8cce4; font-size:0.86rem; color:#1e293b;">
+                    ${pNum}
+                </td>
+                <td colspan="7" style="padding:6px 10px; font-weight:700; font-size:0.86rem; color:#0f172a; text-transform:uppercase; border:1px solid #b8cce4;">
+                    ${escHtml(titleName)}
+                </td>
+            `;
+            tbody.appendChild(bannerTr);
+
+            // 2. Opening Stock Row (Row 1)
+            const opBal = parseFloat(pData.opening_balance ?? 0);
+            const opTr = document.createElement('tr');
+            opTr.className = 'ledger-row-opening';
+            opTr.innerHTML = `
+                <td style="text-align:center; color:#64748b; border:1px solid #cbd5e1;">1</td>
+                <td style="border:1px solid #cbd5e1;"></td>
+                <td style="font-weight:600; text-transform:uppercase; border:1px solid #cbd5e1; color:#1e293b;">OPENING STOCK</td>
+                <td style="border:1px solid #cbd5e1;"></td>
+                <td style="text-align:right; border:1px solid #cbd5e1;">0.00</td>
+                <td style="text-align:right; border:1px solid #cbd5e1;">${fmt3(opBal > 0 ? opBal : 0)}</td>
+                <td style="text-align:right; border:1px solid #cbd5e1;">0.000</td>
+                <td style="text-align:right; font-weight:700; border:1px solid #cbd5e1; color:#0f172a;">${fmt3(opBal)}</td>
+            `;
+            tbody.appendChild(opTr);
+
+            // 3. Transactions Rows
+            let subIdx = 2;
+            if (pData.rows && pData.rows.length > 0) {
+                pData.rows.forEach(r => {
+                    if (r.type === 'opening') return;
+
+                    const inQty  = parseFloat(r.qty_in  ?? 0);
+                    const outQty = parseFloat(r.qty_out ?? 0);
+                    const bal    = parseFloat(r.balance ?? 0);
+                    const rateVal = parseFloat(r.rate ?? r.cost_price ?? r.sale_price ?? 0);
+                    const rateText = rateVal > 0 ? ('PKR ' + fmt2(rateVal)) : '0.00';
+
+                    const tr = document.createElement('tr');
+                    tr.className = 'ledger-row-tx';
+                    tr.innerHTML = `
+                        <td style="text-align:center; color:#64748b; border:1px solid #cbd5e1;">${subIdx}</td>
+                        <td style="white-space:nowrap; border:1px solid #cbd5e1; font-size:0.8rem; color:#334155; line-height:1.2;">${fmtDateWithTime(r.date)}</td>
+                        <td style="border:1px solid #cbd5e1; color:#0f172a; font-weight:500;">${escHtml(r.description || '')}</td>
+                        <td style="border:1px solid #cbd5e1; font-weight:600; color:#334155; font-size:0.8rem;">${escHtml(r.ref || '-')}</td>
+                        <td style="text-align:right; border:1px solid #cbd5e1; white-space:nowrap; color:#334155;">${rateText}</td>
+                        <td style="text-align:right; border:1px solid #cbd5e1; ${inQty > 0 ? 'font-weight:600;' : ''}">${fmt3(inQty)}</td>
+                        <td style="text-align:right; border:1px solid #cbd5e1; ${outQty > 0 ? 'font-weight:600;' : ''}">${fmt3(outQty)}</td>
+                        <td style="text-align:right; font-weight:700; border:1px solid #cbd5e1; color:#0f172a;">${fmt3(bal)}</td>
+                    `;
+                    tbody.appendChild(tr);
+                    subIdx++;
+                });
+            }
+
+            // 4. Closing Balance Row
+            const closingBal = parseFloat(pData.closing_balance ?? 0);
+            const closingTr = document.createElement('tr');
+            closingTr.className = 'ledger-row-closing';
+            closingTr.innerHTML = `
+                <td colspan="7" style="text-align:right; font-weight:700; color:#991b1b; padding:6px 12px; border:1px solid #cbd5e1; font-size:0.85rem;">
+                    Closing Balance :
+                </td>
+                <td style="text-align:right; font-weight:700; color:#991b1b; padding:6px 8px; border:1px solid #cbd5e1; font-size:0.88rem;">
+                    ${fmt3(closingBal)}
+                </td>
+            `;
+            tbody.appendChild(closingTr);
+        });
+
         document.getElementById('pledResult').style.display = 'block';
     }
 

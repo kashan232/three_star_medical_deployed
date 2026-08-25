@@ -1291,9 +1291,13 @@ class ReportingController extends Controller
         // sales table actual columns: total_bill_amount, total_extradiscount, total_net, cash, change
         $query = DB::table('sales')
             ->leftJoin('customers', 'sales.customer_id', '=', 'customers.id')
+            ->where('sales.mode', '!=', 'so')
+            ->whereNotIn('sales.sale_status', ['draft', 'in_delivery'])
             ->select(
                 'sales.id',
                 'sales.invoice_no',
+                'sales.sale_order_no',
+                'sales.vendor_bill_no as dc_no',
                 'sales.reference',
                 'sales.sale_status',
                 'sales.total_bill_amount',   // subtotal
@@ -1437,6 +1441,8 @@ class ReportingController extends Controller
             $rows[] = [
                 'id' => $s->id,
                 'invoice_no' => $s->invoice_no ?? ('SLE-'.$s->id),
+                'sale_order_no' => $s->sale_order_no ?? '',
+                'dc_no' => $s->dc_no ?? '',
                 'reference' => $s->reference ?? '-',
                 'sale_status' => $s->sale_status,
                 'customer_name' => $s->customer_name ?? 'Walk-in Customer',
@@ -1546,7 +1552,9 @@ class ReportingController extends Controller
 
         $query = DB::table('sales')
             ->leftJoin('customers', 'sales.customer_id', '=', 'customers.id')
-            ->select('sales.id','sales.invoice_no','sales.sale_status','sales.total_bill_amount',
+            ->where('sales.mode', '!=', 'so')
+            ->whereNotIn('sales.sale_status', ['draft', 'in_delivery'])
+            ->select('sales.id','sales.invoice_no','sales.sale_order_no','sales.vendor_bill_no as dc_no','sales.sale_status','sales.total_bill_amount',
                      'sales.total_extradiscount','sales.total_net','sales.cash','sales.change',
                      'sales.created_at','customers.customer_name');
 
@@ -1608,6 +1616,8 @@ class ReportingController extends Controller
 
                 $rows[] = [
                     'invoice'   => $s->invoice_no ?? 'SLE-'.$s->id,
+                    'sale_order_no' => $s->sale_order_no ?? '',
+                    'dc_no'     => $s->dc_no ?? '',
                     'date'      => $date,
                     'customer'  => $s->customer_name ?? 'Walk-in',
                     'status'    => $s->sale_status ?? '-',
@@ -1634,12 +1644,12 @@ class ReportingController extends Controller
     {
         $d = $this->buildSaleReportData($request);
 
-        $data   = [['Invoice No','Date','Customer','Status','Item Description','Code','HS Code','Packing','Rate','Qty','Free','Discount','GST','Net Total']];
+        $data   = [['Invoice No','SO #','DC #','Date','Customer','Status','Item Description','Code','HS Code','Packing','Rate','Qty','Free','Discount','GST','Net Total']];
         foreach ($d['rows'] as $r) {
-            $data[] = [$r['invoice'],$r['date'],$r['customer'],$r['status'],$r['item'],$r['code'],$r['hs_code'],$r['packing'],$r['rate'],$r['qty'],$r['free'],$r['discount'],$r['gst'],$r['total']];
+            $data[] = [$r['invoice'],$r['sale_order_no'] ?: '-',$r['dc_no'] ?: '-',$r['date'],$r['customer'],$r['status'],$r['item'],$r['code'],$r['hs_code'],$r['packing'],$r['rate'],$r['qty'],$r['free'],$r['discount'],$r['gst'],$r['total']];
         }
         $data[] = [];
-        $data[] = ['','','','','','','','','GRAND TOTAL:',$d['grandQty'],$d['grandFree'],'','',$d['grandNet']];
+        $data[] = ['','','','','','','','','','GRAND TOTAL:',$d['grandQty'],$d['grandFree'],'','',$d['grandNet']];
 
         $xlsx     = \Shuchkin\SimpleXLSXGen::fromArray($data);
         $filename = 'Sale_Report_' . now()->format('Y-m-d') . '.xlsx';
@@ -2110,7 +2120,8 @@ class ReportingController extends Controller
         // ══════════════════════════════════════════════════════════════════
         $salesRevenueQry = DB::table('sales')
             ->whereBetween(DB::raw('DATE(created_at)'), [$start, $end])
-            ->where('sale_status', '!=', 'returned');
+            ->where('mode', '!=', 'so')
+            ->whereNotIn('sale_status', ['draft', 'in_delivery', 'returned']);
         if ($branchId) {
             $salesRevenueQry->where('branch_id', $branchId);
         }
@@ -2286,7 +2297,8 @@ class ReportingController extends Controller
 
         $salesByPeriodQry = DB::table('sales')
             ->whereBetween(DB::raw('DATE(created_at)'), [$start, $end])
-            ->where('sale_status', '!=', 'returned');
+            ->where('mode', '!=', 'so')
+            ->whereNotIn('sale_status', ['draft', 'in_delivery', 'returned']);
         if ($branchId) {
             $salesByPeriodQry->where('branch_id', $branchId);
         }
@@ -4312,17 +4324,52 @@ class ReportingController extends Controller
                     'item_name'   => $p->item_name,
                 ];
 
+                // ── Period Opening Stock Batches ──
+                $obPeriodQ = DB::table('product_batches')
+                    ->leftJoin('warehouses', 'warehouses.id', '=', 'product_batches.warehouse_id')
+                    ->where('product_batches.product_id', $pId)
+                    ->where(function ($q) {
+                        $q->where('product_batches.source_type', 'opening_stock')
+                          ->orWhereRaw("product_batches.batch_number REGEXP '^[0]+$'");
+                    });
+                if ($branchId)    $obPeriodQ->where('product_batches.branch_id', $branchId);
+                if ($warehouseId) $obPeriodQ->where('product_batches.warehouse_id', $warehouseId);
+                if ($startDate)   $obPeriodQ->where('product_batches.created_at', '>=', $startDate . ' 00:00:00');
+                if ($endDate)     $obPeriodQ->where('product_batches.created_at', '<=', $endDate . ' 23:59:59');
+                foreach ($obPeriodQ->select('product_batches.*', DB::raw('COALESCE(warehouses.warehouse_name, "MAIN STORE") as wh_name'))->get() as $ob) {
+                    $obQty = (float)$ob->qty_received > 0 ? (float)$ob->qty_received : (float)$ob->qty_remaining;
+                    $pRows[] = [
+                        'sort_key'    => $ob->created_at . '_0',
+                        'type'        => 'opening_batch',
+                        'date'        => $ob->created_at,
+                        'description' => 'OPENING STOCK',
+                        'ref'         => '-',
+                        'qty_in'      => $obQty,
+                        'qty_out'     => null,
+                        'rate'        => 0,
+                        'sale_price'  => null,
+                        'cost_price'  => 0,
+                        'balance'     => null,
+                        'product_id'  => $pId,
+                        'item_code'   => $p->item_code,
+                        'item_name'   => $p->item_name,
+                    ];
+                }
+
                 // ── Purchases ──
                 $purchQ = DB::table('purchase_items')
                     ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
                     ->leftJoin('vendors', 'vendors.id', '=', 'purchases.vendor_id')
+                    ->leftJoin('warehouses', 'warehouses.id', '=', 'purchase_items.warehouse_id')
                     ->leftJoin('product_batches', 'product_batches.purchase_item_id', '=', 'purchase_items.id')
                     ->where('purchase_items.product_id', $pId)
                     ->where('purchases.status_purchase', '!=', 'draft')
                     ->select(
                         'purchases.purchase_date as date',
-                        DB::raw('COALESCE(NULLIF(purchases.invoice_no, ""), purchases.po_ref, CONCAT("GRN#", purchases.id)) as ref'),
+                        'purchases.created_at',
+                        DB::raw('COALESCE(NULLIF(purchases.invoice_no, ""), purchases.po_ref, CONCAT("GRN-", LPAD(purchases.id, 4, "0"))) as ref'),
                         DB::raw('COALESCE(vendors.name, "Unknown Vendor") as party'),
+                        DB::raw('COALESCE(warehouses.warehouse_name, "MAIN STORE") as warehouse_name'),
                         DB::raw('COALESCE(
                             NULLIF(product_batches.qty_received, 0),
                             NULLIF(purchase_items.boxes_qty * COALESCE(purchase_items.pieces_per_box, 1), 0),
@@ -4340,15 +4387,16 @@ class ReportingController extends Controller
                 if ($startDate)   $purchQ->where('purchases.purchase_date', '>=', $startDate);
                 if ($endDate)     $purchQ->where('purchases.purchase_date', '<=', $endDate);
                 foreach ($purchQ->get() as $r) {
-                    $batchLabel = !empty($r->batch_no) ? ' [Batch: ' . $r->batch_no . (!empty($r->exp_date) ? ', Exp: ' . $r->exp_date : '') . ']' : '';
+                    $dtStr = $r->created_at ? date('Y-m-d H:i:s', strtotime($r->created_at)) : ($r->date . ' 12:00:00');
                     $pRows[] = [
-                        'sort_key'    => $r->date . '_1',
+                        'sort_key'    => $dtStr . '_1',
                         'type'        => 'purchase',
-                        'date'        => $r->date,
-                        'description' => 'Purchase GRN (' . $r->party . ')' . $batchLabel,
+                        'date'        => $dtStr,
+                        'description' => "({$r->ref} , {$r->party} , {$r->warehouse_name})",
                         'ref'         => $r->ref,
                         'qty_in'      => (float)$r->qty,
                         'qty_out'     => null,
+                        'rate'        => (float)$r->price,
                         'sale_price'  => null,
                         'cost_price'  => (float)$r->price,
                         'balance'     => null,
@@ -4362,12 +4410,15 @@ class ReportingController extends Controller
                 $saleQ = DB::table('sale_items')
                     ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
                     ->leftJoin('customers', 'customers.id', '=', 'sales.customer_id')
+                    ->leftJoin('warehouses', 'warehouses.id', '=', 'sale_items.warehouse_id')
                     ->where('sale_items.product_id', $pId)
                     ->whereIn('sales.sale_status', ['posted', 'post', 'in_delivery'])
                     ->select(
                         'sales.sale_date as date',
-                        DB::raw('COALESCE(NULLIF(sales.invoice_no, ""), CONCAT("SIN#", sales.id)) as ref'),
+                        'sales.created_at',
+                        DB::raw('COALESCE(NULLIF(sales.invoice_no, ""), CONCAT("SO-", LPAD(sales.id, 4, "0"))) as ref'),
                         DB::raw('COALESCE(customers.customer_name, "Walk-in") as party'),
+                        DB::raw('COALESCE(warehouses.warehouse_name, "MAIN STORE") as warehouse_name'),
                         DB::raw("COALESCE(NULLIF(sale_items.total_pieces, 0), sale_items.qty * " . (int)$p->pieces_per_box . ") as qty"),
                         'sale_items.price',
                         'sale_items.total'
@@ -4377,14 +4428,16 @@ class ReportingController extends Controller
                 if ($startDate)   $saleQ->where('sales.sale_date', '>=', $startDate);
                 if ($endDate)     $saleQ->where('sales.sale_date', '<=', $endDate);
                 foreach ($saleQ->get() as $r) {
+                    $dtStr = $r->created_at ? date('Y-m-d H:i:s', strtotime($r->created_at)) : ($r->date . ' 12:00:00');
                     $pRows[] = [
-                        'sort_key'    => $r->date . '_2',
+                        'sort_key'    => $dtStr . '_2',
                         'type'        => 'sale',
-                        'date'        => $r->date,
-                        'description' => 'Sale Invoice (' . $r->party . ')',
+                        'date'        => $dtStr,
+                        'description' => "({$r->ref} , {$r->party} , {$r->warehouse_name})",
                         'ref'         => $r->ref,
                         'qty_in'      => null,
                         'qty_out'     => (float)$r->qty,
+                        'rate'        => (float)$r->price,
                         'sale_price'  => (float)$r->price,
                         'cost_price'  => null,
                         'balance'     => null,
@@ -4398,11 +4451,14 @@ class ReportingController extends Controller
                 $dcQ = DB::table('delivery_note_items')
                     ->join('delivery_notes', 'delivery_notes.id', '=', 'delivery_note_items.dc_note_id')
                     ->leftJoin('customers', 'customers.id', '=', 'delivery_notes.customer_id')
+                    ->leftJoin('warehouses', 'warehouses.id', '=', 'delivery_note_items.warehouse_id')
                     ->where('delivery_note_items.product_id', $pId)
                     ->select(
                         'delivery_notes.delivery_date as date',
-                        DB::raw('COALESCE(delivery_notes.dc_no, "-") as ref'),
+                        'delivery_notes.created_at',
+                        DB::raw('COALESCE(delivery_notes.dc_no, CONCAT("SO-", LPAD(delivery_notes.id, 4, "0"))) as ref'),
                         DB::raw('COALESCE(customers.customer_name, "Walk-in") as party'),
+                        DB::raw('COALESCE(warehouses.warehouse_name, "MAIN STORE") as warehouse_name'),
                         DB::raw("COALESCE(NULLIF(delivery_note_items.total_pieces, 0), delivery_note_items.qty * " . (int)$p->pieces_per_box . ") as qty"),
                         'delivery_note_items.price',
                         'delivery_note_items.line_total'
@@ -4412,14 +4468,16 @@ class ReportingController extends Controller
                 if ($startDate)   $dcQ->where('delivery_notes.delivery_date', '>=', $startDate);
                 if ($endDate)     $dcQ->where('delivery_notes.delivery_date', '<=', $endDate);
                 foreach ($dcQ->get() as $r) {
+                    $dtStr = $r->created_at ? date('Y-m-d H:i:s', strtotime($r->created_at)) : ($r->date . ' 12:00:00');
                     $pRows[] = [
-                        'sort_key'    => $r->date . '_3',
+                        'sort_key'    => $dtStr . '_3',
                         'type'        => 'delivery_challan',
-                        'date'        => $r->date,
-                        'description' => 'Delivery Challan (' . $r->party . ')',
+                        'date'        => $dtStr,
+                        'description' => "({$r->ref} , {$r->party} , {$r->warehouse_name})",
                         'ref'         => $r->ref,
                         'qty_in'      => null,
                         'qty_out'     => (float)$r->qty,
+                        'rate'        => (float)$r->price,
                         'sale_price'  => (float)$r->price,
                         'cost_price'  => null,
                         'balance'     => null,
@@ -4433,12 +4491,15 @@ class ReportingController extends Controller
                 $srQ = DB::table('sale_return_items')
                     ->join('sale_returns', 'sale_returns.id', '=', 'sale_return_items.sale_return_id')
                     ->leftJoin('customers', 'customers.id', '=', 'sale_returns.customer_id')
+                    ->leftJoin('warehouses', 'warehouses.id', '=', 'sale_return_items.warehouse_id')
                     ->where('sale_return_items.product_id', $pId)
                     ->where('sale_returns.status', 'posted')
                     ->select(
                         'sale_returns.return_date as date',
-                        DB::raw('COALESCE(sale_returns.return_invoice, "-") as ref'),
+                        'sale_returns.created_at',
+                        DB::raw('COALESCE(sale_returns.return_invoice, CONCAT("SR-", LPAD(sale_returns.id, 4, "0"))) as ref'),
                         DB::raw('COALESCE(customers.customer_name, "Walk-in") as party'),
+                        DB::raw('COALESCE(warehouses.warehouse_name, "MAIN STORE") as warehouse_name'),
                         'sale_return_items.qty',
                         'sale_return_items.price'
                     );
@@ -4447,14 +4508,16 @@ class ReportingController extends Controller
                 if ($startDate)   $srQ->where('sale_returns.return_date', '>=', $startDate);
                 if ($endDate)     $srQ->where('sale_returns.return_date', '<=', $endDate);
                 foreach ($srQ->get() as $r) {
+                    $dtStr = $r->created_at ? date('Y-m-d H:i:s', strtotime($r->created_at)) : ($r->date . ' 12:00:00');
                     $pRows[] = [
-                        'sort_key'    => $r->date . '_4',
+                        'sort_key'    => $dtStr . '_4',
                         'type'        => 'sale_return',
-                        'date'        => $r->date,
-                        'description' => 'Sale Return (' . $r->party . ')',
+                        'date'        => $dtStr,
+                        'description' => "({$r->ref} , {$r->party} , {$r->warehouse_name})",
                         'ref'         => $r->ref,
                         'qty_in'      => (float)$r->qty,
                         'qty_out'     => null,
+                        'rate'        => (float)$r->price,
                         'sale_price'  => (float)$r->price,
                         'cost_price'  => null,
                         'balance'     => null,
@@ -4468,11 +4531,14 @@ class ReportingController extends Controller
                 $prQ = DB::table('purchase_return_items')
                     ->join('purchase_returns', 'purchase_returns.id', '=', 'purchase_return_items.purchase_return_id')
                     ->leftJoin('vendors', 'vendors.id', '=', 'purchase_returns.vendor_id')
+                    ->leftJoin('warehouses', 'warehouses.id', '=', 'purchase_return_items.warehouse_id')
                     ->where('purchase_return_items.product_id', $pId)
                     ->select(
                         'purchase_returns.return_date as date',
-                        DB::raw('COALESCE(purchase_returns.return_invoice, "-") as ref'),
+                        'purchase_returns.created_at',
+                        DB::raw('COALESCE(purchase_returns.return_invoice, CONCAT("PRTN-", LPAD(purchase_returns.id, 4, "0"))) as ref'),
                         DB::raw('COALESCE(vendors.name, "Unknown Vendor") as party'),
+                        DB::raw('COALESCE(warehouses.warehouse_name, "MAIN STORE") as warehouse_name'),
                         'purchase_return_items.qty',
                         'purchase_return_items.price'
                     );
@@ -4481,14 +4547,16 @@ class ReportingController extends Controller
                 if ($startDate)   $prQ->where('purchase_returns.return_date', '>=', $startDate);
                 if ($endDate)     $prQ->where('purchase_returns.return_date', '<=', $endDate);
                 foreach ($prQ->get() as $r) {
+                    $dtStr = $r->created_at ? date('Y-m-d H:i:s', strtotime($r->created_at)) : ($r->date . ' 12:00:00');
                     $pRows[] = [
-                        'sort_key'    => $r->date . '_5',
+                        'sort_key'    => $dtStr . '_5',
                         'type'        => 'purchase_return',
-                        'date'        => $r->date,
-                        'description' => 'Purchase Return (' . $r->party . ')',
+                        'date'        => $dtStr,
+                        'description' => "({$r->ref} , {$r->party} , {$r->warehouse_name})",
                         'ref'         => $r->ref,
                         'qty_in'      => null,
                         'qty_out'     => (float)$r->qty,
+                        'rate'        => (float)$r->price,
                         'sale_price'  => null,
                         'cost_price'  => (float)$r->price,
                         'balance'     => null,
@@ -4616,25 +4684,141 @@ class ReportingController extends Controller
         if (isset($d['success']) && !$d['success']) return response()->json($d, 500);
 
         $filename = 'Product_Ledger_' . now()->format('Y-m-d') . '.pdf';
-        $html = '<html><head><style>
-            body { font-family: DejaVu Sans, sans-serif; font-size: 10px; }
-            h2 { text-align:center; } table { width:100%; border-collapse:collapse; }
-            th, td { border:1px solid #ddd; padding:4px; text-align:left; }
-            th { background-color:#f2f2f2; }
-            .num { text-align:right; }
-        </style></head><body>';
-        $pName = $d['summary']['product'] ? $d['summary']['product']->item_name : 'All Products';
-        $html .= '<h2>Product Ledger: ' . $pName . '</h2>';
-        $html .= '<p>Period: ' . \Carbon\Carbon::parse($d['summary']['period_start'])->format('d/m/Y') . ' to ' . \Carbon\Carbon::parse($d['summary']['period_end'])->format('d/m/Y') . '</p>';
-        $html .= '<table><tr><th>Date</th><th>Ref</th><th>Description</th><th class="num">Qty In</th><th class="num">Qty Out</th><th class="num">Balance</th></tr>';
-        $html .= '<tr><td colspan="5">Opening Balance</td><td class="num">'.number_format($d['summary']['opening_balance'],4).'</td></tr>';
-        
-        foreach ($d['rows'] as $t) {
-            if ($t['type'] === 'opening') continue;
-            $html .= '<tr><td>'.$t['date'].'</td><td>'.$t['ref'].'</td><td>'.$t['description'].'</td><td class="num">'.($t['qty_in'] ? number_format($t['qty_in'],2) : '-').'</td><td class="num">'.($t['qty_out'] ? number_format($t['qty_out'],2) : '-').'</td><td class="num">'.number_format($t['balance'],4).'</td></tr>';
+        $startDate = !empty($d['summary']['period_start']) ? $d['summary']['period_start'] : '2026-04-01';
+        $endDate   = !empty($d['summary']['period_end']) ? $d['summary']['period_end'] : '2026-04-30';
+        $location  = 'THREE STARS MEDICAL SUPPLIES';
+
+        $productsData = !empty($d['products_data']) ? $d['products_data'] : [];
+        if (empty($productsData) && !empty($d['rows'])) {
+            $productsData[] = [
+                'product' => $d['summary']['product'] ?? [],
+                'opening_balance' => $d['summary']['opening_balance'] ?? 0,
+                'closing_balance' => $d['summary']['closing_balance'] ?? 0,
+                'rows' => $d['rows'],
+            ];
         }
-        $html .= '<tr><td colspan="3"><b>Totals</b></td><td class="num"><b>'.number_format($d['summary']['total_qty_in'],2).'</b></td><td class="num"><b>'.number_format($d['summary']['total_qty_out'],2).'</b></td><td class="num"><b>'.number_format($d['summary']['closing_balance'],4).'</b></td></tr>';
-        $html .= '</table></body></html>';
+
+        $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+            @page { margin: 15px 20px; }
+            body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8.5px; color: #000; margin: 0; padding: 0; }
+            .header-box { width: 100%; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 6px; }
+            .company-name { font-size: 13px; font-weight: bold; letter-spacing: 0.3px; text-transform: uppercase; }
+            .company-sub { font-size: 9px; color: #222; margin-top: 1px; }
+            .report-title { font-size: 16px; font-weight: bold; margin-top: 6px; margin-bottom: 2px; }
+            .meta-table { width: 100%; margin-top: 4px; font-size: 9px; }
+            .meta-table td { padding: 0; }
+            table.ledger-table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+            table.ledger-table th { background-color: #2e62a6; color: #ffffff; font-weight: bold; font-size: 8.5px; padding: 5px 4px; border: 1px solid #2e62a6; text-align: left; }
+            table.ledger-table td { border: 1px solid #cbd5e1; padding: 4px 4px; font-size: 8px; vertical-align: middle; }
+            .tr-prod-banner { background-color: #dce6f7; font-weight: bold; }
+            .tr-prod-banner td { padding: 4px 5px; font-size: 8.5px; text-transform: uppercase; border: 1px solid #b8cce4; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .text-danger { color: #991b1b; }
+            .fw-bold { font-weight: bold; }
+            .footer-table { width: 100%; border-top: 1px solid #cbd5e1; margin-top: 10px; font-size: 7.5px; color: #64748b; }
+            .footer-table td { padding-top: 4px; }
+        </style></head><body>';
+
+        $html .= '<div class="header-box">';
+        $html .= '<div class="company-name">THREE STARS MEDICAL SUPPLIES</div>';
+        $html .= '<div class="company-sub">Three Stars Medical Supplies : Lahore</div>';
+        $html .= '<div class="company-sub">Phone : 0321-4208158</div>';
+        $html .= '<div class="report-title">Product Ledger</div>';
+        $html .= '<table class="meta-table"><tr>';
+        $html .= '<td style="font-weight: bold;">Location : ' . htmlspecialchars($location) . '</td>';
+        $html .= '<td style="text-align: right; font-weight: bold;">' . htmlspecialchars($startDate) . ' -TO- ' . htmlspecialchars($endDate) . '</td>';
+        $html .= '</tr></table>';
+        $html .= '</div>';
+
+        $html .= '<table class="ledger-table">';
+        $html .= '<thead><tr>';
+        $html .= '<th style="width: 32px; text-align: center;">SR #</th>';
+        $html .= '<th style="width: 75px;">Date</th>';
+        $html .= '<th>Description</th>';
+        $html .= '<th style="width: 58px;">REF #</th>';
+        $html .= '<th style="width: 58px; text-align: right;">Rate</th>';
+        $html .= '<th style="width: 54px; text-align: right;">Debit</th>';
+        $html .= '<th style="width: 54px; text-align: right;">Credit</th>';
+        $html .= '<th style="width: 60px; text-align: right;">Balance</th>';
+        $html .= '</tr></thead><tbody>';
+
+        $pIndex = 1;
+        foreach ($productsData as $pData) {
+            $prod = is_array($pData['product']) ? (object)$pData['product'] : $pData['product'];
+            $brandStr = (!empty($prod->brand_name) && $prod->brand_name !== '-' && $prod->brand_name !== 'None') ? $prod->brand_name : '';
+            $packStr = (!empty($prod->pieces_per_box) && $prod->pieces_per_box > 1) ? ' ' . $prod->pieces_per_box . 'PCS' : '';
+            $brandTag = $brandStr ? ' (' . strtoupper($brandStr) . ')' : '';
+            
+            $titleName = $prod->item_name ?? 'Product';
+            if ($brandStr && stripos($titleName, $brandStr) === false) {
+                $titleName = $brandStr . ' ' . $titleName;
+            }
+            $titleName = $titleName . $packStr . $brandTag;
+
+            // Product Banner
+            $html .= '<tr class="tr-prod-banner">';
+            $html .= '<td class="text-center" style="background:#e4edfa;">' . $pIndex . '</td>';
+            $html .= '<td colspan="7">' . htmlspecialchars($titleName) . '</td>';
+            $html .= '</tr>';
+
+            // Opening Stock Row
+            $opBal = (float)($pData['opening_balance'] ?? 0);
+            $html .= '<tr>';
+            $html .= '<td class="text-center">1</td>';
+            $html .= '<td></td>';
+            $html .= '<td style="font-weight: bold; text-transform: uppercase;">OPENING STOCK</td>';
+            $html .= '<td></td>';
+            $html .= '<td class="text-right">0.00</td>';
+            $html .= '<td class="text-right">' . number_format(max(0, $opBal), 3) . '</td>';
+            $html .= '<td class="text-right">0.000</td>';
+            $html .= '<td class="text-right fw-bold">' . number_format($opBal, 3) . '</td>';
+            $html .= '</tr>';
+
+            // Transactions
+            $subIdx = 2;
+            if (!empty($pData['rows'])) {
+                foreach ($pData['rows'] as $r) {
+                    if (($r['type'] ?? '') === 'opening') continue;
+
+                    $inQty  = (float)($r['qty_in'] ?? 0);
+                    $outQty = (float)($r['qty_out'] ?? 0);
+                    $bal    = (float)($r['balance'] ?? 0);
+                    $rate   = (float)($r['rate'] ?? $r['cost_price'] ?? $r['sale_price'] ?? 0);
+                    $dtStr  = !empty($r['date']) ? date('d/m/Y H:i', strtotime($r['date'])) : '';
+
+                    $html .= '<tr>';
+                    $html .= '<td class="text-center">' . $subIdx . '</td>';
+                    $html .= '<td>' . $dtStr . '</td>';
+                    $html .= '<td>' . htmlspecialchars($r['description'] ?? '') . '</td>';
+                    $html .= '<td>' . htmlspecialchars($r['ref'] ?? '-') . '</td>';
+                    $html .= '<td class="text-right">' . ($rate > 0 ? 'PKR ' . number_format($rate, 2) : '0.00') . '</td>';
+                    $html .= '<td class="text-right">' . number_format($inQty, 3) . '</td>';
+                    $html .= '<td class="text-right">' . number_format($outQty, 3) . '</td>';
+                    $html .= '<td class="text-right fw-bold">' . number_format($bal, 3) . '</td>';
+                    $html .= '</tr>';
+                    $subIdx++;
+                }
+            }
+
+            // Closing Balance Row
+            $closingBal = (float)($pData['closing_balance'] ?? 0);
+            $html .= '<tr>';
+            $html .= '<td colspan="7" class="text-right fw-bold text-danger" style="padding: 4px 6px;">Closing Balance :</td>';
+            $html .= '<td class="text-right fw-bold text-danger">' . number_format($closingBal, 3) . '</td>';
+            $html .= '</tr>';
+
+            $pIndex++;
+        }
+
+        $html .= '</tbody></table>';
+
+        $html .= '<table class="footer-table"><tr>';
+        $html .= '<td>ProWaves ver.8.0.1.4592 Copyrights &copy; ' . date('Y') . ' Cybernetic Technologies. All rights reserved. &nbsp;&nbsp; rptItemLedger</td>';
+        $html .= '<td style="text-align: right;">Print Date : ' . now()->format('d M Y') . '</td>';
+        $html .= '</tr></table>';
+
+        $html .= '</body></html>';
 
         $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadHTML($html)->setPaper('A4', 'portrait');
         return $pdf->download($filename);

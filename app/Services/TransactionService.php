@@ -629,23 +629,76 @@ class TransactionService
      */
     public function recalculateVendorLedger($vendorId)
     {
+        $vendor = \App\Models\Vendor::find($vendorId);
+        if (! $vendor) return;
+
         $entries = \App\Models\VendorLedger::where('vendor_id', $vendorId)
-            ->orderBy('created_at', 'asc')
+            ->orderBy(\Illuminate\Support\Facades\DB::raw('DATE(created_at)'), 'asc')
             ->orderBy('id', 'asc')
             ->get();
             
-        $runningBalance = 0;
+        $runningBalance = (float)($vendor->opening_balance ?? 0);
         
         foreach ($entries as $index => $entry) {
-            if ($index === 0) {
-                 // The first entry might have its own opening_balance if it was the initial record
-                 $runningBalance = (float)$entry->opening_balance + (float)$entry->credit - (float)$entry->debit;
-            } else {
-                 $entry->previous_balance = $runningBalance;
-                 $runningBalance += ((float)$entry->credit - (float)$entry->debit);
+            $debit = (float)($entry->debit ?? 0);
+            $credit = (float)($entry->credit ?? 0);
+
+            // Self-healing: if both debit and credit are 0, recover from source
+            if ($debit == 0 && $credit == 0) {
+                $desc = $entry->description ?? '';
+                if ($entry->source_type === \App\Models\Purchase::class || str_contains($desc, 'Purchase') || str_contains($desc, 'PIN-') || str_contains($desc, 'PO-')) {
+                    $purchase = $entry->source_id ? \App\Models\Purchase::find($entry->source_id) : null;
+                    if (! $purchase && preg_match('/#([A-Za-z0-9_-]+)/', $desc, $m)) {
+                        $purchase = \App\Models\Purchase::where('invoice_no', $m[1])->first();
+                    }
+                    if ($purchase) {
+                        $credit = (float)$purchase->total_net;
+                        $debit = 0;
+                    }
+                } elseif ($entry->source_type === \App\Models\PurchaseReturn::class || str_contains($desc, 'Return') || str_contains($desc, 'PR-')) {
+                    $return = $entry->source_id ? \App\Models\PurchaseReturn::find($entry->source_id) : null;
+                    if ($return) {
+                        $debit = (float)$return->total_net;
+                        $credit = 0;
+                    }
+                } elseif ($entry->source_type === \App\Models\VoucherMaster::class || str_contains($desc, 'Voucher') || str_contains($desc, 'CPV') || str_contains($desc, 'BPV') || str_contains($desc, 'Payment')) {
+                    $voucher = $entry->source_id ? \App\Models\VoucherMaster::find($entry->source_id) : null;
+                    if ($voucher) {
+                        $vType = strtolower($voucher->voucher_type);
+                        if (in_array($vType, ['cpv', 'bpv', 'payment', 'expense'])) {
+                            $debit = (float)$voucher->total_amount;
+                            $credit = 0;
+                        } else {
+                            $credit = (float)$voucher->total_amount;
+                            $debit = 0;
+                        }
+                    }
+                }
+
+                if ($debit == 0 && $credit == 0) {
+                    $prev = (float)$entry->previous_balance;
+                    $close = (float)$entry->closing_balance;
+                    if ($close > $prev) {
+                        $credit = $close - $prev;
+                    } elseif ($close < $prev) {
+                        $debit = $prev - $close;
+                    }
+                }
+
+                $entry->debit = $debit;
+                $entry->credit = $credit;
             }
+
+            $entry->previous_balance = $runningBalance;
+            $runningBalance += ($credit - $debit);
             $entry->closing_balance = $runningBalance;
             $entry->save();
+        }
+
+        // Sync to Vendor if column exists
+        if (\Illuminate\Support\Facades\Schema::hasColumn('vendors', 'previous_balance')) {
+            $vendor->previous_balance = $runningBalance;
+            $vendor->save();
         }
     }
 
@@ -712,28 +765,75 @@ class TransactionService
 
     public function recalculateCustomerLedger($customerId)
     {
+        $customer = \App\Models\Customer::find($customerId);
+        if (! $customer) return;
+
         $entries = \App\Models\CustomerLedger::where('customer_id', $customerId)
-            ->orderBy('created_at', 'asc')
+            ->orderBy(\Illuminate\Support\Facades\DB::raw('DATE(created_at)'), 'asc')
             ->orderBy('id', 'asc')
             ->get();
             
-        $runningBalance = 0;
+        $runningBalance = (float)($customer->opening_balance ?? 0);
+
         foreach ($entries as $index => $entry) {
-            if ($index === 0) {
-                 $runningBalance = (float)$entry->opening_balance + (float)$entry->debit - (float)$entry->credit;
-            } else {
-                 $entry->previous_balance = $runningBalance;
-                 $runningBalance += ((float)$entry->debit - (float)$entry->credit);
+            $debit = (float)($entry->debit ?? 0);
+            $credit = (float)($entry->credit ?? 0);
+
+            // Self-healing: if both debit and credit are 0, recover from source
+            if ($debit == 0 && $credit == 0) {
+                $desc = $entry->description ?? '';
+                if ($entry->source_type === \App\Models\Sale::class || str_contains($desc, 'Sale') || str_contains($desc, 'SIN-') || str_contains($desc, 'INV')) {
+                    $sale = $entry->source_id ? \App\Models\Sale::find($entry->source_id) : null;
+                    if (! $sale && preg_match('/#([A-Za-z0-9_-]+)/', $desc, $m)) {
+                        $sale = \App\Models\Sale::where('invoice_no', $m[1])->first();
+                    }
+                    if ($sale) {
+                        $debit = (float)$sale->total_net;
+                        $credit = 0;
+                    }
+                } elseif ($entry->source_type === \App\Models\SaleReturn::class || str_contains($desc, 'Return') || str_contains($desc, 'SR-')) {
+                    $return = $entry->source_id ? \App\Models\SaleReturn::find($entry->source_id) : null;
+                    if ($return) {
+                        $credit = (float)$return->total_net;
+                        $debit = 0;
+                    }
+                } elseif ($entry->source_type === \App\Models\VoucherMaster::class || str_contains($desc, 'Voucher') || str_contains($desc, 'CRV') || str_contains($desc, 'BRV') || str_contains($desc, 'Receipt')) {
+                    $voucher = $entry->source_id ? \App\Models\VoucherMaster::find($entry->source_id) : null;
+                    if ($voucher) {
+                        $vType = strtolower($voucher->voucher_type);
+                        if (in_array($vType, ['crv', 'brv', 'receipt'])) {
+                            $credit = (float)$voucher->total_amount;
+                            $debit = 0;
+                        } else {
+                            $debit = (float)$voucher->total_amount;
+                            $credit = 0;
+                        }
+                    }
+                }
+
+                // If still 0 but previous & closing balances were recorded:
+                if ($debit == 0 && $credit == 0) {
+                    $prev = (float)$entry->previous_balance;
+                    $close = (float)$entry->closing_balance;
+                    if ($close > $prev) {
+                        $debit = $close - $prev;
+                    } elseif ($close < $prev) {
+                        $credit = $prev - $close;
+                    }
+                }
+
+                $entry->debit = $debit;
+                $entry->credit = $credit;
             }
+
+            $entry->previous_balance = $runningBalance;
+            $runningBalance += ($debit - $credit);
             $entry->closing_balance = $runningBalance;
             $entry->save();
         }
 
         // Sync back to Customer Master record
-        $customer = \App\Models\Customer::find($customerId);
-        if ($customer) {
-            $customer->previous_balance = $runningBalance;
-            $customer->save();
-        }
+        $customer->previous_balance = $runningBalance;
+        $customer->save();
     }
 }

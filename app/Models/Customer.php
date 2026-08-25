@@ -36,18 +36,32 @@ class Customer extends Model
     }
 
     /**
+     * Get current closing balance from CustomerLedger or previous_balance or opening_balance
+     */
+    public function getClosingBalanceAttribute()
+    {
+        $lastLedger = \App\Models\CustomerLedger::where('customer_id', $this->id)
+            ->orderBy(\Illuminate\Support\Facades\DB::raw('DATE(created_at)'), 'desc')
+            ->orderBy('id', 'desc')
+            ->first();
+            
+        if ($lastLedger) {
+            return (float)$lastLedger->closing_balance;
+        }
+
+        if (isset($this->attributes['previous_balance']) && $this->attributes['previous_balance'] !== null) {
+            return (float)$this->attributes['previous_balance'];
+        }
+
+        return (float)($this->opening_balance ?? 0);
+    }
+
+    /**
      * Get current balance from BalanceService
      */
     public function getPreviousBalanceAttribute()
     {
-        // If previous_balance column exists and has value, use it
-        if (isset($this->attributes['previous_balance'])) {
-            return $this->attributes['previous_balance'];
-        }
-        
-        // Otherwise calculate from journal entries
-        $balanceService = app(\App\Services\BalanceService::class);
-        return $balanceService->getCustomerBalance($this->id);
+        return $this->getClosingBalanceAttribute();
     }
 
     public function branch()

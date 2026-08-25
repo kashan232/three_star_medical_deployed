@@ -16,6 +16,11 @@ class Account extends Model
         return $this->belongsTo(AccountHead::class, 'head_id');
     }
 
+    public function branch()
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
     /**
      * Get dynamically calculated, real-time balance.
      * Respects Account Type (Debit = Asset/Expense, Credit = Liability/Equity/Income)

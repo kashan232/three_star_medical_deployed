@@ -5,57 +5,86 @@
         <div class="main-content-inner">
             <div class="container-fluid py-4">
 
-                <div class="d-flex justify-content-between align-items-center mb-4">
+                {{-- Page Header --}}
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
                     <div>
-                        <h4 class="fw-bold mb-0 text-dark d-flex align-items-center gap-2">
-                            Chart Of Accounts
+                        <h4 class="fw-bold mb-1 text-dark d-flex align-items-center gap-2">
+                            <i class="fas fa-sitemap text-primary"></i> Chart Of Accounts
                             <button
                                 class="btn btn-sm btn-outline-info d-flex align-items-center gap-1 ms-2 rounded-pill px-3 shadow-none"
-                                data-toggle="modal" data-target="#coaInfoModal" title="How does this work?">
+                                data-toggle="modal" data-target="#coaInfoModal" title="How does Chart of Accounts work?">
                                 <i class="fas fa-info-circle"></i> How it works?
                             </button>
                         </h4>
-                        <p class="text-muted mb-0 small">Manage your financial accounts and categories</p>
+                        <p class="text-muted mb-0 small">Manage your custom financial accounts and categories</p>
                     </div>
                     @can('chart.of.accounts.create')
-                        <div class="d-flex gap-2 align-items-center">
-
-                            {{-- Smart Setup Button: only shows if any critical account missing --}}
-                            @if ($anyMissing)
-                                <button class="btn btn-warning d-flex align-items-center gap-2 fw-semibold" data-toggle="modal"
-                                    data-target="#setupCOAModal">
-                                    <i class="fas fa-magic"></i> Auto-Setup COA
-                                    <span class="badge bg-danger rounded-pill">
-                                        {{ $criticalCOA->where('complete', false)->count() }}
-                                    </span>
-                                </button>
-                            @endif
-
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
                             <a href="{{ route('journal.voucher') }}"
-                                class="btn btn-outline-primary d-flex align-items-center gap-2">
+                                class="btn btn-outline-primary d-flex align-items-center gap-2 shadow-sm">
                                 <i class="fas fa-book"></i> Journal Voucher
                             </a>
-                            <button class="btn btn-primary px-4 shadow-sm fw-medium d-flex align-items-center gap-2"
+                            <button class="btn btn-primary px-4 shadow-sm fw-bold d-flex align-items-center gap-2"
                                 data-toggle="modal" data-target="#addAccountModal">
-                                <i class="fas fa-plus"></i> Add New Account
+                                <i class="fas fa-plus-circle"></i> + Add New Account
                             </button>
-                            <button class="btn btn-outline-secondary d-flex align-items-center gap-2" data-toggle="modal"
+                            <button class="btn btn-outline-secondary d-flex align-items-center gap-2 shadow-sm" data-toggle="modal"
                                 data-target="#addHeadModal">
                                 <i class="fas fa-folder-plus"></i> Add Category
                             </button>
-                            <button class="btn btn-outline-dark d-flex align-items-center gap-2" data-toggle="modal"
+                            <button class="btn btn-outline-dark d-flex align-items-center gap-2 shadow-sm" data-toggle="modal"
                                 data-target="#manageHeadsModal">
-                                <i class="fas fa-folder"></i> Manage Categories
+                                <i class="fas fa-folder-open"></i> Manage Categories
                             </button>
                         </div>
                     @endcan
+                </div>
+
+                {{-- Summary Stats Cards --}}
+                <div class="row g-3 mb-4">
+                    <div class="col-md-3 col-sm-6">
+                        <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #4f46e5 !important;">
+                            <div class="card-body p-3">
+                                <div class="text-muted small fw-semibold text-uppercase">Total Accounts</div>
+                                <div class="fs-4 fw-bold text-dark">{{ $accounts->count() }}</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">All Financial Accounts</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #0284c7 !important;">
+                            <div class="card-body p-3">
+                                <div class="text-info small fw-bold text-uppercase">Categories / Heads</div>
+                                <div class="fs-4 fw-bold text-dark">{{ $heads->count() }}</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Active Categories</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #16a34a !important;">
+                            <div class="card-body p-3">
+                                <div class="text-success small fw-bold text-uppercase">Active Accounts</div>
+                                <div class="fs-4 fw-bold text-dark">{{ $accounts->where('status', 1)->count() }}</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Ready for Vouchers</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-sm-6">
+                        <div class="card border-0 shadow-sm rounded-3 h-100" style="border-left: 4px solid #ea580c !important;">
+                            <div class="card-body p-3">
+                                <div class="text-warning small fw-bold text-uppercase">Total Branches</div>
+                                <div class="fs-4 fw-bold text-dark">{{ count($branches) ?: 1 }}</div>
+                                <div class="text-muted" style="font-size: 0.75rem;">Company Branches</div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <div class="card border-0 shadow-sm rounded-4">
                     <div class="card-body p-4">
                         @if (session('success'))
                             <div class="alert alert-success d-flex align-items-center gap-2 rounded-3 mb-4">
-                                <i class="fas fa-check-circle"></i>
+                                <i class="fas fa-check-circle fs-5"></i>
                                 <span>{{ session('success') }}</span>
                             </div>
                         @endif
@@ -70,105 +99,82 @@
                         @endif
 
                         <div class="table-responsive">
-                            <table class="table table-hover align-middle datanew" style="width:100%">
+                            <table class="table table-hover align-middle datanew" id="coaTable" style="width:100%">
                                 <thead class="bg-light">
                                     <tr>
-                                        <th class="py-3 ps-3 rounded-start text-secondary fw-semibold text-uppercase small"
-                                            style="width: 5%">#</th>
-                                        <th class="py-3 text-secondary fw-semibold text-uppercase small" style="width: 10%">
-                                            Code</th>
-                                        <th class="py-3 text-secondary fw-semibold text-uppercase small" style="width: 15%">
-                                            Head / Group</th>
-                                        <th class="py-3 text-secondary fw-semibold text-uppercase small" style="width: 20%">
-                                            Account Title</th>
-                                        <th class="py-3 text-secondary fw-semibold text-uppercase small" style="width: 8%">
-                                            Type</th>
-                                        <th class="py-3 text-secondary fw-semibold text-uppercase small" style="width: 12%">
-                                            Balance</th>
+                                        <th class="py-3 ps-3 text-secondary fw-bold text-uppercase small" style="width: 5%">#</th>
+                                        <th class="py-3 text-secondary fw-bold text-uppercase small" style="width: 15%">Account Code</th>
+                                        <th class="py-3 text-secondary fw-bold text-uppercase small" style="width: 20%">Category</th>
+                                        <th class="py-3 text-secondary fw-bold text-uppercase small" style="width: 25%">Account Title</th>
+                                        <th class="py-3 text-secondary fw-bold text-uppercase small text-center" style="width: 8%">Type</th>
+                                        <th class="py-3 text-secondary fw-bold text-uppercase small text-end" style="width: 12%">Balance</th>
                                         @if (auth()->user()->isSuperAdmin())
-                                            <th class="py-3 text-secondary fw-semibold text-uppercase small"
-                                                style="width: 10%">
-                                                Branch</th>
+                                            <th class="py-3 text-secondary fw-bold text-uppercase small text-center" style="width: 8%">Branch</th>
                                         @endif
-                                        <th class="py-3 text-secondary fw-semibold text-uppercase small" style="width: 8%">
-                                            Status</th>
-                                        <th class="py-3 pe-3 rounded-end text-secondary fw-semibold text-uppercase small text-center"
-                                            style="width: 15%">Action</th>
+                                        <th class="py-3 text-secondary fw-bold text-uppercase small text-center" style="width: 7%">Status</th>
+                                        <th class="py-3 pe-3 text-secondary fw-bold text-uppercase small text-center" style="width: 10%">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach ($accounts as $acc)
-                                        <tr class="border-bottom-0">
+                                        <tr class="account-row border-bottom">
                                             <td class="ps-3 fw-bold text-muted">{{ $loop->iteration }}</td>
                                             <td>
-                                                <span
-                                                    class="badge bg-light text-dark border font-monospace">{{ $acc->account_code ?? 'N/A' }}</span>
+                                                <span class="badge bg-light text-dark border font-monospace px-2 py-1 fs-6">
+                                                    {{ $acc->account_code ?? 'N/A' }}
+                                                </span>
                                             </td>
                                             <td>
-                                                <span class="fw-semibold text-dark">{{ $acc->head->name ?? '-' }}</span>
-                                                @if ($acc->head && $acc->head->parent_id)
-                                                    <small class="text-muted d-block"
-                                                        style="font-size: 0.8em;">({{ $acc->head->parent->name ?? '' }})</small>
+                                                <span class="fw-bold text-dark">{{ $acc->head->name ?? '-' }}</span>
+                                                @if ($acc->head && $acc->head->code)
+                                                    <small class="text-muted font-monospace d-block" style="font-size: 0.75rem;">[{{ $acc->head->code }}]</small>
                                                 @endif
                                             </td>
-                                            <td class="fw-medium text-dark">{{ $acc->title }}</td>
                                             <td>
+                                                <span class="fw-bold text-dark">{{ $acc->title }}</span>
+                                            </td>
+                                            <td class="text-center">
                                                 @if ($acc->type == 'Debit')
-                                                    <span
-                                                        class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3">Debit</span>
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3">Debit</span>
                                                 @else
-                                                    <span
-                                                        class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-3">Credit</span>
+                                                    <span class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-3">Credit</span>
                                                 @endif
                                             </td>
-                                            <td>
+                                            <td class="text-end">
                                                 @php
                                                     $bal = $acc->calculated_balance;
                                                     $isNegative = $bal < 0;
-                                                    // Determine the sign:
-                                                    // If normal type is Debit, and balance > 0, it's Dr. If < 0, it's Cr.
-                                                    // If normal type is Credit, and balance > 0, it's Cr. If < 0, it's Dr.
-                                                    $displaySuffix =
-                                                        $acc->type === 'Debit'
-                                                            ? ($isNegative
-                                                                ? 'Cr'
-                                                                : 'Dr')
-                                                            : ($isNegative
-                                                                ? 'Dr'
-                                                                : 'Cr');
+                                                    $displaySuffix = $acc->type === 'Debit'
+                                                        ? ($isNegative ? 'Cr' : 'Dr')
+                                                        : ($isNegative ? 'Dr' : 'Cr');
                                                 @endphp
                                                 <div class="{{ $isNegative ? 'text-danger' : 'text-success' }} fw-bold">
                                                     {{ number_format(abs($bal), 2) }}
-                                                    <small
-                                                        class="text-secondary fw-normal ms-1">{{ $displaySuffix }}</small>
+                                                    <small class="text-secondary fw-semibold ms-1">{{ $displaySuffix }}</small>
                                                 </div>
                                             </td>
                                             @if (auth()->user()->isSuperAdmin())
-                                                <td>
-                                                    <span
-                                                        class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2">
+                                                <td class="text-center">
+                                                    <span class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-2">
                                                         {{ $acc->branch->name ?? 'Head Office' }}
                                                     </span>
                                                 </td>
                                             @endif
-                                            <td>
+                                            <td class="text-center">
                                                 @if ($acc->status)
-                                                    <span
-                                                        class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2">Active</span>
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2">Active</span>
                                                 @else
-                                                    <span
-                                                        class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2">Inactive</span>
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2">Inactive</span>
                                                 @endif
                                             </td>
                                             <td class="pe-3 text-center">
-                                                <div class="d-flex justify-content-center gap-2">
+                                                <div class="d-flex justify-content-center gap-1">
                                                     <a href="{{ route('accounts.ledger', $acc->id) }}"
-                                                        class="btn btn-sm btn-outline-info d-flex align-items-center gap-1"
-                                                        title="View Ledger">
-                                                        <i class="fas fa-book"></i> Ledger
+                                                        class="btn btn-sm btn-outline-info" title="View Ledger">
+                                                        <i class="fas fa-book"></i>
                                                     </a>
                                                     <button type="button"
-                                                        class="btn btn-sm btn-outline-warning d-flex align-items-center gap-1 edit-account-btn"
+                                                        class="btn btn-sm btn-outline-warning edit-account-btn"
                                                         data-id="{{ $acc->id }}" data-title="{{ $acc->title }}"
                                                         data-type="{{ $acc->type }}" data-head="{{ $acc->head_id }}"
                                                         data-balance="{{ $acc->opening_balance }}" title="Edit Account">
@@ -180,8 +186,7 @@
                                                         <button type="button" onclick="this.closest('form').submit()"
                                                             class="btn btn-sm {{ $acc->status ? 'btn-outline-danger' : 'btn-outline-success' }}"
                                                             title="{{ $acc->status ? 'Deactivate' : 'Activate' }}">
-                                                            <i
-                                                                class="fas {{ $acc->status ? 'fa-ban' : 'fa-check-circle' }}"></i>
+                                                            <i class="fas {{ $acc->status ? 'fa-ban' : 'fa-check-circle' }}"></i>
                                                         </button>
                                                     </form>
                                                 </div>
@@ -194,115 +199,151 @@
                     </div>
                 </div>
 
-                <!-- Add New Account Modal -->
-                <div class="modal fade" id="addAccountModal" tabindex="-1" role="dialog"
-                    aria-labelledby="addAccountModalLabel" aria-hidden="true">
-                    <div class="modal-dialog modal-dialog-centered" role="document">
-                        <form class="modal-content border-0 shadow-lg rounded-4" action="{{ route('accounts.store') }}"
-                            method="POST">
+                {{-- =========================================================================
+                     MODAL: Add New Account
+                     ========================================================================= --}}
+                <div class="modal fade" id="addAccountModal" tabindex="-1" role="dialog" aria-labelledby="addAccountModalLabel" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+                        <form class="modal-content border-0 shadow-lg rounded-4" action="{{ route('accounts.store') }}" method="POST">
                             @csrf
                             <div class="modal-header border-bottom-0 pb-0">
-                                <h5 class="modal-title fw-bold ms-2" id="addAccountModalLabel">Add New Account</h5>
+                                <div>
+                                    <h5 class="modal-title fw-bold text-primary" id="addAccountModalLabel">
+                                        <i class="fas fa-plus-circle me-1"></i> Add New Account
+                                    </h5>
+                                    <p class="text-muted small mb-0">Create a financial account under your categories.</p>
+                                </div>
                                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                     <span aria-hidden="true">&times;</span>
                                 </button>
                             </div>
                             <div class="modal-body p-4 pt-3">
-                                <p class="text-muted small mb-4 ms-1">Create a new financial account.</p>
 
+                                {{-- Category Selector (Only User's Categories) --}}
                                 <div class="form-group mb-3">
-                                    <label class="small text-secondary fw-bold mb-1">Select Head (Category)</label>
-                                    <select class="form-control" name="head_id" required style="height: 45px;">
-                                        <option value="">Select Head</option>
-                                        @foreach ($heads as $head)
-                                            <option value="{{ $head->id }}">{{ $head->name }}</option>
+                                    <label class="small text-secondary fw-bold mb-1">
+                                        Select Category (Account Head) <span class="text-danger">*</span>
+                                    </label>
+                                    <select class="form-control" name="head_id" id="newAccHeadId" required style="height: 48px; font-weight: 500;">
+                                        <option value="">-- Select Category --</option>
+                                        @foreach ($heads as $h)
+                                            <option value="{{ $h->id }}" data-code="{{ $h->code }}" data-type="{{ $h->type }}">
+                                                {{ $h->name }} {{ $h->code ? "({$h->code})" : '' }}
+                                            </option>
                                         @endforeach
                                     </select>
                                 </div>
+
+                                {{-- Live Generated Account Code Preview Badge --}}
+                                <div class="p-3 mb-3 rounded-3" style="background:#f8fafc; border: 1px dashed #cbd5e1;">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <span class="text-secondary small fw-bold d-block">ACCOUNT CODE:</span>
+                                            <span id="nextCodeBadge" class="fs-5 fw-bold font-monospace text-primary">
+                                                Select a category above...
+                                            </span>
+                                        </div>
+                                        <div class="text-end">
+                                            <span class="text-secondary small fw-bold d-block">DEFAULT NATURE:</span>
+                                            <span id="naturePreviewBadge" class="badge bg-secondary-subtle text-secondary rounded-pill px-3 py-1">
+                                                -
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {{-- Account Title --}}
                                 <div class="form-group mb-3">
-                                    <label class="small text-secondary fw-bold mb-1">Account Title</label>
-                                    <input type="text" name="title" class="form-control"
-                                        placeholder="e.g., UBL Current" required>
+                                    <label class="small text-secondary fw-bold mb-1">
+                                        Account Title / Name <span class="text-danger">*</span>
+                                    </label>
+                                    <input type="text" name="title" id="newAccTitle" class="form-control text-uppercase fw-semibold"
+                                        placeholder="e.g. MEEZAN BANK, FAYSAL BANK, CASH IN HAND" required style="height: 48px;">
                                 </div>
 
                                 <div class="row">
                                     <div class="col-md-6">
                                         <div class="form-group mb-3">
-                                            <label class="small text-secondary fw-bold mb-1">Type</label>
-                                            <select class="form-control" name="type" style="height: 45px;">
-                                                <option value="Debit">Debit</option>
-                                                <option value="Credit">Credit</option>
+                                            <label class="small text-secondary fw-bold mb-1">Normal Account Type</label>
+                                            <select class="form-control" name="type" id="newAccType" style="height: 45px; font-weight:600;">
+                                                <option value="Debit">Debit (Dr)</option>
+                                                <option value="Credit">Credit (Cr)</option>
                                             </select>
                                         </div>
                                     </div>
                                     <div class="col-md-6">
                                         <div class="form-group mb-3">
-                                            <label class="small text-secondary fw-bold mb-1">Opening Balance</label>
+                                            <label class="small text-secondary fw-bold mb-1">Opening Balance (Rs.)</label>
                                             <input type="number" step="0.01" name="opening_balance"
-                                                class="form-control" value="0">
+                                                class="form-control fw-bold" value="0.00" style="height: 45px;">
                                         </div>
                                     </div>
                                 </div>
 
                                 <div class="form-group mb-0">
                                     <div class="custom-control custom-checkbox">
-                                        <input type="checkbox" class="custom-control-input" id="statusCheck"
-                                            name="status" checked>
-                                        <label class="custom-control-label small text-secondary" for="statusCheck">Active
-                                            Account</label>
+                                        <input type="checkbox" class="custom-control-input" id="statusCheck" name="status" checked>
+                                        <label class="custom-control-label small text-secondary fw-semibold" for="statusCheck">
+                                            Active Account (Ready for transactions & vouchers)
+                                        </label>
                                     </div>
                                 </div>
 
                                 @if (auth()->user()->isSuperAdmin())
                                     <div class="form-group mb-3 mt-3">
-                                        <label class="small text-secondary fw-bold mb-1">Target Branch</label>
-                                        <select class="form-control" name="branch_id" style="height: 45px;">
-                                            <option value="">Select Branch</option>
+                                        <label class="small text-secondary fw-bold mb-1">Target Branch <span class="text-danger">*</span></label>
+                                        <select class="form-control" name="branch_id" required style="height: 45px;">
+                                            <option value="">-- Select Target Branch * --</option>
                                             @foreach ($branches as $b)
                                                 <option value="{{ $b->id }}">{{ $b->name }}</option>
                                             @endforeach
                                         </select>
-                                        <small class="text-muted" style="font-size:0.75rem;">Super Admin: Assign this
-                                            account to a branch.</small>
                                     </div>
                                 @endif
                             </div>
                             <div class="modal-footer border-top-0 px-4 pb-4">
-                                <button type="button" class="btn btn-light fw-medium"
-                                    data-dismiss="modal">Close</button>
-                                <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">Save
-                                    Account</button>
+                                <button type="button" class="btn btn-light fw-medium" data-dismiss="modal">Cancel</button>
+                                <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">
+                                    <i class="fas fa-save me-1"></i> Save Account
+                                </button>
                             </div>
                         </form>
                     </div>
                 </div>
 
-                <!-- Add Head Modal -->
-                <div class="modal fade" id="addHeadModal" tabindex="-1" role="dialog" aria-labelledby="addHeadLabel"
-                    aria-hidden="true">
+                {{-- =========================================================================
+                     MODAL: Add New Category / Head
+                     ========================================================================= --}}
+                <div class="modal fade" id="addHeadModal" tabindex="-1" role="dialog" aria-labelledby="addHeadLabel" aria-hidden="true">
                     <div class="modal-dialog modal-dialog-centered" role="document">
-                        <form class="modal-content border-0 shadow-lg rounded-4"
-                            action="{{ route('account-heads.store') }}" method="POST">
+                        <form class="modal-content border-0 shadow-lg rounded-4" action="{{ route('account-heads.store') }}" method="POST">
                             @csrf
                             <div class="modal-header border-bottom-0 pb-0">
-                                <h5 class="modal-title fw-bold ms-2" id="addHeadLabel">Add New Category</h5>
+                                <h5 class="modal-title fw-bold text-dark ms-2" id="addHeadLabel">
+                                    <i class="fas fa-folder-plus text-primary me-1"></i> Add Account Category
+                                </h5>
                                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                                     <span aria-hidden="true">&times;</span>
                                 </button>
                             </div>
                             <div class="modal-body p-4 pt-3">
-                                <p class="text-muted small mb-4 ms-1">Create a new account category/head.</p>
-                                <div class="form-group mb-0">
-                                    <label class="small text-secondary fw-bold mb-1">Head Name</label>
-                                    <input type="text" name="name" class="form-control"
-                                        placeholder="e.g., Current Assets" required>
+                                <p class="text-muted small mb-4 ms-1">Create a new account category.</p>
+
+                                <div class="form-group mb-3">
+                                    <label class="small text-secondary fw-bold mb-1">Category Name <span class="text-danger">*</span></label>
+                                    <input type="text" name="name" class="form-control" placeholder="e.g., Bank, Cash in Hand, Expenses" required style="height: 45px;">
+                                </div>
+
+                                <div class="form-group mb-3">
+                                    <label class="small text-secondary fw-bold mb-1">Category Code (Optional)</label>
+                                    <input type="text" name="code" class="form-control font-monospace" placeholder="e.g., bank-001, cash-001" style="height: 45px;">
                                 </div>
 
                                 @if (auth()->user()->isSuperAdmin())
-                                    <div class="form-group mb-3 mt-3">
-                                        <label class="small text-secondary fw-bold mb-1">Target Branch</label>
-                                        <select class="form-control" name="branch_id" style="height: 45px;">
-                                            <option value="">Select Branch</option>
+                                    <div class="form-group mb-3">
+                                        <label class="small text-secondary fw-bold mb-1">Target Branch <span class="text-danger">*</span></label>
+                                        <select class="form-control" name="branch_id" required style="height: 45px;">
+                                            <option value="">-- Select Target Branch * --</option>
                                             @foreach ($branches as $b)
                                                 <option value="{{ $b->id }}">{{ $b->name }}</option>
                                             @endforeach
@@ -311,10 +352,8 @@
                                 @endif
                             </div>
                             <div class="modal-footer border-top-0 px-4 pb-4">
-                                <button type="button" class="btn btn-light fw-medium"
-                                    data-dismiss="modal">Close</button>
-                                <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">Save
-                                    Category</button>
+                                <button type="button" class="btn btn-light fw-medium" data-dismiss="modal">Close</button>
+                                <button type="submit" class="btn btn-primary px-4 fw-bold shadow-sm">Save Category</button>
                             </div>
                         </form>
                     </div>
@@ -324,42 +363,45 @@
         </div>
     </div>
 
-    {{-- Edit Account Modal --}}
-    <div class="modal fade" id="editAccountModal" tabindex="-1" role="dialog" aria-labelledby="editAccountLabel"
-        aria-hidden="true">
+    {{-- =========================================================================
+         MODAL: Edit Account
+         ========================================================================= --}}
+    <div class="modal fade" id="editAccountModal" tabindex="-1" role="dialog" aria-labelledby="editAccountLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <form class="modal-content border-0 shadow-lg rounded-4" id="editAccountForm" method="POST">
                 @csrf
                 @method('PUT')
                 <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold ms-2" id="editAccountLabel">Edit Account</h5>
+                    <h5 class="modal-title fw-bold text-dark ms-2" id="editAccountLabel">
+                        <i class="fas fa-edit text-warning me-1"></i> Edit Account
+                    </h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
                 <div class="modal-body p-4 pt-3">
-                    <p class="text-muted small mb-4 ms-1">Update account details and opening balance.</p>
+                    <p class="text-muted small mb-4 ms-1">Update account details, category, and opening balance.</p>
 
                     <div class="form-group mb-3">
-                        <label class="small text-secondary fw-bold mb-1">Head (Category)</label>
+                        <label class="small text-secondary fw-bold mb-1">Category (Head)</label>
                         <select class="form-control" name="head_id" id="editHeadId" required style="height:45px;">
-                            <option value="">Select Head</option>
+                            <option value="">Select Category</option>
                             @foreach ($heads as $head)
-                                <option value="{{ $head->id }}">{{ $head->name }}</option>
+                                <option value="{{ $head->id }}">{{ $head->name }} {{ $head->code ? "({$head->code})" : '' }}</option>
                             @endforeach
                         </select>
                     </div>
 
                     <div class="form-group mb-3">
                         <label class="small text-secondary fw-bold mb-1">Account Title</label>
-                        <input type="text" name="title" id="editTitle" class="form-control" required>
+                        <input type="text" name="title" id="editTitle" class="form-control text-uppercase fw-semibold" required style="height:45px;">
                     </div>
 
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group mb-3">
                                 <label class="small text-secondary fw-bold mb-1">Type</label>
-                                <select class="form-control" name="type" id="editType" style="height:45px;">
+                                <select class="form-control" name="type" id="editType" style="height:45px; font-weight:600;">
                                     <option value="Debit">Debit</option>
                                     <option value="Credit">Credit</option>
                                 </select>
@@ -368,8 +410,7 @@
                         <div class="col-md-6">
                             <div class="form-group mb-3">
                                 <label class="small text-secondary fw-bold mb-1">Opening Balance</label>
-                                <input type="number" step="0.01" name="opening_balance" id="editOpeningBalance"
-                                    class="form-control" placeholder="0.00">
+                                <input type="number" step="0.01" name="opening_balance" id="editOpeningBalance" class="form-control fw-bold" placeholder="0.00" style="height:45px;">
                             </div>
                         </div>
                     </div>
@@ -382,215 +423,29 @@
         </div>
     </div>
 
-    {{-- ============================
-         Setup COA Modal
-    ============================= --}}
-    <div class="modal fade" id="setupCOAModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
-            <div class="modal-content border-0 shadow-xl rounded-4" style="overflow:hidden;">
-
-                {{-- Header --}}
-                <div class="modal-header text-white" style="background:linear-gradient(135deg,#1e3a5f,#2563eb);">
-                    <div>
-                        <h5 class="modal-title fw-bold mb-0"><i class="fas fa-magic me-2"></i>Auto-Setup Chart of Accounts
-                        </h5>
-                        <p class="mb-0 small opacity-75 mt-1">Review the 5 critical accounts required for Sales &amp;
-                            Purchase automation</p>
-                    </div>
-                    <button type="button" class="close text-white opacity-100" data-dismiss="modal"
-                        style="font-size:1.4rem;background:none;border:none;">&times;</button>
-                </div>
-
-                <form action="{{ route('accounts.setupCOA') }}" method="POST">
-                    @csrf
-
-                    {{-- Column Headers --}}
-                    <div class="px-4 pt-3 pb-1">
-                        <div class="row g-0" style="background:#f8fafc; border-radius:8px; padding:8px 12px;">
-                            <div class="col-1 text-muted small fw-bold">SELECT</div>
-                            <div class="col-4 text-muted small fw-bold">ACCOUNT NAME</div>
-                            <div class="col-2 text-muted small fw-bold text-center">TYPE</div>
-                            <div class="col-2 text-muted small fw-bold text-center">NATURE</div>
-                            <div class="col-3 text-muted small fw-bold">HEAD / CATEGORY</div>
-                        </div>
-                    </div>
-
-                    {{-- Account Rows --}}
-                    <div class="px-4 pb-2">
-                        @foreach ($criticalCOA as $item)
-                            <div class="row g-0 align-items-center py-3 border-bottom"
-                                style="opacity: {{ $item['complete'] ? '0.5' : '1' }};">
-
-                                {{-- Checkbox --}}
-                                <div class="col-1">
-                                    @if ($item['complete'])
-                                        <span class="text-success fs-5" title="Already set up"><i
-                                                class="fas fa-check-circle"></i></span>
-                                    @else
-                                        <div class="form-check">
-                                            <input class="form-check-input coa-check" type="checkbox" name="keys[]"
-                                                value="{{ $item['key'] }}" id="coa_{{ $item['key'] }}" checked>
-                                        </div>
-                                    @endif
-                                </div>
-
-                                {{-- Account Title --}}
-                                <div class="col-4">
-                                    <span class="fw-bold text-dark d-block">{{ $item['title'] }}</span>
-                                    <small class="text-muted font-monospace">{{ $item['code'] }}</small>
-                                    @if (!$item['complete'])
-                                        @if (!$item['exists'])
-                                            <span class="badge bg-danger-subtle text-danger ms-1"
-                                                style="font-size:.7rem;">Missing</span>
-                                        @elseif(!$item['has_head'])
-                                            <span class="badge bg-warning-subtle text-warning ms-1"
-                                                style="font-size:.7rem;">No Head</span>
-                                        @endif
-                                    @endif
-                                </div>
-
-                                {{-- Type (Debit/Credit) --}}
-                                <div class="col-2 text-center">
-                                    @if ($item['type'] === 'Debit')
-                                        <span class="badge rounded-pill px-3"
-                                            style="background:#dcfce7; color:#166534;">Dr</span>
-                                    @else
-                                        <span class="badge rounded-pill px-3"
-                                            style="background:#fee2e2; color:#991b1b;">Cr</span>
-                                    @endif
-                                </div>
-
-                                {{-- Nature --}}
-                                <div class="col-2 text-center">
-                                    @php
-                                        $natureColors = [
-                                            'Asset' => ['bg' => '#dbeafe', 'text' => '#1d4ed8'],
-                                            'Liability' => ['bg' => '#fef9c3', 'text' => '#854d0e'],
-                                            'Income' => ['bg' => '#dcfce7', 'text' => '#166534'],
-                                            'Expense' => ['bg' => '#fee2e2', 'text' => '#991b1b'],
-                                        ];
-                                        $nc = $natureColors[$item['nature']] ?? [
-                                            'bg' => '#f1f5f9',
-                                            'text' => '#64748b',
-                                        ];
-                                    @endphp
-                                    <span class="badge rounded-pill px-3"
-                                        style="background:{{ $nc['bg'] }};color:{{ $nc['text'] }};">
-                                        {{ $item['nature'] }}
-                                    </span>
-                                </div>
-
-                                {{-- Head / Category --}}
-                                <div class="col-3">
-                                    @if ($item['head_name'])
-                                        <span class="text-dark fw-medium"><i
-                                                class="fas fa-folder text-warning me-1"></i>{{ $item['head_name'] }}</span>
-                                    @else
-                                        <span class="text-muted fst-italic small">
-                                            <i class="fas fa-folder-plus text-secondary me-1"></i>Will create:
-                                            <strong>{{ $item['head'] }}</strong>
-                                        </span>
-                                    @endif
-                                </div>
-
-                            </div>
-                        @endforeach
-                    </div>
-
-                    {{-- Footer --}}
-                    <div class="modal-footer border-top px-4 py-3 d-flex justify-content-between align-items-center">
-                        <div class="text-muted small">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Only checked accounts will be created. ✅ = already complete.
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
-                            <button type="submit" class="btn btn-warning px-4 fw-bold">
-                                <i class="fas fa-magic me-1"></i> Create Selected
-                            </button>
-                        </div>
-                    </div>
-
-                </form>
-            </div>
-        </div>
-    </div>
-
-    {{-- COA Info Modal --}}
-    <div class="modal fade" id="coaInfoModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
-            <div class="modal-content border-0 shadow-lg rounded-4">
-                <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold text-info ms-2"><i class="fas fa-info-circle me-2"></i> How Chart Of
-                        Accounts Works</h5>
-                    <button type="button" class="close text-dark" data-dismiss="modal" aria-label="Close"
-                        style="background:none;border:none;font-size:1.5rem;">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </div>
-                <div class="modal-body p-4 pt-3 text-dark">
-                    <p class="small text-muted mb-3">The Chart of Accounts (COA) is the foundation of your entire financial
-                        system. It tracks where your money goes and where it comes from.</p>
-
-                    <h6 class="fw-bold tracking-wide text-uppercase mb-2 text-primary" style="font-size: 0.85rem;">The 6
-                        Critical Accounts</h6>
-                    <div class="alert alert-light border shadow-sm rounded-3 mb-4">
-                        <ul class="mb-0 ps-3 small text-dark" style="line-height: 1.6;">
-                            <li><strong>1. Sales Revenue (Credit/Income):</strong> Automatically increases when you make a
-                                Sale. Decreases when a customer returns an item (Sale Return).</li>
-                            <li><strong>2. Purchase (Debit/Expense):</strong> Automatically increases with the <em>pure
-                                    purchase price</em> when you buy stock. Decreases on Purchase Return.</li>
-                            <li><strong>3. Purchase Expensive (Debit/Expense):</strong> Automatically created from the
-                                <em>Extra Cost</em> field on a purchase. Also appears in Expense Vouchers. Can be created
-                                manually.
-                            </li>
-                            <li><strong>4. Accounts Receivable (Debit/Asset):</strong> The money customers owe you.
-                                Increases on unpaid sales. Decreases when you receive payment or process a Sale Return.</li>
-                            <li><strong>5. Accounts Payable (Credit/Liability):</strong> The money you owe to vendors.
-                                Increases on unpaid purchases. Decreases when you make a payment.</li>
-                            <li><strong>6. Cash in Hand / Bank (Debit/Asset):</strong> Your actual money. Increases when you
-                                receive a customer payment. Decreases when you pay vendors.</li>
-                        </ul>
-                    </div>
-
-                    <h6 class="fw-bold tracking-wide text-uppercase mb-2 text-primary" style="font-size: 0.85rem;">How
-                        Balances Are Calculated (Double Entry)</h6>
-                    <p class="small mb-2 fw-medium">Every transaction automatically uses double-entry bookkeeping (Debits &
-                        Credits). You do not need to do this manually; the system handles it.</p>
-                    <ul class="small ps-3 text-secondary mb-0">
-                        <li><strong>Debit Accounts (Assets/Expenses):</strong> Their balance GOES UP when Debited, and GOES
-                            DOWN when Credited.</li>
-                        <li><strong>Credit Accounts (Income/Liabilities/Equity):</strong> Their balance GOES UP when
-                            Credited, and GOES DOWN when Debited.</li>
-                    </ul>
-                </div>
-                <div class="modal-footer border-top-0 px-4 pb-4">
-                    <button type="button" class="btn btn-primary fw-medium px-4 rounded-pill shadow-sm"
-                        data-dismiss="modal">I Understand</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Manage Categories Modal -->
+    {{-- =========================================================================
+         MODAL: Manage Categories
+         ========================================================================= --}}
     <div class="modal fade" id="manageHeadsModal" tabindex="-1" role="dialog" aria-labelledby="manageHeadsLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
             <div class="modal-content border-0 shadow-lg rounded-4">
                 <div class="modal-header border-bottom-0 pb-0">
-                    <h5 class="modal-title fw-bold ms-2" id="manageHeadsLabel">Manage Categories (Account Heads)</h5>
+                    <h5 class="modal-title fw-bold text-dark ms-2" id="manageHeadsLabel">
+                        <i class="fas fa-folder-open text-primary me-1"></i> Manage Account Categories
+                    </h5>
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
                 <div class="modal-body p-4 pt-3">
-                    <p class="text-muted small mb-4 ms-1">Update or delete existing account categories. Note: Categories with active balance accounts cannot be deleted.</p>
+                    <p class="text-muted small mb-3 ms-1">Update or delete existing categories.</p>
                     <div class="table-responsive">
                         <table class="table table-hover align-middle" style="width:100%;">
                             <thead class="bg-light">
                                 <tr>
-                                    <th class="py-2 text-secondary fw-semibold text-uppercase small" style="width: 10%;">#</th>
-                                    <th class="py-2 text-secondary fw-semibold text-uppercase small" style="width: 50%;">Category Name</th>
-                                    <th class="py-2 text-secondary fw-semibold text-uppercase small text-center" style="width: 20%;">Accounts Linked</th>
+                                    <th class="py-2 text-secondary fw-semibold text-uppercase small" style="width: 15%;">Code</th>
+                                    <th class="py-2 text-secondary fw-semibold text-uppercase small" style="width: 45%;">Category Name</th>
+                                    <th class="py-2 text-secondary fw-semibold text-uppercase small text-center" style="width: 20%;">Accounts</th>
                                     <th class="py-2 text-secondary fw-semibold text-uppercase small text-center" style="width: 20%;">Action</th>
                                 </tr>
                             </thead>
@@ -609,10 +464,11 @@
                                         $accountsListJson = json_encode($accountNames);
                                     @endphp
                                     <tr id="head-row-{{ $head->id }}">
-                                        <td class="small fw-bold text-muted">{{ $loop->iteration }}</td>
                                         <td>
-                                            <span class="head-name-text fw-semibold text-dark">{{ $head->name }}</span>
-                                            <!-- Hidden inline edit form -->
+                                            <span class="badge bg-light text-dark border font-monospace">{{ $head->code ?? '-' }}</span>
+                                        </td>
+                                        <td>
+                                            <span class="head-name-text fw-bold text-dark">{{ $head->name }}</span>
                                             <div class="head-edit-form d-none mt-1">
                                                 <form action="{{ route('account-heads.update', $head->id) }}" method="POST" class="d-flex gap-2 align-items-center">
                                                     @csrf
@@ -624,10 +480,10 @@
                                             </div>
                                         </td>
                                         <td class="text-center">
-                                            <span class="badge bg-secondary text-white rounded-pill px-3">{{ $linkedAccounts->count() }}</span>
+                                            <span class="badge bg-primary-subtle text-primary rounded-pill px-3">{{ $linkedAccounts->count() }} accounts</span>
                                         </td>
                                         <td class="text-center">
-                                            <div class="d-flex justify-content-center gap-2">
+                                            <div class="d-flex justify-content-center gap-1">
                                                 <button type="button" class="btn btn-sm btn-outline-warning edit-head-btn" title="Edit Category">
                                                     <i class="fas fa-edit"></i>
                                                 </button>
@@ -655,7 +511,7 @@
         </div>
     </div>
 
-    <!-- Delete Category Modal -->
+    {{-- Delete Category Confirmation Modal --}}
     <div class="modal fade" id="deleteHeadModal" tabindex="-1" role="dialog" aria-labelledby="deleteHeadModalLabel" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered" role="document">
             <div class="modal-content border-0 shadow-lg rounded-4">
@@ -666,47 +522,40 @@
                     </button>
                 </div>
                 <div class="modal-body p-4 pt-3">
-                    <!-- Case 1: Cannot delete (non-super-admin, has balance) -->
                     <div id="delHeadErrorView" class="d-none">
                         <div class="alert alert-danger d-flex align-items-start gap-2 rounded-3">
                             <i class="fas fa-exclamation-triangle mt-1"></i>
                             <div>
                                 <strong class="d-block">Deletion Denied</strong>
-                                <span id="delHeadErrorText">This category has linked accounts with active balances. Only a Super Admin can force-delete it.</span>
+                                <span id="delHeadErrorText">This category has linked accounts with active balances.</span>
                             </div>
                         </div>
-                        <p class="text-secondary small mt-3">Linked accounts with active balances (Non-Zero):</p>
                         <ul id="delHeadActiveAccountsList" class="text-danger fw-bold small"></ul>
                     </div>
 
-                    <!-- Case 1B: Super Admin override — has balance but can force-delete -->
                     <div id="delHeadSuperAdminView" class="d-none">
                         <div class="alert alert-danger d-flex align-items-start gap-2 rounded-3 mb-3">
                             <i class="fas fa-shield-alt mt-1 fs-5"></i>
                             <div>
-                                <strong class="d-block">⚠️ Super Admin — Force Delete Warning</strong>
-                                <span>The following accounts have <strong>active balances</strong>. Deleting them will permanently erase all financial data including journal entries.</span>
+                                <strong class="d-block">⚠️ Force Delete Warning</strong>
+                                <span>The following accounts have active balances. Deleting them will erase associated transaction records.</span>
                             </div>
                         </div>
-                        <p class="text-secondary small mb-1">Accounts with active balances:</p>
                         <ul id="delHeadSuperAdminAccountsList" class="text-danger fw-bold small mb-3"></ul>
-                        <p class="fw-bold text-dark mb-0">Account ma balance ha — delete kardon? <strong id="delSuperAdminHeadName" class="text-danger"></strong></p>
+                        <p class="fw-bold text-dark mb-0">Confirm force delete category <strong id="delSuperAdminHeadName" class="text-danger"></strong>?</p>
                     </div>
 
-                    <!-- Case 2: Can delete with confirmation (0 balance accounts) -->
                     <div id="delHeadConfirmView" class="d-none">
                         <p class="text-dark">The following account(s) are linked to this category:</p>
                         <ul id="delHeadLinkedAccountsList" class="text-secondary fw-semibold small mb-3"></ul>
                         <div class="alert alert-warning rounded-3 small">
                             <i class="fas fa-exclamation-circle me-1"></i>
-                            <strong>Warning:</strong> Deleting this category will also permanently delete all the linked accounts listed above.
+                            <strong>Warning:</strong> Deleting this category will also delete all its linked accounts.
                         </div>
-                        <p class="fw-bold text-dark">Are you sure you want to delete this category and all its linked accounts?</p>
                     </div>
 
-                    <!-- Case 3: Simple confirm (no accounts) -->
                     <div id="delHeadSimpleView" class="d-none">
-                        <p class="text-dark">Are you sure you want to delete the category <strong id="delSimpleHeadName"></strong>?</p>
+                        <p class="text-dark">Are you sure you want to delete category <strong id="delSimpleHeadName"></strong>?</p>
                     </div>
                 </div>
                 <div class="modal-footer border-top-0 px-4 pb-4">
@@ -714,8 +563,34 @@
                     <form id="deleteHeadForm" method="POST" class="d-inline">
                         @csrf
                         @method('DELETE')
-                        <button type="submit" id="confirmDeleteHeadBtn" class="btn btn-danger px-4 fw-bold shadow-sm d-none">Yes, Delete All</button>
+                        <button type="submit" id="confirmDeleteHeadBtn" class="btn btn-danger px-4 fw-bold shadow-sm d-none">Yes, Delete</button>
                     </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {{-- COA Info Modal --}}
+    <div class="modal fade" id="coaInfoModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+            <div class="modal-content border-0 shadow-lg rounded-4">
+                <div class="modal-header border-bottom-0 pb-0">
+                    <h5 class="modal-title fw-bold text-info ms-2"><i class="fas fa-info-circle me-2"></i> How Chart Of Accounts Works</h5>
+                    <button type="button" class="close text-dark" data-dismiss="modal" aria-label="Close" style="background:none;border:none;font-size:1.5rem;">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body p-4 pt-3 text-dark">
+                    <p class="small text-muted mb-3">The Chart of Accounts (COA) is the foundation of your financial system:</p>
+                    <div class="alert alert-light border shadow-sm rounded-3 mb-4">
+                        <ul class="mb-0 ps-3 small text-dark" style="line-height: 1.8;">
+                            <li><strong>Categories (Heads):</strong> You can create your own custom categories (e.g. Bank, Cash in Hand, Utility Expenses).</li>
+                            <li><strong>Accounts:</strong> Create your specific accounts under your categories (e.g. Meezan Bank under Bank, Office Cash under Cash).</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="modal-footer border-top-0 px-4 pb-4">
+                    <button type="button" class="btn btn-primary fw-medium px-4 rounded-pill shadow-sm" data-dismiss="modal">I Understand</button>
                 </div>
             </div>
         </div>
@@ -725,23 +600,61 @@
 
 @section('js')
     <script>
-        // PHP-level super admin flag (set by controller via BranchScoped trait)
         const IS_SUPER_ADMIN = {{ $isSuperAdmin ? 'true' : 'false' }};
 
         $(document).ready(function() {
-            if ($.fn.DataTable.isDataTable('.datanew')) {
-                $('.datanew').DataTable().destroy();
+            let dataTable = null;
+            if ($.fn.DataTable.isDataTable('#coaTable')) {
+                dataTable = $('#coaTable').DataTable();
+            } else {
+                dataTable = $('#coaTable').DataTable({
+                    "pageLength": 25,
+                    "aaSorting": [],
+                    "language": {
+                        "search": "",
+                        "searchPlaceholder": "Search accounts, codes, categories..."
+                    },
+                    "dom": "<'row mb-3'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
+                        "<'row'<'col-sm-12'tr>>" +
+                        "<'row mt-3'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+                });
             }
-            $('.datanew').DataTable({
-                "pageLength": 10,
-                "aaSorting": [],
-                "language": {
-                    "search": "",
-                    "searchPlaceholder": "Search accounts..."
-                },
-                "dom": "<'row mb-3'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
-                    "<'row'<'col-sm-12'tr>>" +
-                    "<'row mt-3'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+
+            // Live Next Code & Type Generator when Head is selected
+            $('#newAccHeadId').on('change', function() {
+                const headId = $(this).val();
+                if (!headId) {
+                    $('#nextCodeBadge').text('Select a category above...').removeClass('text-success').addClass('text-primary');
+                    $('#naturePreviewBadge').text('-').removeClass('bg-primary-subtle text-primary bg-warning-subtle text-warning').addClass('bg-secondary-subtle text-secondary');
+                    return;
+                }
+
+                const selectedOption = $(this).find('option:selected');
+                const headCode = selectedOption.data('code') || '';
+                const headType = selectedOption.data('type') || '';
+
+                // Call next-code endpoint
+                $.ajax({
+                    url: "{{ url('/accounts-head') }}/" + headId + "/next-code",
+                    type: 'GET',
+                    success: function(res) {
+                        if (res && res.code) {
+                            $('#nextCodeBadge').text(res.code).removeClass('text-primary').addClass('text-success');
+                            $('#newAccType').val(res.type);
+
+                            if (res.type === 'Debit') {
+                                $('#naturePreviewBadge').text('Debit (Dr)').removeClass('bg-warning-subtle text-warning bg-secondary-subtle text-secondary').addClass('bg-primary-subtle text-primary');
+                            } else {
+                                $('#naturePreviewBadge').text('Credit (Cr)').removeClass('bg-primary-subtle text-primary bg-secondary-subtle text-secondary').addClass('bg-warning-subtle text-warning');
+                            }
+                        }
+                    },
+                    error: function() {
+                        if (headCode) {
+                            $('#nextCodeBadge').text(headCode + '-00001');
+                        }
+                    }
+                });
             });
         });
 
@@ -764,7 +677,7 @@
             $('#editAccountModal').modal('show');
         });
 
-        // Toggle inline editing for category heads
+        // Inline Category Name Edit
         $(document).on('click', '.edit-head-btn', function() {
             const row = $(this).closest('tr');
             row.find('.head-name-text').addClass('d-none');
@@ -781,17 +694,15 @@
             row.find('.delete-head-trigger-btn').removeClass('d-none');
         });
 
-        // Trigger dynamic deletion modal
+        // Delete Category Confirmation Trigger
         $(document).on('click', '.delete-head-trigger-btn', function() {
             const id          = $(this).data('id');
             const name        = $(this).data('name');
             const hasAccounts = $(this).data('has-accounts');
             const hasBalance  = $(this).data('has-balance');
             const accounts    = $(this).data('account-names') || [];
-            // Use the PHP-level constant — more reliable than reading data-attribute
             const isSuperAdmin = IS_SUPER_ADMIN;
 
-            // Reset all views
             $('#delHeadErrorView').addClass('d-none');
             $('#delHeadSuperAdminView').addClass('d-none');
             $('#delHeadConfirmView').addClass('d-none');
@@ -801,19 +712,15 @@
             $('#delHeadSuperAdminAccountsList').empty();
             $('#delHeadLinkedAccountsList').empty();
 
-            // Set Form action
             const actionUrl = "{{ url('/accounts-head') }}/" + id + "/delete";
             $('#deleteHeadForm').attr('action', actionUrl);
 
             if (!hasAccounts) {
-                // Case 3: No linked accounts — simple confirmation
                 $('#delSimpleHeadName').text(name);
                 $('#delHeadSimpleView').removeClass('d-none');
                 $('#confirmDeleteHeadBtn').text('Yes, Delete').removeClass('d-none');
-
             } else if (hasBalance) {
                 if (isSuperAdmin) {
-                    // Case 1B: Super Admin — can force-delete even with balance
                     accounts.forEach(accName => {
                         $('#delHeadSuperAdminAccountsList').append(`<li>${accName}</li>`);
                     });
@@ -824,28 +731,23 @@
                         .removeClass('d-none')
                         .addClass('btn-danger');
                 } else {
-                    // Case 1: Non-super-admin — block deletion
                     accounts.forEach(accName => {
                         $('#delHeadActiveAccountsList').append(`<li>${accName}</li>`);
                     });
                     $('#delHeadErrorView').removeClass('d-none');
-                    // Confirm button stays hidden — deletion is blocked
                 }
             } else {
-                // Case 2: Linked accounts with 0 balance — cascade confirm
                 accounts.forEach(accName => {
-                    $('#delHeadLinkedAccountsList').append(`<li><strong>${accName}</strong> — is linked. Do you still want to delete it?</li>`);
+                    $('#delHeadLinkedAccountsList').append(`<li><strong>${accName}</strong></li>`);
                 });
                 $('#delHeadConfirmView').removeClass('d-none');
                 $('#confirmDeleteHeadBtn').text('Yes, Delete All').removeClass('d-none');
             }
 
-            // Close the Manage heads modal and open the Delete confirm modal
             $('#manageHeadsModal').modal('hide');
             $('#deleteHeadModal').modal('show');
         });
 
-        // Re-open Manage Heads modal if delete modal is closed without action
         $('#deleteHeadModal').on('hidden.bs.modal', function () {
             if ($('#deleteHeadModal').hasClass('show') === false) {
                 $('#manageHeadsModal').modal('show');

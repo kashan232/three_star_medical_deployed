@@ -463,97 +463,19 @@ class BalanceService
 
         $branchId = $branchId ?? 1; // Fallback to head office
 
-        // Define the 4 heads we need (NO Equity)
-        $headMap = [
-            'asset' => 'Current Assets',
-            'liability' => 'Current Liabilities',
-            'income' => 'Income',
-            'expense' => 'Expenses',
-        ];
-
-        $headIds = [];
-
-        foreach ($headMap as $key => $name) {
-            $head = \App\Models\AccountHead::firstOrCreate(
-                ['name' => $name, 'branch_id' => $branchId],
-                ['name' => $name, 'branch_id' => $branchId]
-            );
-
-            $headIds[$key] = $head->id;
+        // Run standard COA seeder to ensure complete, official 5-tier COA structure
+        try {
+            (new \Database\Seeders\StandardCoaSeeder())->run();
+        } catch (\Throwable $e) {
+            \Log::warning("StandardCoaSeeder invocation in BalanceService: " . $e->getMessage());
         }
 
-        // Define the 5 critical accounts
-        $criticalAccounts = [
-            [
-                'title' => 'Cash in Hand',
-                'account_code' => 'CASH',
-                'type' => 'Debit',
-                'head_id' => $headIds['asset'],
-                'search' => ['title', 'like', '%Cash%'],
-            ],
-            [
-                'title' => 'Accounts Receivable',
-                'account_code' => 'AR',
-                'type' => 'Debit',
-                'head_id' => $headIds['asset'],
-                'search' => ['title', 'like', '%Receivable%'],
-            ],
-            [
-                'title' => 'Accounts Payable',
-                'account_code' => 'AP',
-                'type' => 'Credit',
-                'head_id' => $headIds['liability'],
-                'search' => ['title', 'like', '%Payable%'],
-            ],
-            [
-                'title' => 'Sales Revenue',
-                'account_code' => 'SALES',
-                'type' => 'Credit',
-                'head_id' => $headIds['income'],
-                'search' => ['account_code', 'SALES'],
-            ],
-            [
-                'title' => 'Purchase',
-                'account_code' => 'PURCHASE',
-                'type' => 'Debit',
-                'head_id' => $headIds['expense'],
-                'search' => ['account_code', 'PURCHASE'],
-            ],
-            [
-                'title' => 'Purchase Expensive',
-                'account_code' => 'PURCHASE_EXP',
-                'type' => 'Debit',
-                'head_id' => $headIds['expense'],
-                'search' => ['account_code', 'PURCHASE_EXP'],
-            ],
+        $headIds = [
+            'asset'     => AccountHead::where('code', '1-02-040')->value('id') ?? AccountHead::where('name', 'like', '%Current Assets%')->value('id'),
+            'liability' => AccountHead::where('code', '2-02-010')->value('id') ?? AccountHead::where('name', 'like', '%Current Liabilities%')->value('id'),
+            'income'    => AccountHead::where('code', '4-01-001')->value('id') ?? AccountHead::where('name', 'like', '%Sales Revenue%')->value('id'),
+            'expense'   => AccountHead::where('code', '5-01-001')->value('id') ?? AccountHead::where('name', 'like', '%Cost of Goods%')->value('id'),
         ];
-
-        foreach ($criticalAccounts as $def) {
-            $existing = Account::where($def['search'][0], $def['search'][1], $def['search'][2] ?? $def['search'][1])
-                ->where('branch_id', $branchId)
-                ->first();
-
-            if (! $existing) {
-                $acc = Account::create([
-                    'title' => $def['title'],
-                    'account_code' => $def['account_code'],
-                    'type' => $def['type'],
-                    'head_id' => $def['head_id'],
-                    'opening_balance' => 0,
-                    'status' => 1,
-                    'branch_id' => $branchId,
-                ]);
-
-                $acc->account_code = $def['account_code'];
-                $acc->save();
-                \Log::info("COA Auto-Setup: Created account '{$def['title']}' under head ID {$def['head_id']}");
-            } elseif (is_null($existing->head_id)) {
-                // Fix existing account that has no head assigned
-                $existing->head_id = $def['head_id'];
-                $existing->save();
-                \Log::info("COA Auto-Setup: Fixed head for '{$existing->title}'");
-            }
-        }
 
         return $headIds;
     }
@@ -571,28 +493,18 @@ class BalanceService
 
         $account = Account::where('branch_id', $branchId)
             ->where(function ($q) {
-                $q->where('title', 'like', '%Receivable%')
+                $q->where('account_code', 'like', '1-02-051%')
+                    ->orWhere('title', 'like', '%Receivable%')
                     ->orWhere('account_code', 'AR');
             })
+            ->orderBy('id')
             ->first();
-
-        if (! $account) {
-            // Auto-create COA and try again
-            $this->ensureDefaultCOA($branchId);
-            $account = Account::where('branch_id', $branchId)
-                ->where(function ($q) {
-                    $q->where('title', 'like', '%Receivable%')
-                        ->orWhere('account_code', 'AR');
-                })
-                ->first();
-        }
 
         return $account?->id;
     }
 
     /**
      * Get Sales Revenue account ID.
-     * Auto-creates COA if missing. Returns null if still unavailable.
      */
     public function getSalesRevenueId(?int $branchId = null): ?int
     {
@@ -603,27 +515,18 @@ class BalanceService
 
         $account = Account::where('branch_id', $branchId)
             ->where(function ($q) {
-                $q->where('account_code', 'SALES')
+                $q->where('account_code', 'like', '4-01-001%')
+                    ->orWhere('account_code', 'SALES')
                     ->orWhere('title', 'like', '%Sales%');
             })
+            ->orderBy('id')
             ->first();
-
-        if (! $account) {
-            $this->ensureDefaultCOA($branchId);
-            $account = Account::where('branch_id', $branchId)
-                ->where(function ($q) {
-                    $q->where('account_code', 'SALES')
-                        ->orWhere('title', 'like', '%Sales%');
-                })
-                ->first();
-        }
 
         return $account?->id;
     }
 
     /**
      * Get Cash account ID.
-     * Auto-creates COA if missing. Returns null if still unavailable.
      */
     public function getCashAccountId(?int $branchId = null): ?int
     {
@@ -634,27 +537,18 @@ class BalanceService
 
         $account = Account::where('branch_id', $branchId)
             ->where(function ($q) {
-                $q->where('title', 'like', '%Cash%')
+                $q->where('account_code', 'like', '1-02-040%')
+                    ->orWhere('title', 'like', '%Cash%')
                     ->orWhere('account_code', 'CASH');
             })
+            ->orderBy('id')
             ->first();
-
-        if (! $account) {
-            $this->ensureDefaultCOA($branchId);
-            $account = Account::where('branch_id', $branchId)
-                ->where(function ($q) {
-                    $q->where('title', 'like', '%Cash%')
-                        ->orWhere('account_code', 'CASH');
-                })
-                ->first();
-        }
 
         return $account?->id;
     }
 
     /**
      * Get Accounts Payable account ID (Liability).
-     * Auto-creates COA if missing. Returns null if still unavailable.
      */
     public function getAccountsPayableId(?int $branchId = null): ?int
     {
@@ -665,20 +559,12 @@ class BalanceService
 
         $account = Account::where('branch_id', $branchId)
             ->where(function ($q) {
-                $q->where('title', 'like', '%Payable%')
+                $q->where('account_code', 'like', '2-02-010%')
+                    ->orWhere('title', 'like', '%Payable%')
                     ->orWhere('account_code', 'AP');
             })
+            ->orderBy('id')
             ->first();
-
-        if (! $account) {
-            $this->ensureDefaultCOA($branchId);
-            $account = Account::where('branch_id', $branchId)
-                ->where(function ($q) {
-                    $q->where('title', 'like', '%Payable%')
-                        ->orWhere('account_code', 'AP');
-                })
-                ->first();
-        }
 
         return $account?->id;
     }
@@ -686,36 +572,34 @@ class BalanceService
     /**
      * Get the main Purchase account ID (tracks purchase price only — no extra cost)
      */
-    public function getPurchaseExpenseId(?int $branchId = null): int
+    public function getPurchaseExpenseId(?int $branchId = null): ?int
     {
-
         if ($branchId === null && auth()->check()) {
             $branchId = auth()->user()->getBranchId();
         }
         $branchId = $branchId ?? 1;
 
         $account = Account::where('branch_id', $branchId)
-            ->where('account_code', 'PURCHASE')
+            ->where(function ($q) {
+                $q->where('account_code', 'like', '5-01-001%')
+                    ->orWhere('account_code', 'PURCHASE')
+                    ->orWhere('title', 'like', '%Cost of Goods%')
+                    ->orWhere(function ($sub) {
+                        $sub->where('title', 'like', '%Purchase%')
+                            ->where('account_code', '!=', 'PURCHASE_EXP');
+                    });
+            })
+            ->orderBy('id')
             ->first();
 
-        if (! $account) {
-            $account = Account::where('title', 'like', '%Cost of Goods%')
-                ->orWhere(function ($q) {
-                    $q->where('title', 'like', '%Purchase%')
-                        ->where('account_code', '!=', 'PURCHASE_EXP');
-                })
-                ->first();
-        }
-
-        return $account->id;
+        return $account?->id;
     }
 
     /**
      * Get the Purchase Expensive account ID (tracks extra/additional costs on purchases)
      */
-    public function getPurchaseExpensiveId(?int $branchId = null): int
+    public function getPurchaseExpensiveId(?int $branchId = null): ?int
     {
-
         if ($branchId === null && auth()->check()) {
             $branchId = auth()->user()->getBranchId();
         }
@@ -724,11 +608,13 @@ class BalanceService
         $account = Account::where('branch_id', $branchId)
             ->where(function ($q) {
                 $q->where('account_code', 'PURCHASE_EXP')
-                    ->orWhere('title', 'Purchase Expensive');
+                    ->orWhere('title', 'Purchase Expensive')
+                    ->orWhere('account_code', 'like', '5-02%');
             })
+            ->orderBy('id')
             ->first();
 
-        return $account->id;
+        return $account?->id ?? $this->getPurchaseExpenseId($branchId);
     }
 
     /**

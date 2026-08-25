@@ -575,6 +575,11 @@ class SaleReturnController extends Controller
                 $cust->save();
             }
 
+            $txService = app(\App\Services\TransactionService::class);
+            if (method_exists($txService, 'recalculateCustomerLedger')) {
+                $txService->recalculateCustomerLedger($validated['customer_id']);
+            }
+
             DB::commit();
 
             return redirect()->route('sale.return.index')->with('success', 'Sale return processed successfully.');

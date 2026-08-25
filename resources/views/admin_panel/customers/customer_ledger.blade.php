@@ -550,13 +550,13 @@
                 @if (request('customer_id'))
                     @if ($CustomerLedgers->count() > 0)
                         @php
-                            $ob = $CustomerLedgers->first()->previous_balance ?? 0;
-                            $cb = $CustomerLedgers->last()->closing_balance ?? 0;
+                            $ob = $openingBalance ?? ($CustomerLedgers->first()->previous_balance ?? 0);
                             $totalDebit = $CustomerLedgers->sum('debit');
                             $totalCredit = $CustomerLedgers->sum('credit');
-                            $cust = $CustomerLedgers->first()->customer;
-                            $start = request('from_date');
-                            $end = request('to_date');
+                            $cb = $ob + $totalDebit - $totalCredit;
+                            $cust = $CustomerLedgers->first()->customer ?? ($customers->find(request('customer_id')));
+                            $start = request('from_date', date('Y-m-01'));
+                            $end = request('to_date', date('Y-m-d'));
 
                             $netBal = $cb;
                             $balLabel = $netBal >= 0 ? 'Receivable (Dr)' : 'Advance/Credit (Cr)';
@@ -649,11 +649,15 @@
                                         </tr>
 
                                         {{-- Transaction rows --}}
+                                        @php
+                                            $running = $ob;
+                                        @endphp
                                         @foreach ($CustomerLedgers as $ledger)
                                             @php
-                                                $dr = $ledger->debit ?? 0;
-                                                $cr = $ledger->credit ?? 0;
-                                                $bal = $ledger->closing_balance;
+                                                $dr = (float)($ledger->debit ?? 0);
+                                                $cr = (float)($ledger->credit ?? 0);
+                                                $running += ($dr - $cr);
+                                                $bal = $running;
                                                 $bc = $bal > 0 ? 'bal-dr' : ($bal < 0 ? 'bal-cr' : 'bal-zero');
                                                 $bl = $bal > 0.01 ? 'Dr' : ($bal < -0.01 ? 'Cr' : '—');
 

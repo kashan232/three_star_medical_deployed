@@ -32,6 +32,32 @@ class Vendor extends Model
     }
 
     /**
+     * Get current closing balance from VendorLedger or previous_balance or opening_balance
+     */
+    public function getClosingBalanceAttribute()
+    {
+        $lastLedger = \App\Models\VendorLedger::where('vendor_id', $this->id)
+            ->orderBy(\Illuminate\Support\Facades\DB::raw('DATE(created_at)'), 'desc')
+            ->orderBy('id', 'desc')
+            ->first();
+            
+        if ($lastLedger) {
+            return (float)$lastLedger->closing_balance;
+        }
+
+        if (isset($this->attributes['previous_balance']) && $this->attributes['previous_balance'] !== null) {
+            return (float)$this->attributes['previous_balance'];
+        }
+
+        return (float)($this->opening_balance ?? 0);
+    }
+
+    public function getPreviousBalanceAttribute()
+    {
+        return $this->getClosingBalanceAttribute();
+    }
+
+    /**
      * Polymorphic relationship to journal entries
      */
     public function journalEntries()

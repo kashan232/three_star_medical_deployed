@@ -1223,15 +1223,23 @@ class SaleController extends Controller
                 $sale->due_date = null;
             }
 
-            // ONLY generate or set invoice number if it doesn't already have one
-            // This prevents un-posted/draft sales from getting new numbers upon re-posting
-            if (!$sale->invoice_no) {
+            // ONLY generate or set invoice number if it doesn't already have one,
+            // OR if converting an existing draft Sale Order (SO-*) into a Sale Invoice Note (mode == 'sin')
+            $isConvertingSoToSin = ($request->mode == 'sin' && $sale->invoice_no && str_starts_with($sale->invoice_no, 'SO-'));
+
+            if (!$sale->invoice_no || $isConvertingSoToSin) {
+                if ($isConvertingSoToSin && !$sale->sale_order_no) {
+                    $sale->sale_order_no = $sale->invoice_no;
+                }
+
                 // Check if user provided manual invoice number
-                if ($request->filled('invoice_no')) {
+                if ($request->filled('invoice_no') && !str_starts_with(trim($request->invoice_no), 'SO-')) {
                     $manualInvoice = trim($request->invoice_no);
 
                     // Check for duplicates
-                    $exists = Sale::where('invoice_no', $manualInvoice)->exists();
+                    $exists = Sale::where('invoice_no', $manualInvoice)
+                        ->when($sale->id, fn($q) => $q->where('id', '!=', $sale->id))
+                        ->exists();
                     if ($exists) {
                         throw \Illuminate\Validation\ValidationException::withMessages([
                             'invoice_no' => "Invoice number '{$manualInvoice}' already exists. Please use a different number or leave blank for auto-generation.",
@@ -1710,11 +1718,14 @@ class SaleController extends Controller
             return;
         }
 
-        $ledger = CustomerLedger::where('customer_id', $customer_id)->latest('id')->first();
+        $ledger = CustomerLedger::where('customer_id', $customer_id)
+            ->orderBy(\Illuminate\Support\Facades\DB::raw('DATE(created_at)'), 'desc')
+            ->orderBy('id', 'desc')
+            ->first();
         // Fallback: If no ledger, check Customer Master
         if (! $ledger) {
             $cust = \App\Models\Customer::find($customer_id);
-            $prev_bal = $cust->previous_balance ?? 0;
+            $prev_bal = $cust->opening_balance ?? $cust->previous_balance ?? 0;
         } else {
             $prev_bal = $ledger->closing_balance;
         }
@@ -1722,23 +1733,26 @@ class SaleController extends Controller
         $new_bal = $prev_bal + $sale->total_net;
 
         \Log::info("Legacy Ledger (Invoice): Customer #{$customer_id}. Prev: {$prev_bal} + Sale: {$sale->total_net} = New: {$new_bal}");
+        $createdAt = $sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->setTime(date('H'), date('i'), date('s')) : now();
+
         CustomerLedger::create([
-            'customer_id' => $sale->customer_id,
-            'branch_id' => $sale->branch_id,
+            'customer_id'      => $sale->customer_id,
+            'branch_id'        => $sale->branch_id,
             'admin_or_user_id' => auth()->id() ?? 1,
-            'description' => "Sale Confirmed #{$sale->invoice_no}",
+            'description'      => "Sale Confirmed #{$sale->invoice_no}",
+            'debit'            => (float)$sale->total_net,
+            'credit'           => 0,
             'previous_balance' => $prev_bal,
-            'opening_balance' => 0,
-            'closing_balance' => $new_bal,
-            'source_type' => \App\Models\Sale::class,
-            'source_id' => $sale->id,
+            'opening_balance'  => 0,
+            'closing_balance'  => $new_bal,
+            'source_type'      => \App\Models\Sale::class,
+            'source_id'        => $sale->id,
+            'created_at'       => $createdAt,
         ]);
 
-        // Update Customer Master
-        $cust = \App\Models\Customer::find($customer_id);
-        if ($cust) {
-            $cust->previous_balance = $new_bal;
-            $cust->save();
+        $txService = app(\App\Services\TransactionService::class);
+        if (method_exists($txService, 'recalculateCustomerLedger')) {
+            $txService->recalculateCustomerLedger($customer_id);
         }
     }
 

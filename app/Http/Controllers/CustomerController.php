@@ -237,6 +237,8 @@ class CustomerController extends Controller
         $customers = Customer::when($branchId, fn($q) => $q->where('branch_id', $branchId))->orderBy('customer_name')->get();
         $ledgerData = collect([]);
 
+        $openingBalance = 0;
+
         if ($request->filled('customer_id')) {
             $customerId = $request->customer_id;
             $startDate  = $request->from_date ?? '2000-01-01';
@@ -244,11 +246,20 @@ class CustomerController extends Controller
             
             $customerObj = Customer::find($customerId);
 
+            // Fetch opening balance before startDate
+            $openingEntry = \App\Models\CustomerLedger::where('customer_id', $customerId)
+                ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
+                ->whereDate('created_at', '<', $startDate)
+                ->orderBy(\Illuminate\Support\Facades\DB::raw('DATE(created_at)'), 'desc')
+                ->orderBy('id', 'desc')
+                ->first();
+            $openingBalance = $openingEntry ? (float)$openingEntry->closing_balance : (float)($customerObj->opening_balance ?? 0);
+
             $ledgers = \App\Models\CustomerLedger::where('customer_id', $customerId)
                 ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
                 ->whereDate('created_at', '>=', $startDate)
                 ->whereDate('created_at', '<=', $endDate)
-                ->orderBy('created_at', 'asc')
+                ->orderBy(\Illuminate\Support\Facades\DB::raw('DATE(created_at)'), 'asc')
                 ->orderBy('id', 'asc')
                 ->get();
             
@@ -256,16 +267,19 @@ class CustomerController extends Controller
                 $prev = (float) $row->previous_balance;
                 $close = (float) $row->closing_balance;
                 
-                $debit = 0;
-                $credit = 0;
+                $debit = (float)($row->debit ?? 0);
+                $credit = (float)($row->credit ?? 0);
                 
-                if ($close > $prev) {
-                    $debit = $close - $prev;
-                } elseif ($close < $prev) {
-                    $credit = $prev - $close;
+                if ($debit == 0 && $credit == 0) {
+                    if ($close > $prev) {
+                        $debit = $close - $prev;
+                    } elseif ($close < $prev) {
+                        $credit = $prev - $close;
+                    }
                 }
 
                 return (object) [
+                    'id'               => $row->id,
                     'created_at'       => $row->created_at->format('Y-m-d'),
                     'customer'         => $customerObj,
                     'description'      => $row->description,
@@ -278,20 +292,15 @@ class CustomerController extends Controller
 
             // Ensure the ledger shows even if there are no new transactions in period but there is a balance
             if ($ledgerData->isEmpty() && $customerObj) {
-                $openingEntry = \App\Models\CustomerLedger::where('customer_id', $customerId)
-                    ->whereDate('created_at', '<', $startDate)
-                    ->orderBy('id', 'desc')
-                    ->first();
-                $currentPrev = $openingEntry ? (float)$openingEntry->closing_balance : 0;
-                
                 $ledgerData->push((object) [
+                    'id'               => 0,
                     'created_at'       => $startDate,
                     'customer'         => $customerObj,
                     'description'      => 'Balance Brought Forward',
                     'debit'            => 0,
                     'credit'           => 0,
-                    'closing_balance'  => $currentPrev,
-                    'previous_balance' => $currentPrev,
+                    'closing_balance'  => $openingBalance,
+                    'previous_balance' => $openingBalance,
                 ]);
             }
         }
@@ -299,6 +308,7 @@ class CustomerController extends Controller
         return view('admin_panel.customers.customer_ledger', [
             'CustomerLedgers' => $ledgerData,
             'customers'       => $customers,
+            'openingBalance'  => $openingBalance,
         ]);
     }
 

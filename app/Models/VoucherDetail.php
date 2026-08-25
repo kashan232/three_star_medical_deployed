@@ -28,4 +28,9 @@ class VoucherDetail extends Model
     {
         return $this->belongsTo(Account::class, 'account_id');
     }
+
+    public function party()
+    {
+        return $this->morphTo();
+    }
 }

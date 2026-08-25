@@ -43,31 +43,50 @@ class JournalEntryService
     }
 
     /**
-     * Update the real-time balance on the Account model.
-     * Assets/Expenses: Dr increases, Cr decreases.
-     * Liabilities/Equity/Income: Cr increases, Dr decreases.
-     *
-     * @param  int  $accountId
-     * @param  float  $debit
-     * @param  float  $credit
+     * Reverse and delete all Journal Entries for a given source model.
      */
-    private function updateAccountBalance(/** @var int */ $accountId, /** @var float */ $debit, /** @var float */ $credit)
+    public function reverseEntriesForSource(Model $source)
+    {
+        $entries = JournalEntry::where('source_type', get_class($source))
+            ->where('source_id', $source->id)
+            ->get();
+
+        foreach ($entries as $entry) {
+            // Revert balance on Account: Dr subtracted, Cr added
+            $this->revertAccountBalance($entry->account_id, $entry->debit, $entry->credit);
+            $entry->delete();
+        }
+    }
+
+    /**
+     * Update the real-time balance on the Account model.
+     */
+    private function updateAccountBalance(int $accountId, float $debit, float $credit)
     {
         $account = Account::find($accountId);
         if (! $account) {
             return;
         }
 
-        // Determine normal balance side based on Head Type
-        // If Head Type is not yet migrated, assume default based on name or similar logic.
-        // For now, let's use a simplified approach:
-        // current_balance represents the "net" (Debit - Credit) or similar.
-        // Actually, standards usually keep a signed balance or a Dr/Cr indicator.
-        // Let's adopt: Positive = Debit Balance, Negative = Credit Balance.
-
         $netChange = $debit - $credit;
         $currentBalance = $account->current_balance ?? 0;
         $account->current_balance = $currentBalance + $netChange;
+        $account->save();
+    }
+
+    /**
+     * Revert the real-time balance on the Account model.
+     */
+    private function revertAccountBalance(int $accountId, float $debit, float $credit)
+    {
+        $account = Account::find($accountId);
+        if (! $account) {
+            return;
+        }
+
+        $netChange = $debit - $credit;
+        $currentBalance = $account->current_balance ?? 0;
+        $account->current_balance = $currentBalance - $netChange;
         $account->save();
     }
 }

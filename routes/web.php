@@ -424,6 +424,15 @@ Route::middleware('auth')->group(function () {
     Route::get('/party-list', [VoucherController::class, 'partyList'])->name('party.list');
     Route::get('/receipt-vouchers/fetch', [VoucherController::class, 'fetchReceiptVouchers'])->name('receipt_vouchers.fetch');
 
+    // Unified ERP Vouchers (CRV, BRV, CPV, BPV, JV)
+    Route::get('/vouchers-manager/{type?}', [VoucherController::class, 'voucherList'])->name('vouchers.list');
+    Route::get('/vouchers/create-new/{type}', [VoucherController::class, 'createVoucherPage'])->name('vouchers.create_page');
+    Route::post('/vouchers/store-action/{type}', [VoucherController::class, 'storeVoucherAction'])->name('vouchers.store_action');
+    Route::get('/vouchers/edit-record/{id}', [VoucherController::class, 'editVoucherPage'])->name('vouchers.edit_page');
+    Route::put('/vouchers/update-record/{id}', [VoucherController::class, 'updateVoucherAction'])->name('vouchers.update_action');
+    Route::delete('/vouchers/destroy/{id}', [VoucherController::class, 'destroyVoucherAction'])->name('vouchers.destroy_action');
+    Route::get('/vouchers/print-unified/{id}', [VoucherController::class, 'unifiedPrint'])->name('vouchers.print_unified');
+
     // Cheque Management Routes
     Route::get('/cheques', [ChequeController::class, 'index'])->name('cheques.index')->middleware('permission:sales.view');
     Route::post('/cheques/{id}/clear', [ChequeController::class, 'clear'])->name('cheques.clear')->middleware('permission:sales.create');
@@ -432,6 +441,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/accounts-head/store', [AccountsHeadController::class, 'storeHead'])->name('account-heads.store');
     Route::put('/accounts-head/{id}/update', [AccountsHeadController::class, 'updateHead'])->name('account-heads.update');
     Route::delete('/accounts-head/{id}/delete', [AccountsHeadController::class, 'destroyHead'])->name('account-heads.destroy');
+    Route::get('/accounts-head/{id}/next-code', [AccountsHeadController::class, 'getNextAccountCode'])->name('account-heads.next-code');
     Route::post('/accounts/store', [AccountsHeadController::class, 'storeAccount'])->name('accounts.store');
     Route::post('/accounts/{id}/toggle-status', [AccountsHeadController::class, 'toggleStatus'])->name('accounts.toggleStatus');
     Route::put('/accounts/{id}/update', [AccountsHeadController::class, 'updateAccount'])->name('accounts.update');

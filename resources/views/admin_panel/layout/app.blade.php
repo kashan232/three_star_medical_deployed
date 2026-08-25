@@ -774,30 +774,28 @@
                                 <div class="submenu">
                                     <ul class="submenu-item">
                                         @can('chart.of.accounts.view')
-                                            <li><a href="{{ route('view_all') }}"><i class="fa-solid fa-money-bill-wave"></i>
-                                                    Char Of Accounts</a></li>
-                                        @endcan
-                                        @can('expense.voucher.view')
-                                            <li><a href="{{ route('all_expense_vochers') }}"><i
-                                                        class="fa-solid fa-money-bill-wave"></i> Expense Voucher</a></li>
+                                            <li><a href="{{ route('view_all') }}"><i class="fa-solid fa-list-ol"></i>
+                                                    Chart Of Accounts</a></li>
                                         @endcan
                                         @can('receipts.voucher.view')
-                                            <li><a href="{{ route('all_recepit_vochers') }}"><i
-                                                        class="fa-solid fa-wallet"></i> Receipts Voucher</a></li>
-                                            <li><a href="{{ route('cheques.index') }}"><i
-                                                        class="fa-solid fa-money-check"></i> Cheque Management</a></li>
-                                        @endcan
-                                        @can('journal.voucher.view')
-                                            <li><a href="{{ route('vouchers.index', 'journal voucher') }}"><i
-                                                        class="fa-solid fa-wallet"></i> Journal Voucher</a></li>
+                                            <li><a href="{{ route('vouchers.list', 'crv') }}"><i
+                                                        class="fa-solid fa-hand-holding-usd text-success"></i> Cash Receiving (CRV)</a></li>
+                                            <li><a href="{{ route('vouchers.list', 'brv') }}"><i
+                                                        class="fa-solid fa-university text-primary"></i> Bank Receiving (BRV)</a></li>
                                         @endcan
                                         @can('payment.voucher.view')
-                                            <li><a href="{{ route('all_Payment_vochers') }}"><i
-                                                        class="fa-solid fa-wallet"></i> Payment Voucher</a></li>
+                                            <li><a href="{{ route('vouchers.list', 'cpv') }}"><i
+                                                        class="fa-solid fa-money-bill-wave text-warning"></i> Cash Payment (CPV)</a></li>
+                                            <li><a href="{{ route('vouchers.list', 'bpv') }}"><i
+                                                        class="fa-solid fa-file-invoice-dollar text-purple"></i> Bank Payment (BPV)</a></li>
                                         @endcan
-                                        @can('income.voucher.view')
-                                            <li><a href="{{ route('vouchers.index', 'income voucher') }}"><i
-                                                        class="fa-solid fa-wallet"></i> Income Voucher</a></li>
+                                        @can('journal.voucher.view')
+                                            <li><a href="{{ route('vouchers.list', 'jv') }}"><i
+                                                        class="fa-solid fa-book text-secondary"></i> Journal Voucher (JV)</a></li>
+                                        @endcan
+                                        @can('receipts.voucher.view')
+                                            <li><a href="{{ route('cheques.index') }}"><i
+                                                        class="fa-solid fa-money-check"></i> Cheque Management</a></li>
                                         @endcan
                                     </ul>
                                 </div>

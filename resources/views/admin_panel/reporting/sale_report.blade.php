@@ -583,6 +583,18 @@
                     let invFree = 0;
                     let invNet = 0;
 
+                    let badgeHtml = '';
+                    if (s.sale_order_no && s.dc_no) {
+                        badgeHtml = `<span class="badge" style="background:#e0e7ff; color:#3730a3; font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; margin-left:8px; border:1px solid #c7d2fe;">SO: ${s.sale_order_no}</span>
+                                     <span class="badge" style="background:#fef3c7; color:#92400e; font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; margin-left:4px; border:1px solid #fde68a;">DC: ${s.dc_no}</span>`;
+                    } else if (s.sale_order_no) {
+                        badgeHtml = `<span class="badge" style="background:#e0e7ff; color:#3730a3; font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; margin-left:8px; border:1px solid #c7d2fe;">SO: ${s.sale_order_no}</span>`;
+                    } else if (s.dc_no) {
+                        badgeHtml = `<span class="badge" style="background:#fef3c7; color:#92400e; font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; margin-left:8px; border:1px solid #fde68a;">DC: ${s.dc_no}</span>`;
+                    } else {
+                        badgeHtml = `<span class="badge" style="background:#f1f5f9; color:#475569; font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; margin-left:8px; border:1px solid #e2e8f0;">Direct Sale</span>`;
+                    }
+
                     // Invoice Header row
                     html += `
                         <tr class="inv-bar-row">
@@ -590,6 +602,7 @@
                                 <strong>SALE</strong> &nbsp;&nbsp;
                                 <strong>Invoice :</strong> ${s.invoice_no} &nbsp;&nbsp;
                                 <strong>Date :</strong> ${formattedDate}
+                                ${badgeHtml}
                             </td>
                             <td colspan="7">
                                 <strong>Customer :</strong> ${s.customer_name}
@@ -638,7 +651,7 @@
                     html += `
                         <tr class="inv-sum-row">
                             <td colspan="5" class="text-right">
-                                <span class="text-red">TOTAL FOR :</span> SALE ${s.invoice_no}
+                                <span class="text-red">TOTAL FOR :</span> ${s.invoice_no}
                             </td>
                             <td class="text-right"><span class="text-red">${invQty.toFixed(0)}</span></td>
                             <td class="text-right"><span class="text-red">${invFree.toFixed(0)}</span></td>

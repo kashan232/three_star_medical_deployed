@@ -13,27 +13,30 @@ class VoucherMaster extends Model
 
     protected $casts = [
         'date' => 'date',
+        'cheque_date' => 'date',
         'posted_at' => 'datetime',
+        'verified_at' => 'datetime',
         'total_amount' => 'decimal:2',
     ];
 
     // Status Constants
     const STATUS_DRAFT = 'draft';
-
     const STATUS_POSTED = 'posted';
-
     const STATUS_CANCELLED = 'cancelled';
 
     // Type Constants
+    const TYPE_CRV = 'crv'; // Cash Receiving Voucher
+    const TYPE_BRV = 'brv'; // Bank Receiving Voucher
+    const TYPE_CPV = 'cpv'; // Cash Payment Voucher
+    const TYPE_BPV = 'bpv'; // Bank Payment Voucher
+    const TYPE_JV  = 'jv';  // Journal Voucher
+    
+    // Legacy Type Constants
     const TYPE_RECEIPT = 'receipt';
-
     const TYPE_PAYMENT = 'payment';
-
     const TYPE_EXPENSE = 'expense';
-
     const TYPE_JOURNAL = 'journal';
-
-    const TYPE_CONTRA = 'contra';
+    const TYPE_CONTRA  = 'contra';
 
     /**
      * Branch this voucher belongs to.
@@ -45,22 +48,39 @@ class VoucherMaster extends Model
 
     /**
      * Generate next voucher number scoped to a branch and type.
-     * Format: PV-B1-0001 (Payment Voucher, Branch 1, #0001)
+     * Format: CRV-0001, BRV-0001, CPV-0001, BPV-0001, JV-0001
      */
     public static function generateVoucherNo(string $type, ?int $branchId = null): string
     {
-        $typeCode = strtoupper(substr($type, 0, 2)); // e.g. 'PY' for payment, 'RC' for receipt
-        $branchCode = $branchId ? 'B'.$branchId.'-' : '';
-        $prefix = $typeCode.'-'.$branchCode;
+        $typeMap = [
+            'crv' => 'CRV',
+            'brv' => 'BRV',
+            'cpv' => 'CPV',
+            'bpv' => 'BPV',
+            'jv'  => 'JV',
+            'receipt' => 'CRV',
+            'payment' => 'CPV',
+            'expense' => 'CPV',
+            'journal' => 'JV',
+            'contra'  => 'JV',
+        ];
 
-        $last = static::where('voucher_no', 'like', "{$prefix}%")
+        $prefixCode = $typeMap[strtolower($type)] ?? strtoupper(substr($type, 0, 3));
+        $branchCode = ($branchId && $branchId > 1) ? 'B'.$branchId.'-' : '';
+        $prefix = $prefixCode.'-'.$branchCode;
+
+        $last = static::where('voucher_no', 'like', "{$prefixCode}-%")
             ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
             ->orderByDesc('id')
             ->value('voucher_no');
 
-        $num = $last ? (int) substr($last, strlen($prefix)) : 0;
+        if ($last && preg_match('/-(\d+)$/', $last, $m)) {
+            $num = (int)$m[1];
+        } else {
+            $num = 0;
+        }
 
-        return $prefix.str_pad($num + 1, 4, '0', STR_PAD_LEFT);
+        return $prefixCode.'-'.str_pad($num + 1, 5, '0', STR_PAD_LEFT);
     }
 
     /**
@@ -85,5 +105,15 @@ class VoucherMaster extends Model
     public function createdBy()
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function verifiedBy()
+    {
+        return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function modifiedBy()
+    {
+        return $this->belongsTo(User::class, 'modified_by');
     }
 }

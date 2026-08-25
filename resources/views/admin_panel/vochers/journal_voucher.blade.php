@@ -1,6 +1,50 @@
 @extends('admin_panel.layout.app')
 @section('content')
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <style>
+        .balance-preview-wrap {
+            margin-top: 6px;
+            display: block;
+            min-height: 24px;
+        }
+
+        .balance-preview-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .balance-preview-badge.badge-green {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
+        }
+
+        .balance-preview-badge.badge-red {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .balance-preview-badge.badge-blue {
+            background: #e0e7ff;
+            color: #3730a3;
+            border: 1px solid #c7d2fe;
+        }
+
+        .balance-preview-badge.badge-purple {
+            background: #ede9fe;
+            color: #5b21b6;
+            border: 1px solid #ddd6fe;
+        }
+    </style>
 
     <div class="main-content">
         <div class="container-fluid py-4">
@@ -106,7 +150,7 @@
         }) as $headName => $accs)
                                                     <optgroup label="{{ $headName }}">
                                                         @foreach ($accs as $acc)
-                                                            <option value="{{ $acc->id }}">{{ $acc->title }}
+                                                            <option value="{{ $acc->id }}" data-balance="{{ $acc->calculated_balance }}" data-type="{{ strtolower(optional($acc->head)->name ?? 'account') }}">{{ $acc->title }}
                                                                 ({{ $acc->account_code ?: $acc->id }})
                                                             </option>
                                                         @endforeach
@@ -137,7 +181,7 @@
         }) as $headName => $accs)
                                                     <optgroup label="{{ $headName }}">
                                                         @foreach ($accs as $acc)
-                                                            <option value="{{ $acc->id }}">{{ $acc->title }}
+                                                            <option value="{{ $acc->id }}" data-balance="{{ $acc->calculated_balance }}" data-type="{{ strtolower(optional($acc->head)->name ?? 'account') }}">{{ $acc->title }}
                                                                 ({{ $acc->account_code ?: $acc->id }})
                                                             </option>
                                                         @endforeach
@@ -266,7 +310,7 @@
             foreach ($grpAccs as $grpAcc) {
                 $code = $grpAcc->account_code ?: $grpAcc->id;
                 $accountOptionsHtml .=
-                    '<option value="' . $grpAcc->id . '">' . e($grpAcc->title) . ' (' . e($code) . ')</option>';
+                    '<option value="' . $grpAcc->id . '" data-balance="' . $grpAcc->calculated_balance . '" data-type="' . strtolower(optional($grpAcc->head)->name ?? 'account') . '">' . e($grpAcc->title) . ' (' . e($code) . ')</option>';
             }
             $accountOptionsHtml .= '</optgroup>';
         }
@@ -274,8 +318,77 @@
     <script>
         const accountOptionsHtml = @json($accountOptionsHtml);
 
+        function updateAccountBalanceBadge(selectEl) {
+            var $select = $(selectEl);
+            var $selected = $select.find(':selected');
+            var rawBal = $selected.attr('data-balance');
+            var type = ($selected.attr('data-type') || '').toLowerCase();
+            
+            var $container = $select.closest('td');
+            var $badgeWrap = $container.find('.balance-preview-wrap');
+            
+            if (!$badgeWrap.length) {
+                $badgeWrap = $('<div class="balance-preview-wrap"></div>');
+                var $s2 = $container.find('.select2-container');
+                if ($s2.length) {
+                    $s2.after($badgeWrap);
+                } else {
+                    $container.append($badgeWrap);
+                }
+            }
+            
+            if (rawBal === undefined || rawBal === null || rawBal === '' || $select.val() === '' || $select.val() === null) {
+                $badgeWrap.hide().empty();
+                return;
+            }
+            
+            var bal = parseFloat(rawBal);
+            if (isNaN(bal)) {
+                $badgeWrap.hide().empty();
+                return;
+            }
+            
+            var formattedAmount = 'Rs. ' + Math.abs(bal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            var badgeClass = 'badge-blue';
+            var iconClass = 'fas fa-wallet';
+            var label = '';
+            
+            if (bal > 0.01) {
+                badgeClass = 'badge-purple';
+                iconClass = 'bi bi-cash-stack';
+                label = 'Current Balance: ' + formattedAmount + ' (Dr)';
+            } else if (bal < -0.01) {
+                badgeClass = 'badge-green';
+                iconClass = 'bi bi-cash-stack';
+                label = 'Current Balance: ' + formattedAmount + ' (Cr)';
+            } else {
+                badgeClass = 'badge-blue';
+                iconClass = 'bi bi-cash-stack';
+                label = 'Current Balance: Rs. 0.00';
+            }
+            
+            var html = `
+                <span class="balance-preview-badge ${badgeClass}">
+                    <i class="${iconClass} me-1"></i> <span>${label}</span>
+                </span>
+            `;
+            
+            $badgeWrap.html(html).show();
+        }
+
+        function initAllBalanceBadges() {
+            $('.account-select').each(function() {
+                updateAccountBalanceBadge(this);
+            });
+        }
+
         $(document).ready(function() {
             $('.account-select').select2({ width: '100%' });
+            initAllBalanceBadges();
+        });
+
+        $(document).on('change', '.account-select', function() {
+            updateAccountBalanceBadge(this);
         });
 
         let rowIndex = 2;
