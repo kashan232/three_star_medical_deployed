@@ -27,7 +27,7 @@ class DatabaseSeeder extends Seeder
             AllModulesPermissionsSeeder::class, // NEW: All module permissions (module.view, module.create, etc.)
             SuperAdminSeeder::class, 
             BranchManagerRoleSeeder::class, 
-            StandardCoaSeeder::class, 
+            // StandardCoaSeeder::class, // Disabled: user uses custom accounts & categories
         ]);
     }
 }

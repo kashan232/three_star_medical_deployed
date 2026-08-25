@@ -14,7 +14,8 @@ class StandardCoaSeeder extends Seeder
      */
     public function run(): void
     {
-        $branches = Branch::all();
+        // Disabled: Chart of accounts is managed manually by the user
+        return;
         if ($branches->isEmpty()) {
             $branches = collect([(object)['id' => 1]]);
         }
