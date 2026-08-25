@@ -46,6 +46,12 @@ return new class extends Migration
         // 2. ENHANCE Voucher Details
         if (Schema::hasTable('voucher_details')) {
             Schema::table('voucher_details', function (Blueprint $table) {
+                if (!Schema::hasColumn('voucher_details', 'party_type')) {
+                    $table->string('party_type')->nullable()->after('account_id');
+                }
+                if (!Schema::hasColumn('voucher_details', 'party_id')) {
+                    $table->unsignedBigInteger('party_id')->nullable()->after('party_type');
+                }
                 if (!Schema::hasColumn('voucher_details', 'reference_no')) {
                     $table->string('reference_no')->nullable()->after('narration');
                 }
@@ -71,6 +77,12 @@ return new class extends Migration
 
         if (Schema::hasTable('voucher_details')) {
             Schema::table('voucher_details', function (Blueprint $table) {
+                if (Schema::hasColumn('voucher_details', 'party_id')) {
+                    $table->dropColumn('party_id');
+                }
+                if (Schema::hasColumn('voucher_details', 'party_type')) {
+                    $table->dropColumn('party_type');
+                }
                 if (Schema::hasColumn('voucher_details', 'reference_no')) {
                     $table->dropColumn('reference_no');
                 }
