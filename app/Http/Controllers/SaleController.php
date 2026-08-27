@@ -1586,7 +1586,7 @@ class SaleController extends Controller
                     // --- LEDGER POSTING (THE INVOICE) ---
                     // Post directly to journal entries without creating a separate Journal Voucher document.
                     // In proper ERP, the sale invoice itself is the source document that posts to GL.
-                    if ($custForVoucher && $sale->total_net > 0) {
+                    if ($custForVoucher && $sale->total_net > 0 && $arAccountId && $salesAccountId) {
                         // Dr Accounts Receivable (Customer owes us money)
                         $journalService->recordEntry(
                             $sale,
@@ -1616,7 +1616,7 @@ class SaleController extends Controller
                         $request->input('payment_account_id', []),
                         $request->input('payment_amount', [])
                     );
-                } catch (\Exception $e) {
+                } catch (\Throwable $e) {
                     \Log::error('Professional Ledger Posting Error: '.$e->getMessage());
                 }
             }

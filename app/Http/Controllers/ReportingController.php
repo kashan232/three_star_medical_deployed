@@ -1848,19 +1848,9 @@ class ReportingController extends Controller
         }
 
         // ── 1. Detect Twin Vendor (MUST happen first, before filter queries) ─
-        // Only match if customer_id is non-empty to avoid false matches
-        $twinVendor = null;
-        $custCode = trim($customer->customer_id ?? '');
-        $custCnic = trim($customer->cnic ?? '');
-        if ($custCode !== '' || $custCnic !== '') {
-            $twinVendor = DB::table('vendors')
-                ->where(function($q) use ($custCode, $custCnic) {
-                    if ($custCode !== '') $q->where('vendor_code', $custCode);
-                    if ($custCnic !== '') $q->orWhere(function($q2) use ($custCnic) {
-                        $q2->where('cnic', $custCnic)->whereNotNull('cnic')->where('cnic', '!=', '');
-                    });
-                })->first();
-        }
+        $dualService = app(\App\Services\DualPartyLedgerService::class);
+        $custModel = \App\Models\Customer::find($customerId);
+        $twinVendor = $custModel ? $dualService->findTwinVendor($custModel) : null;
 
         // ── 2. Opening balance ─────────────────────────────────────────────────
         $lastCustEntry = DB::table('customer_ledgers')
@@ -2811,18 +2801,9 @@ class ReportingController extends Controller
         }
 
         // ── 1. Detect Twin Customer (MUST happen first) ───────────────────────
-        $twinCustomer = null;
-        $vendCode = trim($vendor->vendor_code ?? '');
-        $vendCnic = trim($vendor->cnic ?? '');
-        if ($vendCode !== '' || $vendCnic !== '') {
-            $twinCustomer = DB::table('customers')
-                ->where(function($q) use ($vendCode, $vendCnic) {
-                    if ($vendCode !== '') $q->where('customer_id', $vendCode);
-                    if ($vendCnic !== '') $q->orWhere(function($q2) use ($vendCnic) {
-                        $q2->where('cnic', $vendCnic)->whereNotNull('cnic')->where('cnic', '!=', '');
-                    });
-                })->first();
-        }
+        $dualService = app(\App\Services\DualPartyLedgerService::class);
+        $vendModel = \App\Models\Vendor::find($vendorId);
+        $twinCustomer = $vendModel ? $dualService->findTwinCustomer($vendModel) : null;
 
         // ── 2. Opening balance ─────────────────────────────────────────────────
         $lastVendEntry = DB::table('vendor_ledgers')

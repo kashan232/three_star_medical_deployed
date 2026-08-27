@@ -482,7 +482,7 @@ class BalanceService
 
     /**
      * Get Accounts Receivable account ID.
-     * Auto-creates COA if missing. Returns null if still unavailable.
+     * Auto-creates COA if missing.
      */
     public function getAccountsReceivableId(?int $branchId = null): ?int
     {
@@ -495,16 +495,37 @@ class BalanceService
             ->where(function ($q) {
                 $q->where('account_code', 'like', '1-02-051%')
                     ->orWhere('title', 'like', '%Receivable%')
+                    ->orWhere('title', 'like', '%Customer%')
                     ->orWhere('account_code', 'AR');
             })
             ->orderBy('id')
             ->first();
+
+        if (!$account) {
+            $head = \App\Models\AccountHead::firstOrCreate(
+                ['name' => 'Accounts Receivable', 'branch_id' => $branchId],
+                ['code' => 'AR-001', 'type' => 'Asset']
+            );
+
+            $account = Account::create([
+                'branch_id'       => $branchId,
+                'head_id'         => $head->id,
+                'title'           => 'Accounts Receivable (Debtors)',
+                'account_code'    => '1-02-051-00001',
+                'type'            => 'Debit',
+                'opening_balance' => 0,
+                'current_balance' => 0,
+                'status'          => 1,
+                'is_active'       => 1,
+            ]);
+        }
 
         return $account?->id;
     }
 
     /**
      * Get Sales Revenue account ID.
+     * Auto-creates COA if missing.
      */
     public function getSalesRevenueId(?int $branchId = null): ?int
     {
@@ -517,16 +538,37 @@ class BalanceService
             ->where(function ($q) {
                 $q->where('account_code', 'like', '4-01-001%')
                     ->orWhere('account_code', 'SALES')
-                    ->orWhere('title', 'like', '%Sales%');
+                    ->orWhere('title', 'like', '%Sales%')
+                    ->orWhere('title', 'like', '%Revenue%');
             })
             ->orderBy('id')
             ->first();
+
+        if (!$account) {
+            $head = \App\Models\AccountHead::firstOrCreate(
+                ['name' => 'Sales Revenue', 'branch_id' => $branchId],
+                ['code' => 'SALES-001', 'type' => 'Revenue']
+            );
+
+            $account = Account::create([
+                'branch_id'       => $branchId,
+                'head_id'         => $head->id,
+                'title'           => 'Sales Revenue (Sales Income)',
+                'account_code'    => '4-01-001-00001',
+                'type'            => 'Credit',
+                'opening_balance' => 0,
+                'current_balance' => 0,
+                'status'          => 1,
+                'is_active'       => 1,
+            ]);
+        }
 
         return $account?->id;
     }
 
     /**
      * Get Cash account ID.
+     * Auto-creates COA if missing.
      */
     public function getCashAccountId(?int $branchId = null): ?int
     {
@@ -544,11 +586,31 @@ class BalanceService
             ->orderBy('id')
             ->first();
 
+        if (!$account) {
+            $head = \App\Models\AccountHead::firstOrCreate(
+                ['name' => 'Cash', 'branch_id' => $branchId],
+                ['code' => 'CASH-001', 'type' => 'Asset']
+            );
+
+            $account = Account::create([
+                'branch_id'       => $branchId,
+                'head_id'         => $head->id,
+                'title'           => 'Cash in Hand',
+                'account_code'    => '1-02-040-00001',
+                'type'            => 'Debit',
+                'opening_balance' => 0,
+                'current_balance' => 0,
+                'status'          => 1,
+                'is_active'       => 1,
+            ]);
+        }
+
         return $account?->id;
     }
 
     /**
      * Get Accounts Payable account ID (Liability).
+     * Auto-creates COA if missing.
      */
     public function getAccountsPayableId(?int $branchId = null): ?int
     {
@@ -561,10 +623,30 @@ class BalanceService
             ->where(function ($q) {
                 $q->where('account_code', 'like', '2-02-010%')
                     ->orWhere('title', 'like', '%Payable%')
+                    ->orWhere('title', 'like', '%Vendor%')
                     ->orWhere('account_code', 'AP');
             })
             ->orderBy('id')
             ->first();
+
+        if (!$account) {
+            $head = \App\Models\AccountHead::firstOrCreate(
+                ['name' => 'Accounts Payable', 'branch_id' => $branchId],
+                ['code' => 'AP-001', 'type' => 'Liability']
+            );
+
+            $account = Account::create([
+                'branch_id'       => $branchId,
+                'head_id'         => $head->id,
+                'title'           => 'Accounts Payable (Creditors)',
+                'account_code'    => '2-02-010-00001',
+                'type'            => 'Credit',
+                'opening_balance' => 0,
+                'current_balance' => 0,
+                'status'          => 1,
+                'is_active'       => 1,
+            ]);
+        }
 
         return $account?->id;
     }

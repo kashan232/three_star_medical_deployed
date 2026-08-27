@@ -583,23 +583,34 @@
                             </div>
                         </div>
 
+                        {{-- Dual Party Banner if applicable --}}
+                        @if (!empty($isDual) && !empty($twinVendor))
+                            <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:10px; padding:10px 16px; margin-bottom:16px; color:#166534; font-size:.85rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <span style="font-size:1.15rem;">🤝</span>
+                                    <span><strong>Dual Party (Customer & Vendor):</strong> Combined statement showing all <strong>Sales</strong> and <strong>Purchases</strong> for <strong>{{ $twinVendor->name }}</strong> (Vendor Code: <code>{{ $twinVendor->vendor_code }}</code>).</span>
+                                </div>
+                                <span style="background:#dcfce7; color:#15803d; padding:3px 10px; border-radius:20px; font-weight:700; font-size:.75rem;">Merged Ledger Active</span>
+                            </div>
+                        @endif
+
                         {{-- KPI Row --}}
                         <div class="kpi-row">
                             <div class="kpi-box k-blue">
                                 <div class="kpi-lbl">Opening Balance</div>
                                 <div class="kpi-val">Rs {{ number_format(abs($ob), 2) }}</div>
-                                <div class="kpi-sub">{{ $ob >= 0 ? 'Receivable' : 'Credit/Advance' }}</div>
+                                <div class="kpi-sub">{{ $ob >= 0 ? 'Receivable (Dr)' : 'Payable/Advance (Cr)' }}</div>
                             </div>
                             <div class="kpi-box k-sky">
-                                <div class="kpi-lbl">Total Invoiced (Dr)</div>
+                                <div class="kpi-lbl">Total Debit (Dr)</div>
                                 <div class="kpi-val" style="color:var(--red)">Rs {{ number_format($totalDebit, 2) }}</div>
-                                <div class="kpi-sub">Charged to customer</div>
+                                <div class="kpi-sub">Sales & Payments Made</div>
                             </div>
                             <div class="kpi-box k-green">
-                                <div class="kpi-lbl">Total Received (Cr)</div>
+                                <div class="kpi-lbl">Total Credit (Cr)</div>
                                 <div class="kpi-val" style="color:var(--green)">Rs {{ number_format($totalCredit, 2) }}
                                 </div>
-                                <div class="kpi-sub">Payments collected</div>
+                                <div class="kpi-sub">Purchases & Receipts</div>
                             </div>
                             <div class="kpi-box k-amber">
                                 <div class="kpi-lbl">Transactions</div>
@@ -632,8 +643,8 @@
                                     <tbody>
                                         {{-- Opening row --}}
                                         @php
-                                            $obClass = $ob >= 0 ? 'bal-dr' : ($ob < 0 ? 'bal-cr' : 'bal-zero');
-                                            $obLabel = $ob > 0.01 ? 'Dr' : ($ob < -0.01 ? 'Cr' : '—');
+                                             $obClass = $ob > 0.01 ? 'bal-dr' : ($ob < -0.01 ? 'bal-cr' : 'bal-zero');
+                                             $obLabel = $ob > 0.01 ? 'Dr' : ($ob < -0.01 ? 'Cr' : '—');
                                         @endphp
                                         <tr class="row-opening">
                                             <td>—</td>
@@ -658,25 +669,27 @@
                                                 $cr = (float)($ledger->credit ?? 0);
                                                 $running += ($dr - $cr);
                                                 $bal = $running;
-                                                $bc = $bal > 0 ? 'bal-dr' : ($bal < 0 ? 'bal-cr' : 'bal-zero');
+                                                $bc = $bal > 0.01 ? 'bal-dr' : ($bal < -0.01 ? 'bal-cr' : 'bal-zero');
                                                 $bl = $bal > 0.01 ? 'Dr' : ($bal < -0.01 ? 'Cr' : '—');
 
                                                 // Extract ref / invoice from description if any
-                                                $descLower = strtolower($ledger->description);
-                                                preg_match('/#(inv|sr|pv|jv)-?\d+/i', $ledger->description, $matches);
-                                                $invoice = $matches[0] ?? '—';
+                                                $descLower = strtolower($ledger->description ?? '');
+                                                $invoice = $ledger->ref ?? '—';
+                                                if ($invoice === '—') {
+                                                    preg_match('/#(inv|sin|grn|pv|cpv|crv|sr|so|po|jv|rv|re|pr|prtn|rvid)[- ]?([A-Z0-9\-_]+)/i', $ledger->description ?? '', $matches);
+                                                    $invoice = $matches[0] ?? '—';
+                                                }
 
-                                                if (str_contains($descLower, 'return')) {
+                                                $txType = $ledger->type ?? '';
+                                                if ($txType === 'purchase' || str_contains($descLower, 'purchase') || str_contains($descLower, 'grn')) {
+                                                    $badgeHtml = '<span class="tx-type" style="background:#fee2e2;color:#991b1b;">📦 Purchase</span>';
+                                                } elseif ($txType === 'payment' || str_contains($descLower, 'vendor payment') || str_contains($descLower, 'cpv')) {
+                                                    $badgeHtml = '<span class="tx-type" style="background:#e0e7ff;color:#3730a3;">💳 Payment</span>';
+                                                } elseif ($txType === 'return' || str_contains($descLower, 'return') || str_contains($descLower, 'prtn') || str_contains($descLower, 'srn')) {
                                                     $badgeHtml = '<span class="tx-type tx-return">↩ Return</span>';
-                                                } elseif (
-                                                    str_contains($descLower, 'payment') ||
-                                                    str_contains($descLower, 'receipt')
-                                                ) {
+                                                } elseif ($txType === 'receipt' || str_contains($descLower, 'payment') || str_contains($descLower, 'receipt') || str_contains($descLower, 'crv')) {
                                                     $badgeHtml = '<span class="tx-type tx-receipt">✔ Receipt</span>';
-                                                } elseif (
-                                                    str_contains($descLower, 'sale') ||
-                                                    str_contains($descLower, 'invoice')
-                                                ) {
+                                                } elseif ($txType === 'sale' || str_contains($descLower, 'sale') || str_contains($descLower, 'invoice') || str_contains($descLower, 'sin')) {
                                                     $badgeHtml = '<span class="tx-type tx-sale">💰 Sale</span>';
                                                 } else {
                                                     $badgeHtml = '<span class="tx-type tx-journal">📖 Journal</span>';

@@ -279,7 +279,7 @@ class VendorController extends Controller
     }
 
     /**
-     * Show vendor ledger (journal-based)
+     * Show vendor ledger (journal/dual-party combined)
      */
     public function ledger($vendorId)
     {
@@ -288,11 +288,21 @@ class VendorController extends Controller
         // Get date range from request or default to current month
         $startDate = request('start_date', now()->startOfMonth()->format('Y-m-d'));
         $endDate = request('end_date', now()->endOfMonth()->format('Y-m-d'));
+        $branchId = $this->getBranchId();
 
-        $balanceService = app(\App\Services\BalanceService::class);
-        $ledgerData = $balanceService->getVendorLedger($vendorId, $startDate, $endDate);
+        $dualService = app(\App\Services\DualPartyLedgerService::class);
+        $ledgerData = $dualService->getVendorLedgerData($vendorId, $startDate, $endDate, $branchId);
 
-        return view('admin_panel.vendors.ledger', $ledgerData);
+        return view('admin_panel.vendors.ledger', [
+            'vendor'          => $ledgerData['party'],
+            'twin_party'      => $ledgerData['twin_party'],
+            'is_dual'         => $ledgerData['is_dual'],
+            'opening_balance' => $ledgerData['opening_balance'],
+            'closing_balance' => $ledgerData['closing_balance'],
+            'total_debit'     => $ledgerData['total_debit'],
+            'total_credit'    => $ledgerData['total_credit'],
+            'transactions'    => $ledgerData['transactions'],
+        ]);
     }
 
     // =========================================================================

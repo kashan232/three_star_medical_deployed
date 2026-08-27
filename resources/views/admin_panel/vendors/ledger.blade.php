@@ -49,29 +49,40 @@
                     </div>
                 </div>
 
+                <!-- Dual Party Banner if applicable -->
+                @if (!empty($is_dual) && !empty($twin_party))
+                    <div style="background:#f0fdf4; border:1px solid #86efac; border-radius:10px; padding:12px 18px; margin-bottom:20px; color:#166534; font-size:.87rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-size:1.25rem;">🤝</span>
+                            <span><strong>Dual Party (Customer & Vendor):</strong> Combined statement showing all <strong>Purchases</strong> from Vendor and <strong>Sales</strong> to Customer <strong>{{ $twin_party->customer_name ?? $twin_party->name }}</strong> (Customer Code: <code>{{ $twin_party->customer_id ?? $twin_party->vendor_code }}</code>).</span>
+                        </div>
+                        <span style="background:#dcfce7; color:#15803d; padding:4px 12px; border-radius:20px; font-weight:700; font-size:.78rem;">Merged Ledger Active</span>
+                    </div>
+                @endif
+
                 <!-- Summary Cards -->
                 <div class="row mb-4 g-3">
                     <div class="col-md-4">
                         <div class="card border-0 shadow-sm rounded-4 h-100 bg-light">
                             <div class="card-body p-4">
                                 <h6 class="text-secondary text-uppercase small fw-bold mb-2">Opening Balance</h6>
-                                <h3 class="fw-bold text-dark mb-0">Rs. {{ number_format($opening_balance, 2) }}</h3>
-                                <p class="small text-muted mb-0 mt-1">As of
-                                    {{ \Carbon\Carbon::parse(request('start_date', now()->startOfMonth()))->format('d/m/Y') }}
+                                <h3 class="fw-bold text-dark mb-0">Rs. {{ number_format(abs($opening_balance), 2) }}</h3>
+                                <p class="small text-muted mb-0 mt-1">
+                                    {{ $opening_balance > 0.01 ? 'Receivable (Dr)' : ($opening_balance < -0.01 ? 'Payable (Cr)' : 'Zero Balance') }}
                                 </p>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-4">
                         <div
-                            class="card border-0 shadow-sm rounded-4 h-100 {{ $closing_balance > 0 ? 'bg-danger text-white' : ($closing_balance < 0 ? 'bg-success text-white' : 'bg-primary text-white') }}">
+                            class="card border-0 shadow-sm rounded-4 h-100 {{ $closing_balance > 0.01 ? 'bg-danger text-white' : ($closing_balance < -0.01 ? 'bg-success text-white' : 'bg-primary text-white') }}">
                             <div class="card-body p-4">
-                                <h6 class="text-white-50 text-uppercase small fw-bold mb-2">Closing Balance</h6>
+                                <h6 class="text-white-50 text-uppercase small fw-bold mb-2">Net Closing Balance</h6>
                                 <h3 class="fw-bold mb-0">
                                     Rs. {{ number_format(abs($closing_balance), 2) }}
                                 </h3>
                                 <p class="small text-white-50 mb-0 mt-1">
-                                    {{ $closing_balance > 0 ? 'To be Paid (Payable)' : ($closing_balance < 0 ? 'Advance (Receivable)' : 'Settled') }}
+                                    {{ $closing_balance > 0.01 ? 'Party Owes Us (Receivable / Dr)' : ($closing_balance < -0.01 ? 'We Owe Party (Payable / Cr)' : 'Fully Settled (0.00)') }}
                                 </p>
                             </div>
                         </div>
@@ -80,7 +91,7 @@
                         <div class="card border-0 shadow-sm rounded-4 h-100 bg-white">
                             <div class="card-body p-4">
                                 <h6 class="text-secondary text-uppercase small fw-bold mb-2">Total Transactions</h6>
-                                <h3 class="fw-bold text-dark mb-0">{{ $transactions->count() }}</h3>
+                                <h3 class="fw-bold text-dark mb-0">{{ is_countable($transactions) ? count($transactions) : $transactions->count() }}</h3>
                                 <p class="small text-muted mb-0 mt-1">In selected period</p>
                             </div>
                         </div>
@@ -101,10 +112,10 @@
                                         </th>
                                         <th class="py-3 text-secondary fw-semibold text-uppercase small text-end">Credit
                                             (Cr)</th>
-                                        <th class="py-3 text-secondary fw-semibold text-uppercase small text-end">Balance
+                                        <th class="py-3 text-secondary fw-semibold text-uppercase small text-end">Running Balance
                                         </th>
                                         <th class="py-3 pe-4 text-secondary fw-semibold text-uppercase small text-center">
-                                            Source</th>
+                                            Type</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -117,41 +128,54 @@
                                         </tr>
                                     @else
                                         @foreach ($transactions as $txn)
+                                            @php
+                                                $tDate = is_array($txn) ? ($txn['date'] ?? $txn['created_at'] ?? '') : ($txn->created_at ?? $txn->date ?? '');
+                                                $tDesc = is_array($txn) ? ($txn['description'] ?? '') : ($txn->description ?? '');
+                                                $tDr   = (float)(is_array($txn) ? ($txn['debit'] ?? 0) : ($txn->debit ?? 0));
+                                                $tCr   = (float)(is_array($txn) ? ($txn['credit'] ?? 0) : ($txn->credit ?? 0));
+                                                $tBal  = (float)(is_array($txn) ? ($txn['balance'] ?? $txn['running_balance'] ?? 0) : ($txn->running_balance ?? $txn->balance ?? $txn->closing_balance ?? 0));
+                                                $tType = is_array($txn) ? ($txn['type'] ?? '') : ($txn->type ?? '');
+                                                $tSource = is_array($txn) ? ($txn['source'] ?? $txn['source_type'] ?? '') : ($txn->source ?? $txn->source_type ?? '');
+
+                                                $descLower = strtolower($tDesc);
+                                                $isDr = $tBal > 0.01;
+                                                $isCr = $tBal < -0.01;
+                                            @endphp
                                             <tr class="border-light-subtle">
                                                 <td class="ps-4 fw-medium text-dark">
-                                                    {{ \Carbon\Carbon::parse($txn['date'])->format('d/m/Y') }}</td>
-                                                <td class="text-muted small">{{ $txn['description'] }}</td>
+                                                    {{ \Carbon\Carbon::parse($tDate)->format('d/m/Y') }}</td>
+                                                <td class="text-muted small">{{ $tDesc }}</td>
                                                 <td class="text-end font-monospace text-dark">
-                                                    {{ $txn['debit'] > 0 ? number_format($txn['debit'], 2) : '-' }}
+                                                    {{ $tDr > 0 ? number_format($tDr, 2) : '-' }}
                                                 </td>
                                                 <td class="text-end font-monospace text-dark">
-                                                    {{ $txn['credit'] > 0 ? number_format($txn['credit'], 2) : '-' }}
+                                                    {{ $tCr > 0 ? number_format($tCr, 2) : '-' }}
                                                 </td>
                                                 <td
-                                                    class="text-end fw-bold font-monospace {{ $txn['balance'] > 0 ? 'text-danger' : 'text-success' }}">
-                                                    {{ number_format(abs($txn['balance']), 2) }}
+                                                    class="text-end fw-bold font-monospace {{ $isDr ? 'text-danger' : ($isCr ? 'text-success' : 'text-muted') }}">
+                                                    {{ number_format(abs($tBal), 2) }}
                                                     <small class="fw-normal text-muted ms-1"
-                                                        style="font-size: 0.7em;">{{ $txn['balance'] >= 0 ? 'Cr' : 'Dr' }}</small>
+                                                        style="font-size: 0.7em;">{{ $isDr ? 'Dr' : ($isCr ? 'Cr' : '—') }}</small>
                                                 </td>
                                                 <td class="pe-4 text-center">
-                                                    @if ($txn['source_type'] === 'App\\Models\\Purchase')
+                                                    @if ($tType === 'purchase' || str_contains($descLower, 'purchase') || str_contains($descLower, 'grn'))
                                                         <span
-                                                            class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3">Purchase</span>
-                                                    @elseif($txn['source_type'] === 'App\\Models\\VoucherMaster')
-                                                        @if ($txn['debit'] > 0)
-                                                            <span
-                                                                class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3">Payment</span>
-                                                        @else
-                                                            <span
-                                                                class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3">Receipt</span>
-                                                        @endif
-                                                    @elseif($txn['source_type'] === 'App\\Models\\VendorPayment')
+                                                            class="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-3">📦 Purchase</span>
+                                                    @elseif($tType === 'sale' || str_contains($descLower, 'sale') || str_contains($descLower, 'sin') || str_contains($descLower, 'inv'))
                                                         <span
-                                                            class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-3">Vendor
-                                                            Payment</span>
+                                                            class="badge bg-primary-subtle text-primary border border-primary-subtle rounded-pill px-3">💰 Sale</span>
+                                                    @elseif($tType === 'payment' || str_contains($descLower, 'payment') || str_contains($descLower, 'cpv'))
+                                                        <span
+                                                            class="badge bg-info-subtle text-info border border-info-subtle rounded-pill px-3">💳 Payment</span>
+                                                    @elseif($tType === 'receipt' || str_contains($descLower, 'receipt') || str_contains($descLower, 'crv'))
+                                                        <span
+                                                            class="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3">✔ Receipt</span>
+                                                    @elseif($tType === 'return' || str_contains($descLower, 'return') || str_contains($descLower, 'prtn') || str_contains($descLower, 'srn'))
+                                                        <span
+                                                            class="badge bg-warning-subtle text-warning border border-warning-subtle rounded-pill px-3">↩ Return</span>
                                                     @else
                                                         <span
-                                                            class="badge bg-light text-secondary border rounded-pill px-3">{{ class_basename($txn['source_type']) }}</span>
+                                                            class="badge bg-light text-secondary border rounded-pill px-3">📖 Journal</span>
                                                     @endif
                                                 </td>
                                             </tr>
@@ -161,12 +185,12 @@
                                 <tfoot class="bg-light border-top">
                                     <tr>
                                         <td colspan="4" class="text-end py-3 fw-bold text-dark text-uppercase small">
-                                            Closing Balance:</td>
+                                            Net Closing Balance:</td>
                                         <td
-                                            class="text-end py-3 fw-bold font-monospace {{ $closing_balance > 0 ? 'text-danger' : 'text-success' }}">
+                                            class="text-end py-3 fw-bold font-monospace {{ $closing_balance > 0.01 ? 'text-danger' : ($closing_balance < -0.01 ? 'text-success' : 'text-muted') }}">
                                             Rs. {{ number_format(abs($closing_balance), 2) }}
                                             <small
-                                                class="fw-normal text-muted ms-1">{{ $closing_balance >= 0 ? 'Cr' : 'Dr' }}</small>
+                                                class="fw-normal text-muted ms-1">{{ $closing_balance > 0.01 ? 'Dr (Receivable)' : ($closing_balance < -0.01 ? 'Cr (Payable)' : 'Settled') }}</small>
                                         </td>
                                         <td></td>
                                     </tr>

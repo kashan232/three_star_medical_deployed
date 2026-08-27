@@ -290,7 +290,7 @@ class ProductBatchController extends Controller
                     ->where('product_id', $productId)
                     ->where('warehouse_id', $warehouseId)
                     ->where('branch_id', $branchId)
-                    ->orderBy('exp_date', 'asc')
+                    ->orderByRaw('CASE WHEN exp_date IS NULL THEN 1 ELSE 0 END, exp_date ASC, id ASC')
                     ->lockForUpdate()
                     ->get();
 
@@ -300,7 +300,7 @@ class ProductBatchController extends Controller
                         ->where('product_id', $productId)
                         ->where('branch_id', $branchId)
                         ->where('warehouse_id', '!=', $warehouseId)
-                        ->orderBy('exp_date', 'asc')
+                        ->orderByRaw('CASE WHEN exp_date IS NULL THEN 1 ELSE 0 END, exp_date ASC, id ASC')
                         ->lockForUpdate()
                         ->get();
                     $batches = $batches->concat($otherBatches);
@@ -318,6 +318,57 @@ class ProductBatchController extends Controller
 
                     $deductions[] = ['batch_id' => $batch->id, 'qty' => $deductQty, 'warehouse_id' => $batch->warehouse_id];
                     $remaining   -= $deductQty;
+                }
+
+                if ($remaining > 0) {
+                    // Check if there is live unbatched stock in warehouse_stocks for this product
+                    $whStocks = DB::table('warehouse_stocks')
+                        ->where('product_id', $productId)
+                        ->where('branch_id', $branchId)
+                        ->where('total_pieces', '>', 0)
+                        ->orderByRaw("CASE WHEN warehouse_id = {$warehouseId} THEN 0 ELSE 1 END")
+                        ->get();
+
+                    foreach ($whStocks as $ws) {
+                        if ($remaining <= 0) break;
+
+                        $trackedInBatches = (float) ProductBatch::where('product_id', $productId)
+                            ->where('warehouse_id', $ws->warehouse_id)
+                            ->where('branch_id', $branchId)
+                            ->where('status', 'active')
+                            ->sum('qty_remaining');
+
+                        $unbatchedInWarehouse = max(0, (float)$ws->total_pieces - $trackedInBatches);
+
+                        if ($unbatchedInWarehouse > 0) {
+                            $autoBatch = ProductBatch::create([
+                                'product_id'       => $productId,
+                                'warehouse_id'     => $ws->warehouse_id,
+                                'branch_id'        => $branchId,
+                                'batch_number'     => 'NO-BATCH',
+                                'mfg_date'         => null,
+                                'exp_date'         => null,
+                                'qty_received'     => $unbatchedInWarehouse,
+                                'qty_remaining'    => $unbatchedInWarehouse,
+                                'source_type'      => 'opening_stock',
+                                'status'           => 'active',
+                            ]);
+
+                            $deductQty = min((float)$autoBatch->qty_remaining, $remaining);
+                            $autoBatch->qty_remaining -= $deductQty;
+                            if ($autoBatch->qty_remaining <= 0) {
+                                $autoBatch->status = 'consumed';
+                            }
+                            $autoBatch->save();
+
+                            $deductions[] = [
+                                'batch_id'     => $autoBatch->id,
+                                'qty'          => $deductQty,
+                                'warehouse_id' => $ws->warehouse_id,
+                            ];
+                            $remaining -= $deductQty;
+                        }
+                    }
                 }
 
                 if ($remaining > 0) {

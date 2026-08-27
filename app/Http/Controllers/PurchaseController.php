@@ -300,17 +300,22 @@ class PurchaseController extends Controller
                 );
 
                 // Create or reactivate a held batch
-                if (! empty($item->batch_no)) {
+                $rawBatch = trim((string) ($item->batch_no ?? ''));
+                $hasBatch = !empty($rawBatch) && !in_array(strtoupper($rawBatch), ['NO-BATCH', 'NO BATCH', 'N/A', 'NONE']);
+                $hasExp   = !empty($item->exp_date);
+
+                if ($hasBatch || $hasExp) {
+                    $batchNumber = $hasBatch ? $rawBatch : 'NO-BATCH';
                     \App\Models\ProductBatch::updateOrCreate(
                         [
                             'product_id'   => $item->product_id,
-                            'batch_number' => $item->batch_no,
+                            'batch_number' => $batchNumber,
                             'branch_id'    => $branchId,
                             'warehouse_id' => $item->warehouse_id ?: $warehouseId,
                         ],
                         [
-                            'mfg_date'         => $item->mfg_date,
-                            'exp_date'         => $item->exp_date,
+                            'mfg_date'         => !empty($item->mfg_date) ? $item->mfg_date : null,
+                            'exp_date'         => !empty($item->exp_date) ? $item->exp_date : null,
                             'qty_received'     => $stockQty,
                             'qty_remaining'    => $stockQty,
                             'status'           => 'active',
@@ -703,9 +708,9 @@ class PurchaseController extends Controller
                     'loose_qty' => $looseQtys[$i] ?? 0,
                     'length' => (string) ($lengths[$i] ?? ''),
                     'width' => (string) ($widths[$i] ?? ''),
-                    'batch_no' => $lotNos[$i] ?? null,
-                    'mfg_date' => $mfgDates[$i] ?? null,
-                    'exp_date' => $expDates[$i] ?? null,
+                    'batch_no' => !empty(trim((string)($lotNos[$i] ?? ''))) ? trim((string)$lotNos[$i]) : null,
+                    'mfg_date' => !empty($mfgDates[$i]) ? $mfgDates[$i] : null,
+                    'exp_date' => !empty($expDates[$i]) ? $expDates[$i] : null,
                     'gst_percent' => (float) ($gstPercents[$i] ?? 0),
                     'gst_amount' => (float) ($gstAmounts[$i] ?? 0),
                     'it_percent' => (float) ($itPercents[$i] ?? 0),

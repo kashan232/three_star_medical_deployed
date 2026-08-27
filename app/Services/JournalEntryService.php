@@ -15,8 +15,13 @@ class JournalEntryService
      * @param  string  $date  (Y-m-d)
      * @param  Model|null  $party  (Optional Customer/Vendor model)
      */
-    public function recordEntry(Model $source, int $accountId, float $debit, float $credit, ?string $description, string $date, ?Model $party = null)
+    public function recordEntry(Model $source, ?int $accountId, float $debit, float $credit, ?string $description, string $date, ?Model $party = null)
     {
+        if (empty($accountId)) {
+            \Log::warning("JournalEntryService: Skipping entry because accountId is empty for source " . get_class($source) . " #{$source->id}");
+            return null;
+        }
+
         // 1. Create Journal Entry
         $data = [
             'source_type' => get_class($source),

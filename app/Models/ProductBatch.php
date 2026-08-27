@@ -45,7 +45,10 @@ class ProductBatch extends Model
     {
         return $query->where('status', 'active')
             ->where('qty_remaining', '>', 0)
-            ->where('exp_date', '>', now()->toDateString());
+            ->where(function ($q) {
+                $q->whereNull('exp_date')
+                  ->orWhere('exp_date', '>', now()->toDateString());
+            });
     }
 
     /** Batches expiring within $days days */
@@ -53,13 +56,15 @@ class ProductBatch extends Model
     {
         return $query->where('status', 'active')
             ->where('qty_remaining', '>', 0)
+            ->whereNotNull('exp_date')
             ->whereBetween('exp_date', [now()->toDateString(), now()->addDays($days)->toDateString()]);
     }
 
     /** Already expired batches with remaining stock */
     public function scopeExpired($query)
     {
-        return $query->where('exp_date', '<', now()->toDateString())
+        return $query->whereNotNull('exp_date')
+            ->where('exp_date', '<', now()->toDateString())
             ->where('qty_remaining', '>', 0);
     }
 
@@ -67,12 +72,12 @@ class ProductBatch extends Model
 
     public function getIsNonExpiringAttribute(): bool
     {
-        return $this->exp_date && Carbon::parse($this->exp_date)->year >= 2090;
+        return empty($this->exp_date) || (Carbon::parse($this->exp_date)->year >= 2090);
     }
 
     public function getDaysToExpiryAttribute(): int
     {
-        if ($this->is_non_expiring) {
+        if (empty($this->exp_date) || $this->is_non_expiring) {
             return 99999;
         }
         return (int) now()->startOfDay()->diffInDays(Carbon::parse($this->exp_date)->startOfDay(), false);
@@ -80,7 +85,7 @@ class ProductBatch extends Model
 
     public function getExpiryStatusAttribute(): string
     {
-        if ($this->is_non_expiring) {
+        if (empty($this->exp_date) || $this->is_non_expiring) {
             return 'no_expiry';
         }
         $days = $this->days_to_expiry;
