@@ -2268,6 +2268,7 @@ class VoucherController extends Controller
             ->findOrFail($id);
 
         $locationName = $voucher->location ?? ($voucher->branch->name ?? 'HEAD OFFICE');
+        $vType = strtolower($voucher->voucher_type ?? 'jv');
 
         $rows = [];
         foreach ($voucher->details as $d) {
@@ -2275,8 +2276,21 @@ class VoucherController extends Controller
             $code = $acc->account_code ?? '-';
             $title = $acc->title ?? '-';
 
-            // Check if this line is linked to a line-level Party (Customer / Vendor) or header Party
-            $lineParty = $d->party ?? $voucher->party;
+            // 1. Check if this detail line has an explicit line-level party
+            $lineParty = $d->party;
+
+            // 2. If line has no direct party, determine if it should inherit from the header party
+            if (!$lineParty && $voucher->party) {
+                // In CRV / BRV / Receipt: Credit side is the Customer/Party paying
+                if (in_array($vType, ['crv', 'brv', 'receipt']) && (float)$d->credit > 0) {
+                    $lineParty = $voucher->party;
+                }
+                // In CPV / BPV / Payment / Expense: Debit side is the Vendor/Party receiving payment
+                elseif (in_array($vType, ['cpv', 'bpv', 'payment', 'expense']) && (float)$d->debit > 0) {
+                    $lineParty = $voucher->party;
+                }
+            }
+
             if ($lineParty) {
                 if ($lineParty instanceof Customer) {
                     $code = '1-02-051-' . str_pad($lineParty->id, 5, '0', STR_PAD_LEFT);
@@ -2284,6 +2298,13 @@ class VoucherController extends Controller
                 } elseif ($lineParty instanceof Vendor) {
                     $code = '2-02-010-' . str_pad($lineParty->id, 5, '0', STR_PAD_LEFT);
                     $title = $lineParty->name;
+                }
+            } else {
+                // Standard COA formatting for cash/bank accounts
+                if ($code === 'cash-001-00001') {
+                    $code = '1-02-040-00001';
+                } elseif ($code === 'bank-001-00001') {
+                    $code = '1-02-052-00001';
                 }
             }
 
