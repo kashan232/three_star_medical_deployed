@@ -397,6 +397,8 @@ Route::middleware('auth')->group(function () {
     Route::post('vouchers/store', [VoucherController::class, 'store'])->name('vouchers.store');
     Route::get('/view_all', [AccountsHeadController::class, 'index'])->name('view_all');
     Route::get('/accounts/{id}/ledger', [AccountsHeadController::class, 'showLedger'])->name('accounts.ledger');
+    Route::get('/accounts/{id}/ledger/pdf', [AccountsHeadController::class, 'exportLedgerPdf'])->name('accounts.ledger.pdf');
+    Route::get('/accounts/{id}/ledger/excel', [AccountsHeadController::class, 'exportLedgerExcel'])->name('accounts.ledger.excel');
 
     // Vouchers (Receipts, Payments, Expenses)
     Route::get('/all_recepit_vochers', [VoucherController::class, 'all_recepit_vochers'])->name('all_recepit_vochers');

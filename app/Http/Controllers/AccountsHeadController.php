@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Http\Traits\BranchScoped;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Shuchkin\SimpleXLSXGen;
 
 class AccountsHeadController extends Controller
 {
@@ -195,24 +197,284 @@ class AccountsHeadController extends Controller
         return back()->with('success', "Account '{$account->title}' ({$account->account_code}) created successfully!");
     }
 
-    public function showLedger($id, Request $request)
+    /**
+     * Shared calculation method for Account Ledger (Web, PDF, Excel)
+     */
+    protected function prepareLedgerData($id, Request $request)
     {
-        $account = \App\Models\Account::findOrFail($id);
+        $account = \App\Models\Account::with(['head', 'branch'])->findOrFail($id);
 
-        // Fetch Journal Entries for this account
+        $fromDate = $request->input('from_date');
+        $toDate = $request->input('to_date');
+
+        // 1. Base opening balance calculation
+        $baseOpening = (float)($account->opening_balance ?? 0);
+        $openingBalance = $baseOpening;
+
+        // If from_date is set, calculate prior transactions
+        if ($fromDate) {
+            $priorTotals = \App\Models\JournalEntry::where('account_id', $id)
+                ->where('entry_date', '<', $fromDate)
+                ->selectRaw('SUM(debit) as total_debit, SUM(credit) as total_credit')
+                ->first();
+
+            $priorDebit = (float)($priorTotals->total_debit ?? 0);
+            $priorCredit = (float)($priorTotals->total_credit ?? 0);
+
+            if ($account->type === 'Credit') {
+                $openingBalance = $baseOpening + $priorCredit - $priorDebit;
+            } else {
+                $openingBalance = $baseOpening + $priorDebit - $priorCredit;
+            }
+        }
+
+        // 2. Fetch Journal Entries for this account
         $query = \App\Models\JournalEntry::where('account_id', $id)
-            ->with('party') // Load party if polymorphic
+            ->with(['party', 'source'])
             ->orderBy('entry_date', 'asc')
             ->orderBy('id', 'asc');
 
-        // Optional: Filter by Date Range
-        if ($request->has('from_date') && $request->has('to_date')) {
-            $query->whereBetween('entry_date', [$request->from_date, $request->to_date]);
+        if ($fromDate && $toDate) {
+            $query->whereBetween('entry_date', [$fromDate, $toDate]);
+        } elseif ($fromDate) {
+            $query->where('entry_date', '>=', $fromDate);
+        } elseif ($toDate) {
+            $query->where('entry_date', '<=', $toDate);
         }
 
         $entries = $query->get();
 
-        return view('admin_panel.accounts.ledger', compact('account', 'entries'));
+        // 3. Process entries with running balance
+        $runningBalance = $openingBalance;
+        $totalDebit = 0;
+        $totalCredit = 0;
+
+        $processedEntries = [];
+        foreach ($entries as $entry) {
+            $debit = (float)($entry->debit ?? 0);
+            $credit = (float)($entry->credit ?? 0);
+            $totalDebit += $debit;
+            $totalCredit += $credit;
+
+            if ($account->type === 'Credit') {
+                $runningBalance = $runningBalance + $credit - $debit;
+                $balanceType = ($runningBalance >= 0) ? 'Cr' : 'Dr';
+            } else {
+                $runningBalance = $runningBalance + $debit - $credit;
+                $balanceType = ($runningBalance >= 0) ? 'Dr' : 'Cr';
+            }
+
+            // Extract voucher/invoice number
+            $voucherNo = '-';
+            if ($entry->source) {
+                if (!empty($entry->source->voucher_no)) {
+                    $voucherNo = $entry->source->voucher_no;
+                } elseif (!empty($entry->source->invoice_no)) {
+                    $voucherNo = $entry->source->invoice_no;
+                } elseif (!empty($entry->source->invoice_number)) {
+                    $voucherNo = $entry->source->invoice_number;
+                } elseif (!empty($entry->source->bill_no)) {
+                    $voucherNo = $entry->source->bill_no;
+                } elseif (!empty($entry->source->reference_no)) {
+                    $voucherNo = $entry->source->reference_no;
+                }
+            }
+
+            // Extract party name
+            $partyName = '';
+            if ($entry->party) {
+                $partyName = $entry->party->name 
+                    ?? $entry->party->customer_name 
+                    ?? $entry->party->vendor_name 
+                    ?? $entry->party->title 
+                    ?? $entry->party->business_name 
+                    ?? '';
+            }
+
+            $entry->computed_voucher_no = $voucherNo;
+            $entry->computed_party_name = $partyName;
+            $entry->computed_running_balance = $runningBalance;
+            $entry->computed_balance_type = $balanceType;
+
+            $processedEntries[] = $entry;
+        }
+
+        $closingBalance = $runningBalance;
+        $closingBalanceType = ($account->type === 'Credit') 
+            ? (($closingBalance >= 0) ? 'Cr' : 'Dr') 
+            : (($closingBalance >= 0) ? 'Dr' : 'Cr');
+
+        $openingBalanceType = ($account->type === 'Credit')
+            ? (($openingBalance >= 0) ? 'Cr' : 'Dr')
+            : (($openingBalance >= 0) ? 'Dr' : 'Cr');
+
+        return [
+            'account'             => $account,
+            'entries'             => $processedEntries,
+            'raw_entries'         => $entries,
+            'openingBalance'      => $openingBalance,
+            'openingBalanceType'  => $openingBalanceType,
+            'runningBalance'      => $runningBalance,
+            'closingBalance'      => $closingBalance,
+            'closingBalanceType'  => $closingBalanceType,
+            'totalDebit'          => $totalDebit,
+            'totalCredit'         => $totalCredit,
+            'fromDate'            => $fromDate,
+            'toDate'              => $toDate,
+        ];
+    }
+
+    public function showLedger($id, Request $request)
+    {
+        $data = $this->prepareLedgerData($id, $request);
+        return view('admin_panel.accounts.ledger', $data);
+    }
+
+    public function exportLedgerPdf($id, Request $request)
+    {
+        $data = $this->prepareLedgerData($id, $request);
+        $account = $data['account'];
+
+        $cleanCode = preg_replace('/[^A-Za-z0-9_-]/', '_', $account->account_code ?: $account->title);
+        $filename = 'General_Ledger_' . $cleanCode . '_' . now()->format('Y-m-d') . '.pdf';
+
+        $pdf = Pdf::loadView('admin_panel.accounts.ledger_pdf', $data)
+            ->setPaper('A4', 'portrait');
+
+        return $pdf->download($filename);
+    }
+
+    public function exportLedgerExcel($id, Request $request)
+    {
+        $data = $this->prepareLedgerData($id, $request);
+        $account = $data['account'];
+
+        $periodText = ($data['fromDate'] ? date('d-M-Y', strtotime($data['fromDate'])) : 'Beginning') . ' to ' . ($data['toDate'] ? date('d-M-Y', strtotime($data['toDate'])) : date('d-M-Y'));
+        $currentBalFormatted = number_format(abs($account->calculated_balance ?? $account->current_balance), 2);
+        $currentBalType = ($account->type === 'Credit' ? (($account->calculated_balance ?? $account->current_balance) >= 0 ? 'Cr' : 'Dr') : (($account->calculated_balance ?? $account->current_balance) >= 0 ? 'Dr' : 'Cr'));
+
+        $excelData = [
+            // Company Header Banner
+            [
+                '<style font-size="14" color="#ffffff" bgcolor="#1e3a8a" height="28"><center><b>THREE STARS MEDICAL SUPPLIES</b></center></style>',
+                '', '', '', '', '', '', ''
+            ],
+            // Statement Title Banner
+            [
+                '<style font-size="11" color="#ffffff" bgcolor="#2563eb" height="22"><center><b>GENERAL LEDGER STATEMENT</b></center></style>',
+                '', '', '', '', '', '', ''
+            ],
+            [''],
+            // Metadata Row 1
+            [
+                '<style bgcolor="#f1f5f9" border="thin"><left><b>Account Title:</b></left></style>',
+                '<style bgcolor="#ffffff" border="thin"><left><b>' . htmlspecialchars($account->title) . '</b></left></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><left><b>Account Code:</b></left></style>',
+                '<style bgcolor="#ffffff" border="thin"><center><b>' . htmlspecialchars($account->account_code) . '</b></center></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><left><b>Current Balance:</b></left></style>',
+                '<style bgcolor="#ffffff" border="thin" color="#1e40af"><right><b>' . $currentBalFormatted . ' ' . $currentBalType . '</b></right></style>',
+                '', ''
+            ],
+            // Metadata Row 2
+            [
+                '<style bgcolor="#f1f5f9" border="thin"><left><b>Category / Head:</b></left></style>',
+                '<style bgcolor="#ffffff" border="thin"><left>' . htmlspecialchars($account->head->name ?? 'N/A') . '</left></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><left><b>Account Type:</b></left></style>',
+                '<style bgcolor="#ffffff" border="thin"><center>' . htmlspecialchars($account->type) . '</center></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><left><b>Statement Period:</b></left></style>',
+                '<style bgcolor="#ffffff" border="thin"><left>' . $periodText . '</left></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><left><b>Generated:</b></left></style>',
+                '<style bgcolor="#ffffff" border="thin"><center>' . now()->format('d-M-Y h:i A') . '</center></style>'
+            ],
+            [''],
+            // Column Headers
+            [
+                '<style font-size="10" color="#ffffff" bgcolor="#1e293b" border="thin" height="24"><center><b>Date</b></center></style>',
+                '<style font-size="10" color="#ffffff" bgcolor="#1e293b" border="thin"><center><b>Voucher / Ref No</b></center></style>',
+                '<style font-size="10" color="#ffffff" bgcolor="#1e293b" border="thin"><left><b>Description / Narration</b></left></style>',
+                '<style font-size="10" color="#ffffff" bgcolor="#1e293b" border="thin"><left><b>Party</b></left></style>',
+                '<style font-size="10" color="#ffffff" bgcolor="#1e293b" border="thin"><right><b>Debit (PKR)</b></right></style>',
+                '<style font-size="10" color="#ffffff" bgcolor="#1e293b" border="thin"><right><b>Credit (PKR)</b></right></style>',
+                '<style font-size="10" color="#ffffff" bgcolor="#1e293b" border="thin"><right><b>Balance (PKR)</b></right></style>',
+                '<style font-size="10" color="#ffffff" bgcolor="#1e293b" border="thin"><center><b>Type</b></center></style>'
+            ],
+            // Opening Balance Row
+            [
+                '<style bgcolor="#f1f5f9" border="thin"><center>-</center></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><center>-</center></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><left><b>Opening Balance</b></left></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><center>-</center></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><right>-</right></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><right>-</right></style>',
+                '<style bgcolor="#f1f5f9" border="thin" nf="#,##0.00"><right><b>' . (float)abs($data['openingBalance']) . '</b></right></style>',
+                '<style bgcolor="#f1f5f9" border="thin"><center><b>' . $data['openingBalanceType'] . '</b></center></style>'
+            ]
+        ];
+
+        // Transactions
+        $rowIndex = 0;
+        foreach ($data['entries'] as $entry) {
+            $rowIndex++;
+            $rowBg = ($rowIndex % 2 === 0) ? '#f8fafc' : '#ffffff';
+            $debit = (float)($entry->debit ?? 0);
+            $credit = (float)($entry->credit ?? 0);
+            $bal = (float)abs($entry->computed_running_balance);
+
+            $debitCell = ($debit > 0)
+                ? '<style bgcolor="' . $rowBg . '" border="thin" color="#16a34a" nf="#,##0.00"><right>' . $debit . '</right></style>'
+                : '<style bgcolor="' . $rowBg . '" border="thin"><right>-</right></style>';
+
+            $creditCell = ($credit > 0)
+                ? '<style bgcolor="' . $rowBg . '" border="thin" color="#dc2626" nf="#,##0.00"><right>' . $credit . '</right></style>'
+                : '<style bgcolor="' . $rowBg . '" border="thin"><right>-</right></style>';
+
+            $excelData[] = [
+                '<style bgcolor="' . $rowBg . '" border="thin"><center>' . ($entry->entry_date ? $entry->entry_date->format('d-M-Y') : '-') . '</center></style>',
+                '<style bgcolor="' . $rowBg . '" border="thin"><center><b>' . htmlspecialchars($entry->computed_voucher_no) . '</b></center></style>',
+                '<style bgcolor="' . $rowBg . '" border="thin"><left>' . htmlspecialchars($entry->description ?? '-') . '</left></style>',
+                '<style bgcolor="' . $rowBg . '" border="thin" color="#2563eb"><left>' . htmlspecialchars($entry->computed_party_name ?: '-') . '</left></style>',
+                $debitCell,
+                $creditCell,
+                '<style bgcolor="' . $rowBg . '" border="thin" nf="#,##0.00"><right><b>' . $bal . '</b></right></style>',
+                '<style bgcolor="' . $rowBg . '" border="thin"><center><b>' . $entry->computed_balance_type . '</b></center></style>',
+            ];
+        }
+
+        // Totals Row
+        $excelData[] = [
+            '<style bgcolor="#e2e8f0" border="medium" height="22"><center><b>TOTAL PERIOD</b></center></style>',
+            '<style bgcolor="#e2e8f0" border="medium"></style>',
+            '<style bgcolor="#e2e8f0" border="medium"></style>',
+            '<style bgcolor="#e2e8f0" border="medium"></style>',
+            '<style bgcolor="#e2e8f0" border="medium" color="#16a34a" nf="#,##0.00"><right><b>' . (float)$data['totalDebit'] . '</b></right></style>',
+            '<style bgcolor="#e2e8f0" border="medium" color="#dc2626" nf="#,##0.00"><right><b>' . (float)$data['totalCredit'] . '</b></right></style>',
+            '<style bgcolor="#e2e8f0" border="medium" color="#0f172a" nf="#,##0.00"><right><b>' . (float)abs($data['closingBalance']) . '</b></right></style>',
+            '<style bgcolor="#e2e8f0" border="medium"><center><b>(' . $data['closingBalanceType'] . ')</b></center></style>'
+        ];
+
+        $cleanCode = preg_replace('/[^A-Za-z0-9_-]/', '_', $account->account_code ?: $account->title);
+        $filename = 'General_Ledger_' . $cleanCode . '_' . now()->format('Y-m-d') . '.xlsx';
+        
+        $totalRows = count($excelData);
+        $xlsx = SimpleXLSXGen::fromArray($excelData);
+        
+        // Merge header banners across all 8 columns (A to H)
+        $xlsx->mergeCells('A1:H1')
+             ->mergeCells('A2:H2')
+             ->mergeCells('A' . $totalRows . ':D' . $totalRows)
+             ->setColWidth(1, 15)
+             ->setColWidth(2, 18)
+             ->setColWidth(3, 38)
+             ->setColWidth(4, 25)
+             ->setColWidth(5, 16)
+             ->setColWidth(6, 16)
+             ->setColWidth(7, 18)
+             ->setColWidth(8, 10);
+
+        return response((string) $xlsx, 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ]);
     }
 
     public function toggleStatus($id)
