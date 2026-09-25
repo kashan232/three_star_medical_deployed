@@ -1081,8 +1081,9 @@ class SaleController extends Controller
             $transactionService = app(\App\Services\TransactionService::class);
             $transactionService->reverseSaleAccounting($sale);
 
-            // Revert Stock for Direct Sale (SIN)
-            if ($sale->mode === 'sin') {
+            // Revert Stock for Direct Sale (SIN) - only if no delivery notes exist (DC manages its own stock)
+            $hasDcOnSale = \App\Models\DeliveryNote::where('sale_id', $sale->id)->where('status', '!=', 'cancelled')->exists();
+            if ($sale->mode === 'sin' && !$hasDcOnSale) {
                 $this->handleStockImpact($sale, 'in');
 
                 // Revert batch stock
@@ -1264,10 +1265,13 @@ class SaleController extends Controller
             $sale->save(); // Save first to get ID
 
             // 3. Process Items
+            $hasDcOnSale = $request->filled('dc_id') || ($sale->id && \App\Models\DeliveryNote::where('sale_id', $sale->id)->where('status', '!=', 'cancelled')->exists());
+
             // Delete old items if updating
             if (! $isNew) {
                 // If this is a direct sale (SIN) and was previously posted, restore warehouse & batch stocks before deleting
-                if ($sale->mode == 'sin' && $sale->sale_status == 'post') {
+                // (Only for direct sales that do NOT have delivery notes, because DC manages its own stock)
+                if ($sale->mode == 'sin' && $sale->sale_status == 'post' && !$hasDcOnSale) {
                     $this->handleStockImpact($sale, 'in');
 
                     // Restore batch stocks
@@ -1450,6 +1454,24 @@ class SaleController extends Controller
                             ->where('delivery_note_item_id', $dcItem->id)
                             ->update(['sale_item_id' => $saleItem->id]);
                     }
+                } elseif ($hasDcOnSale) {
+                    // Sale has active Delivery Notes: link any unlinked delivery note items to this sale item
+                    $dcItems = \App\Models\DeliveryNoteItem::whereHas('dcNote', function($q) use ($sale) {
+                            $q->where('sale_id', $sale->id)->where('status', '!=', 'cancelled');
+                        })
+                        ->where('product_id', $pid)
+                        ->get();
+                    $totalDelivered = 0;
+                    foreach ($dcItems as $dci) {
+                        $dci->update(['sale_item_id' => $saleItem->id]);
+                        $totalDelivered += (float)$dci->total_pieces;
+                        DB::table('sale_item_batches')
+                            ->where('delivery_note_item_id', $dci->id)
+                            ->update(['sale_item_id' => $saleItem->id]);
+                    }
+                    if ($totalDelivered > 0) {
+                        $saleItem->update(['delivered_qty' => $totalDelivered]);
+                    }
                 } elseif ($request->mode == 'sin' && $status === 'post') {
                     $deductions = \App\Http\Controllers\ProductBatchController::deductFromBatches(
                         $pid,
@@ -1564,8 +1586,8 @@ class SaleController extends Controller
             if ($status === 'post') {
                 \Log::info('Proceeding to Auto-Receipt & Ledger logic for Sale #'.$sale->invoice_no);
 
-                // 1. DEDUCT STOCK FROM WAREHOUSE
-                if ($sale->mode == 'sin' && !$request->filled('dc_id')) {
+                // 1. DEDUCT STOCK FROM WAREHOUSE (Only for direct sales with no delivery notes)
+                if ($sale->mode == 'sin' && !$request->filled('dc_id') && !$hasDcOnSale) {
                     $this->handleStockImpact($sale, 'out');
                 }
 

@@ -97,6 +97,11 @@ class Sale extends Model
         return $this->hasMany(DeliveryReturnNote::class, 'sale_id');
     }
 
+    public function deliveryNotes()
+    {
+        return $this->hasMany(DeliveryNote::class, 'sale_id');
+    }
+
     /**
      * Accessor for due amount (Total Net - Cash/Paid)
      */

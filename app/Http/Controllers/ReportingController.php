@@ -4244,7 +4244,13 @@ class ReportingController extends Controller
                 $saleBeforeQ = DB::table('sale_items')
                     ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
                     ->where('sale_items.product_id', $pId)
-                    ->whereIn('sales.sale_status', ['posted', 'post', 'in_delivery']);
+                    ->whereIn('sales.sale_status', ['posted', 'post', 'in_delivery'])
+                    ->whereNotExists(function ($query) {
+                        $query->select(DB::raw(1))
+                            ->from('delivery_notes')
+                            ->whereColumn('delivery_notes.sale_id', 'sales.id')
+                            ->where('delivery_notes.status', '!=', 'cancelled');
+                    });
                 if ($branchId)    $saleBeforeQ->where('sales.branch_id', $branchId);
                 if ($warehouseId) $saleBeforeQ->where('sale_items.warehouse_id', $warehouseId);
                 if ($startDate)   $saleBeforeQ->where('sales.sale_date', '<', $startDate);
@@ -4252,7 +4258,8 @@ class ReportingController extends Controller
 
                 $dcBeforeQ = DB::table('delivery_note_items')
                     ->join('delivery_notes', 'delivery_notes.id', '=', 'delivery_note_items.dc_note_id')
-                    ->where('delivery_note_items.product_id', $pId);
+                    ->where('delivery_note_items.product_id', $pId)
+                    ->where('delivery_notes.status', '!=', 'cancelled');
                 if ($branchId)    $dcBeforeQ->where('delivery_notes.branch_id', $branchId);
                 if ($warehouseId) $dcBeforeQ->where('delivery_note_items.warehouse_id', $warehouseId);
                 if ($startDate)   $dcBeforeQ->where('delivery_notes.delivery_date', '<', $startDate);
@@ -4394,6 +4401,12 @@ class ReportingController extends Controller
                     ->leftJoin('warehouses', 'warehouses.id', '=', 'sale_items.warehouse_id')
                     ->where('sale_items.product_id', $pId)
                     ->whereIn('sales.sale_status', ['posted', 'post', 'in_delivery'])
+                    ->whereNotExists(function ($query) {
+                        $query->select(DB::raw(1))
+                            ->from('delivery_notes')
+                            ->whereColumn('delivery_notes.sale_id', 'sales.id')
+                            ->where('delivery_notes.status', '!=', 'cancelled');
+                    })
                     ->select(
                         'sales.sale_date as date',
                         'sales.created_at',
@@ -4431,13 +4444,16 @@ class ReportingController extends Controller
                 // ── Delivery Challans ──
                 $dcQ = DB::table('delivery_note_items')
                     ->join('delivery_notes', 'delivery_notes.id', '=', 'delivery_note_items.dc_note_id')
+                    ->leftJoin('sales', 'sales.id', '=', 'delivery_notes.sale_id')
                     ->leftJoin('customers', 'customers.id', '=', 'delivery_notes.customer_id')
                     ->leftJoin('warehouses', 'warehouses.id', '=', 'delivery_note_items.warehouse_id')
                     ->where('delivery_note_items.product_id', $pId)
+                    ->where('delivery_notes.status', '!=', 'cancelled')
                     ->select(
                         'delivery_notes.delivery_date as date',
                         'delivery_notes.created_at',
                         DB::raw('COALESCE(delivery_notes.dc_no, CONCAT("SO-", LPAD(delivery_notes.id, 4, "0"))) as ref'),
+                        DB::raw('COALESCE(sales.invoice_no, "") as sale_invoice_no'),
                         DB::raw('COALESCE(customers.customer_name, "Walk-in") as party'),
                         DB::raw('COALESCE(warehouses.warehouse_name, "MAIN STORE") as warehouse_name'),
                         DB::raw("COALESCE(NULLIF(delivery_note_items.total_pieces, 0), delivery_note_items.qty * " . (int)$p->pieces_per_box . ") as qty"),
@@ -4450,11 +4466,12 @@ class ReportingController extends Controller
                 if ($endDate)     $dcQ->where('delivery_notes.delivery_date', '<=', $endDate);
                 foreach ($dcQ->get() as $r) {
                     $dtStr = $r->created_at ? date('Y-m-d H:i:s', strtotime($r->created_at)) : ($r->date . ' 12:00:00');
+                    $invSuffix = !empty($r->sale_invoice_no) ? " [{$r->sale_invoice_no}]" : "";
                     $pRows[] = [
                         'sort_key'    => $dtStr . '_3',
                         'type'        => 'delivery_challan',
                         'date'        => $dtStr,
-                        'description' => "({$r->ref} , {$r->party} , {$r->warehouse_name})",
+                        'description' => "({$r->ref}{$invSuffix} , {$r->party} , {$r->warehouse_name})",
                         'ref'         => $r->ref,
                         'qty_in'      => null,
                         'qty_out'     => (float)$r->qty,
