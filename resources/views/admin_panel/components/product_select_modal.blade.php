@@ -21,6 +21,7 @@
     .product-select-btn .psm-btn-arrow { float: right; opacity:.45; margin-left:4px; }
 
     /* ── Modal Overrides ── */
+    #erpProductModal { z-index: 1055 !important; }
     #erpProductModal .modal-dialog { max-width: 92vw; width: 1100px; }
     #erpProductModal .modal-content { border: none; border-radius: 16px; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,.18); }
     #erpProductModal .modal-header {
@@ -114,7 +115,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title"><i class="bi bi-boxes"></i> Product Catalogue</h5>
-                <button type="button" class="btn-close" data-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close" style="background:none;border:none;font-size:1.6rem;line-height:1;opacity:.85;cursor:pointer;"><span aria-hidden="true">&times;</span></button>
             </div>
 
             <div class="psm-filters">
@@ -240,6 +241,11 @@
     /* ── One-time setup ── */
     function _init() {
         window._psmReady = true;
+
+        var el = document.getElementById('erpProductModal');
+        if (el && el.parentNode !== document.body) {
+            document.body.appendChild(el);
+        }
 
         if (window._psmPending) {
             window._psmPending = false;
@@ -415,9 +421,12 @@
     function _showModal() {
         var el = document.getElementById('erpProductModal');
         if (!el) return;
+        if (el.parentNode !== document.body) {
+            document.body.appendChild(el);
+        }
         if ($ && $.fn.modal) {
             $(el).modal('show');
-        } else if (typeof bootstrap !== 'undefined') {
+        } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
             bootstrap.Modal.getOrCreateInstance(el).show();
         } else {
             el.style.display = 'block'; el.classList.add('show');
@@ -429,11 +438,12 @@
         if (!el) return;
         if ($ && $.fn.modal) {
             $(el).modal('hide');
-        } else if (typeof bootstrap !== 'undefined') {
+        } else if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
             bootstrap.Modal.getOrCreateInstance(el).hide();
         } else {
             el.style.display = 'none'; el.classList.remove('show');
             document.body.classList.remove('modal-open');
+            $('.modal-backdrop').remove();
             S.selected.clear(); _updateCountUI();
         }
     }

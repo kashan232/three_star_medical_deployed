@@ -357,6 +357,8 @@ class ReportingController extends Controller
             // Normalise "all" to null
             $warehouseId = ($warehouseId && $warehouseId !== 'all') ? (int)$warehouseId : null;
 
+            $query = Product::with(['brand', 'category_relation', 'sub_category_relation', 'unit', 'packings']);
+
             $query->when($productId && $productId !== 'all', function ($q) use ($productId) {
                 if (is_array($productId)) {
                     $q->whereIn('id', $productId);
@@ -708,6 +710,9 @@ class ReportingController extends Controller
 
     public function exportItemStockPdf(Request $request)
     {
+        ini_set('memory_limit', '-1');
+        set_time_limit(300);
+
         $request->merge(['report_type' => 'ledger']); // Force detail ledger data load
         $d = $this->buildItemStockData($request);
         if (isset($d['error'])) return response()->json($d, 500);

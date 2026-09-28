@@ -971,7 +971,7 @@
             <div id="pdfHeader">
                 <div class="header-table">
                     <div class="col-logo">
-                        <img src="{{ asset('admin_panel/assets/images/logo/logo.png') }}" style="max-height:45px;" alt="Logo">
+                        <img src="{{ file_exists(public_path('admin_panel/assets/images/logo/logo.png')) ? asset('admin_panel/assets/images/logo/logo.png') : asset('assets/images/wijdan_logo.png') }}" style="max-height:45px;" alt="Logo">
                     </div>
                     <div class="col-center">
                         <div class="main-title">THREE STAR MEDICAL SUPPLIES</div>
@@ -1555,11 +1555,10 @@
                 window._gTotals = null;
             }
 
-            // ── Dynamic Dropdown Logic: Cat -> Sub -> Brand -> Product ──────────
-            function updateFilters(changedElement) {
-                var catId   = $('#filterCategory').val();
-                var subId   = $('#filterSubCategory').val();
-                var brandId = $('#filterBrand').val();
+            // ── Dynamic Dropdown Logic: Cat -> Sub ──────────────────────────────
+            function updateFilters() {
+                var catId = $('#filterCategory').val();
+                var subId = $('#filterSubCategory').val();
 
                 // 1. Filter Sub-Categories based on Category
                 var validSubs = new Set();
@@ -1567,7 +1566,7 @@
                     var $opt = $(this);
                     if ($opt.val() === 'all') return;
                     
-                    var matchCat = (catId === 'all' || $opt.attr('data-cat') == catId);
+                    var matchCat = (catId === 'all' || !catId || $opt.attr('data-cat') == catId);
                     if (matchCat) {
                         $opt.show().prop('disabled', false);
                         validSubs.add($opt.val());
@@ -1575,68 +1574,18 @@
                         $opt.hide().prop('disabled', true);
                     }
                 });
+
                 // Reset Sub-Cat if no longer valid
                 if (subId !== 'all' && !validSubs.has(subId)) {
-                    $('#filterSubCategory').val('all').trigger('change.select2');
-                    subId = 'all';
+                    $('#filterSubCategory').val('all');
                 }
 
-                // 2. Build map of valid Brands and Products based on Cat/Sub selection
-                var validBrands = new Set();
-                var validProds  = new Set();
+                // 2. Ensure all Brands/Companies are always enabled and selectable
+                $('#filterBrand option').prop('disabled', false).show();
 
-                $('#product_id option').each(function() {
-                    var $opt = $(this);
-                    if ($opt.val() === 'all') return;
-
-                    var pCat   = $opt.attr('data-cat');
-                    var pSub   = $opt.attr('data-sub');
-                    var pBrand = $opt.attr('data-brand');
-
-                    // A product is valid for the current Cat/Sub selection if it matches both
-                    var matchCat = (catId === 'all' || pCat == catId);
-                    var matchSub = (subId === 'all' || pSub == subId);
-
-                    if (matchCat && matchSub) {
-                        if (pBrand) validBrands.add(pBrand);
-                        
-                        // Additionally, for the product itself to be visible, it must also match the Brand selection
-                        if (brandId === 'all' || pBrand == brandId) {
-                            validProds.add($opt.val());
-                        }
-                    }
-                });
-
-                // 3. Filter Brands based on validBrands set
-                $('#filterBrand option').each(function() {
-                    var $opt = $(this);
-                    if ($opt.val() === 'all') return;
-                    if (validBrands.has($opt.val())) {
-                        $opt.show().prop('disabled', false);
-                    } else {
-                        $opt.hide().prop('disabled', true);
-                    }
-                });
-                // Reset Brand if no longer valid
-                if (brandId !== 'all' && !validBrands.has(brandId)) {
-                    $('#filterBrand').val('all').trigger('change.select2');
-                    brandId = 'all';
-                }
-
-                // 4. Filter Products based on validProds set
-                $('#product_id option').each(function() {
-                    var $opt = $(this);
-                    if ($opt.val() === 'all') return;
-                    if (validProds.has($opt.val())) {
-                        $opt.show().prop('disabled', false);
-                    } else {
-                        $opt.hide().prop('disabled', true);
-                    }
-                });
-                // Product ID doesn't usually need a reset-to-all unless we want to be strict
-
-                // 5. Refresh Select2 state (required to hide/show options properly in UI)
-                $('.select2-global, .select2-product').trigger('change.select2');
+                // 3. Refresh Select2 state (required to hide/show options properly in UI)
+                $('#filterSubCategory').trigger('change.select2');
+                $('#filterBrand').trigger('change.select2');
             }
 
             // ── Event bindings ───────────────────────────────────────────────────
@@ -1644,17 +1593,9 @@
                 fetchReport();
             });
 
-            // Handle changes with cascading logic
+            // Handle Category change to cascade Sub-Category
             $('#filterCategory').on('change', function() {
-                updateFilters('cat');
-            });
-
-            $('#filterSubCategory').on('change', function() {
-                updateFilters('sub');
-            });
-
-            $('#filterBrand').on('change', function() {
-                updateFilters('brand');
+                updateFilters();
             });
 
             if (IS_SUPER_ADMIN) {
