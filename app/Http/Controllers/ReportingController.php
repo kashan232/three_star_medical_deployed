@@ -404,6 +404,7 @@ class ReportingController extends Controller
                 ->select(
                     'product_id',
                     'batch_number',
+                    'qty_received',
                     'qty_remaining',
                     'exp_date',
                     'mfg_date',
@@ -419,33 +420,52 @@ class ReportingController extends Controller
             // We fetch everything in one query to avoid N+1 issues.
             // stock_movements.qty is +ve for IN, -ve for OUT.
             $hasBranchOnMovements = \Schema::hasColumn('stock_movements', 'branch_id');
-            
+            $hasStartDate = !empty($start) ? 1 : 0;
             $startDt = $start ? $start . ' 00:00:00' : '1970-01-01 00:00:00';
             $endDt   = $end   ? $end   . ' 23:59:59' : '2099-12-31 23:59:59';
 
             $movementsQuery = DB::table('stock_movements')
                 ->whereIn('product_id', $productIds)
                 ->select('product_id',
-                    // Initial = sum of all qty before start date (Robust handling of type vs qty)
-                    DB::raw("SUM(CASE WHEN created_at < '$startDt' THEN (CASE WHEN type = 'out' AND qty > 0 THEN -qty WHEN type='in' AND qty < 0 THEN abs(qty) ELSE qty END) ELSE 0 END) as initial"),
+                    // Initial = sum of all qty before start date (or opening stock if no start date filter)
+                    DB::raw("SUM(CASE 
+                        WHEN ($hasStartDate = 1 AND created_at < '$startDt') THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END)
+                        WHEN ($hasStartDate = 0 AND ref_type IN ('INIT', 'OPENING')) THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END)
+                        ELSE 0 END) as initial"),
                     
                     // Period Purchased (qty > 0 and ref_type is purchase related)
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('PURCHASE', 'GRN', 'PUR', 'in', 'PURCHASE_ITEM') THEN abs(qty) ELSE 0 END) as purchased"),
+                    DB::raw("SUM(CASE 
+                        WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('PURCHASE', 'purchase', 'GRN', 'grn', 'PUR', 'pur', 'PURCHASE_ITEM') THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END)
+                        WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('PURCHASE_DELETE') THEN -ABS(qty)
+                        ELSE 0 END) as purchased"),
                     
-                    // Period Purchase Return (Should be negative as it reduces stock)
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('PR', 'purchase_return', 'PURCHASE_RETURN') THEN -abs(qty) ELSE 0 END) as pur_return"),
+                    // Period Purchase Return (Positive number representing stock returned to vendor)
+                    DB::raw("SUM(CASE 
+                        WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('PR', 'pr', 'purchase_return', 'PURCHASE_RETURN', 'DN_PUR_RET') THEN ABS(qty)
+                        ELSE 0 END) as pur_return"),
                     
-                    // Period Sold (Should be negative as it reduces stock)
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('sale', 'SALE', 'SIN', 'sale_in', 'out', 'DC', 'DELIVERY_NOTE', 'delivery_note') THEN -abs(qty) ELSE 0 END) as sold"),
+                    // Period Sold (Positive number representing net stock sold / dispatched)
+                    DB::raw("SUM(CASE 
+                        WHEN created_at BETWEEN '$startDt' AND '$endDt' AND (
+                            (ref_type IN ('sale', 'SALE', 'SIN', 'sin', 'out', 'DC', 'dc', 'delivery_note', 'DELIVERY_NOTE', 'donation') AND (type = 'out' OR qty < 0))
+                        ) THEN ABS(qty)
+                        WHEN created_at BETWEEN '$startDt' AND '$endDt' AND (
+                            (ref_type IN ('dc_cancel', 'DC_CANCEL', 'sale_cancel', 'SALE_CANCEL', 'sale_in', 'donation_cancel'))
+                            OR (ref_type IN ('sale', 'SALE', 'SIN', 'sin', 'DC', 'dc', 'delivery_note', 'DELIVERY_NOTE') AND (type = 'in' OR qty > 0))
+                        ) THEN -ABS(qty)
+                        ELSE 0 END) as sold"),
                     
-                    // Period Sale Return (Should be positive as it adds to stock)
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('SR', 'sale_return', 'SALE_RETURN', 'SRN') THEN abs(qty) ELSE 0 END) as sale_return"),
-                    
-                    // Period Donated (Should be positive representing stock out)
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type = 'donation' THEN abs(qty) WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type = 'donation_cancel' THEN -abs(qty) ELSE 0 END) as donated"),
+                    // Period Sale Return (Positive number representing stock returned by customer)
+                    DB::raw("SUM(CASE 
+                        WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('SR', 'sr', 'sale_return', 'SALE_RETURN', 'SRN', 'srn', 'drn', 'DRN') THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END)
+                        ELSE 0 END) as sale_return"),
                     
                     // Adjustments (anything else in period)
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('INIT', 'OPENING', 'ADJ', 'adjustment') THEN qty ELSE 0 END) as adjusted")
+                    DB::raw("SUM(CASE 
+                        WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('ADJ', 'adj', 'adjustment', 'ADJUSTMENT', 'MANUAL_EDIT_MODAL', 'MANUAL_ADD') THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END)
+                        WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('batch_discard') THEN -ABS(qty)
+                        WHEN ($hasStartDate = 1 AND created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('INIT', 'OPENING')) THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END)
+                        ELSE 0 END) as adjusted")
                 );
 
             if ($branchId && $hasBranchOnMovements) {
@@ -491,23 +511,21 @@ class ReportingController extends Controller
                 // Movement summaries for the period
                 $mv = $movementsAll->get($pid) ?: (object)[
                     'initial' => 0, 'purchased' => 0, 'pur_return' => 0, 
-                    'sold' => 0, 'sale_return' => 0, 'donated' => 0, 'adjusted' => 0
+                    'sold' => 0, 'sale_return' => 0, 'adjusted' => 0
                 ];
 
                 $initial    = (float)$mv->initial;
                 $purchased  = (float)$mv->purchased;
                 $purReturn  = (float)abs($mv->pur_return);
-                $sold       = (float)abs($mv->sold);
-                $donated    = (float)abs($mv->donated ?? 0);
+                $sold       = (float)$mv->sold;
                 $saleReturn = (float)$mv->sale_return;
                 $adjusted   = (float)$mv->adjusted;
 
                 // Calculated period balance: Initial + In - Out
-                // Period Balance = initial + purchased - pur_return - sold + sale_return - donated + adjusted
-                $periodBalance = $initial + $purchased - $purReturn - $sold + $saleReturn - $donated + $adjusted;
+                // Period Balance = initial + purchased - pur_return - sold + sale_return + adjusted
+                $periodBalance = $initial + $purchased - $purReturn - $sold + $saleReturn + $adjusted;
 
-                // If no date filters, period balance should match live balance (but calculation is safer for audit)
-                // Use period balance for the table columns to ensure they reconcile.
+                // If no date filters, period balance matches live balance (warehouse stock)
                 $displayBalance = (!$start && !$end) ? $liveBalance : $periodBalance;
 
                 // Status (based on period-end balance)
@@ -547,7 +565,7 @@ class ReportingController extends Controller
                     'purchased'                => $purchased,
                     'purchase_return_qty'      => $purReturn,
                     'sold'                     => $sold,
-                    'donated'                  => $donated,
+                    'donated'                  => 0,
                     'sale_return_qty'          => $saleReturn,
                     'adjusted_qty'             => $adjusted,
                     'balance'                  => $displayBalance,
@@ -572,14 +590,21 @@ class ReportingController extends Controller
                         'pieces_per_box' => $u->pieces_per_box,
                     ])->toArray() : [],
                     'batches'                  => (function() use ($batchAll, $pid, $displayBalance) {
-                        $mapped = $batchAll->get($pid, collect())->map(fn($b) => [
-                            'batch_number'  => $b->batch_number,
-                            'qty_remaining' => (float)$b->qty_remaining,
-                            'exp_date'      => $b->exp_date,
-                            'mfg_date'      => $b->mfg_date,
-                            'status'        => $b->status,
-                            'source_type'   => $b->source_type,
-                        ])->values()->toArray();
+                        $mapped = $batchAll->get($pid, collect())->map(function($b) {
+                            $qtyRem = (float)$b->qty_remaining;
+                            $qtyRec = (float)$b->qty_received;
+                            if ($qtyRec > 0 && $qtyRem > $qtyRec) {
+                                $qtyRem = $qtyRec;
+                            }
+                            return [
+                                'batch_number'  => $b->batch_number,
+                                'qty_remaining' => $qtyRem,
+                                'exp_date'      => $b->exp_date,
+                                'mfg_date'      => $b->mfg_date,
+                                'status'        => $b->status,
+                                'source_type'   => $b->source_type,
+                            ];
+                        })->values()->toArray();
 
                         $sumBatchQty = array_sum(array_column($mapped, 'qty_remaining'));
                         $unbatchedQty = $displayBalance - $sumBatchQty;
@@ -3298,12 +3323,12 @@ class ReportingController extends Controller
                 ->when($branchId && $hasBranchOnMovements, fn($q) => $q->where('branch_id', $branchId))
                 ->select(
                     'product_id',
-                    DB::raw("SUM(CASE WHEN created_at < '$startDt' THEN qty ELSE 0 END) as opening"),
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND qty > 0 AND ref_type IN ('PURCHASE', 'GRN', 'PUR', 'in', 'PURCHASE_ITEM') THEN qty ELSE 0 END) as purchased"),
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND qty < 0 AND ref_type IN ('PR', 'purchase_return', 'PURCHASE_RETURN') THEN ABS(qty) ELSE 0 END) as pur_return"),
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND qty < 0 AND ref_type IN ('sale', 'SALE', 'SIN', 'sale_in', 'out', 'DC', 'DELIVERY_NOTE', 'delivery_note') THEN ABS(qty) ELSE 0 END) as sold"),
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND qty > 0 AND ref_type IN ('SR', 'sale_return', 'SALE_RETURN', 'SRN') THEN qty ELSE 0 END) as sale_return"),
-                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('INIT', 'OPENING', 'ADJ', 'adjustment') THEN qty ELSE 0 END) as adjusted")
+                    DB::raw("SUM(CASE WHEN created_at < '$startDt' THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END) ELSE 0 END) as opening"),
+                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('PURCHASE', 'purchase', 'GRN', 'grn', 'PUR', 'pur', 'PURCHASE_ITEM') THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END) WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('PURCHASE_DELETE') THEN -ABS(qty) ELSE 0 END) as purchased"),
+                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('PR', 'pr', 'purchase_return', 'PURCHASE_RETURN', 'DN_PUR_RET') THEN ABS(qty) ELSE 0 END) as pur_return"),
+                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ((ref_type IN ('sale', 'SALE', 'SIN', 'sin', 'out', 'DC', 'dc', 'delivery_note', 'DELIVERY_NOTE', 'donation') AND (type = 'out' OR qty < 0))) THEN ABS(qty) WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ((ref_type IN ('dc_cancel', 'DC_CANCEL', 'sale_cancel', 'SALE_CANCEL', 'sale_in', 'donation_cancel')) OR (ref_type IN ('sale', 'SALE', 'SIN', 'sin', 'DC', 'dc', 'delivery_note', 'DELIVERY_NOTE') AND (type = 'in' OR qty > 0))) THEN -ABS(qty) ELSE 0 END) as sold"),
+                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('SR', 'sr', 'sale_return', 'SALE_RETURN', 'SRN', 'srn', 'drn', 'DRN') THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END) ELSE 0 END) as sale_return"),
+                    DB::raw("SUM(CASE WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('ADJ', 'adj', 'adjustment', 'ADJUSTMENT', 'MANUAL_EDIT_MODAL', 'MANUAL_ADD') THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END) WHEN created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('batch_discard') THEN -ABS(qty) WHEN (created_at BETWEEN '$startDt' AND '$endDt' AND ref_type IN ('INIT', 'OPENING')) THEN (CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END) ELSE 0 END) as adjusted")
                 )
                 ->groupBy('product_id')
                 ->get()
