@@ -15,11 +15,13 @@ class FbrController extends Controller
      */
     public function getDetails($id)
     {
+        FbrService::ensureSchemaExists();
+
         $sale = Sale::with(['customer_relation', 'items.product'])->findOrFail($id);
 
         $payload = FbrService::buildPayload($sale);
         $scenarios = FbrService::getScenarios();
-        $isFbrPosted = ($sale->fbr_status === 'posted');
+        $isFbrPosted = (($sale->fbr_status ?? '') === 'posted');
 
         return response()->json([
             'success'          => true,
@@ -52,19 +54,29 @@ class FbrController extends Controller
      */
     public function postToFbr(Request $request, $id)
     {
-        $sale = Sale::findOrFail($id);
+        try {
+            FbrService::ensureSchemaExists();
 
-        if ($sale->sale_status !== 'post') {
+            $sale = Sale::findOrFail($id);
+
+            if ($sale->sale_status !== 'post') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Sale invoice must be POSTED in the ERP before submitting to FBR.'
+                ], 422);
+            }
+
+            $scenarioId = $request->input('scenario_id');
+            $result = FbrService::postInvoice($sale, $scenarioId);
+
+            return response()->json($result, $result['success'] ? 200 : 400);
+        } catch (\Throwable $e) {
+            \Log::error('FBR postToFbr Error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
-                'message' => 'Sale invoice must be POSTED in the ERP before submitting to FBR.'
-            ], 422);
+                'message' => 'Server Error: ' . $e->getMessage()
+            ], 500);
         }
-
-        $scenarioId = $request->input('scenario_id');
-        $result = FbrService::postInvoice($sale, $scenarioId);
-
-        return response()->json($result, $result['success'] ? 200 : 400);
     }
 
     /**
@@ -72,11 +84,21 @@ class FbrController extends Controller
      */
     public function validateWithFbr(Request $request, $id)
     {
-        $sale = Sale::findOrFail($id);
-        $scenarioId = $request->input('scenario_id');
-        $result = FbrService::validateInvoice($sale, $scenarioId);
+        try {
+            FbrService::ensureSchemaExists();
 
-        return response()->json($result, $result['success'] ? 200 : 400);
+            $sale = Sale::findOrFail($id);
+            $scenarioId = $request->input('scenario_id');
+            $result = FbrService::validateInvoice($sale, $scenarioId);
+
+            return response()->json($result, $result['success'] ? 200 : 400);
+        } catch (\Throwable $e) {
+            \Log::error('FBR validateWithFbr Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Server Error: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     /**

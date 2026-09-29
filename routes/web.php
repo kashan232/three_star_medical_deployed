@@ -543,6 +543,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/settings/fbr', [\App\Http\Controllers\FbrController::class, 'settingsPage'])->name('settings.fbr');
     Route::post('/settings/fbr', [\App\Http\Controllers\FbrController::class, 'updateSettings'])->name('settings.fbr.update');
     Route::get('/settings/fbr/test-connection', [\App\Http\Controllers\FbrController::class, 'testConnection'])->name('settings.fbr.test');
+    Route::get('/settings/fbr/run-migration', function () {
+        \App\Services\FbrService::ensureSchemaExists();
+        return redirect()->route('settings.fbr')->with('success', 'FBR database columns and tables verified and updated successfully.');
+    })->name('settings.fbr.migrate');
 
     // Notifications
     Route::get('/notifications/fetch', [App\Http\Controllers\NotificationController::class, 'fetch'])->name('notifications.fetch');

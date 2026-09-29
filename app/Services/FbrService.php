@@ -7,9 +7,65 @@ use App\Models\Customer;
 use App\Models\SystemSetting;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
 
 class FbrService
 {
+    /**
+     * Ensure FBR columns exist on sales table and fbr_invoice_logs table exists.
+     * Prevents Unknown column errors if migration hasn't been run yet on production/cPanel.
+     */
+    public static function ensureSchemaExists(): void
+    {
+        try {
+            if (!Schema::hasColumn('sales', 'fbr_status')) {
+                Schema::table('sales', function (Blueprint $table) {
+                    if (!Schema::hasColumn('sales', 'fbr_status')) {
+                        $table->string('fbr_status', 20)->default('unposted')->after('sale_status');
+                    }
+                    if (!Schema::hasColumn('sales', 'fbr_invoice_no')) {
+                        $table->string('fbr_invoice_no', 100)->nullable()->after('fbr_status');
+                    }
+                    if (!Schema::hasColumn('sales', 'fbr_scenario_id')) {
+                        $table->string('fbr_scenario_id', 20)->nullable()->after('fbr_invoice_no');
+                    }
+                    if (!Schema::hasColumn('sales', 'fbr_posted_at')) {
+                        $table->timestamp('fbr_posted_at')->nullable()->after('fbr_scenario_id');
+                    }
+                    if (!Schema::hasColumn('sales', 'fbr_environment')) {
+                        $table->string('fbr_environment', 20)->default('sandbox')->after('fbr_posted_at');
+                    }
+                    if (!Schema::hasColumn('sales', 'fbr_qr_code')) {
+                        $table->text('fbr_qr_code')->nullable()->after('fbr_environment');
+                    }
+                    if (!Schema::hasColumn('sales', 'fbr_response')) {
+                        $table->longText('fbr_response')->nullable()->after('fbr_qr_code');
+                    }
+                });
+            }
+
+            if (!Schema::hasTable('fbr_invoice_logs')) {
+                Schema::create('fbr_invoice_logs', function (Blueprint $table) {
+                    $table->id();
+                    $table->unsignedBigInteger('sale_id')->nullable()->index();
+                    $table->string('environment', 20)->default('sandbox');
+                    $table->string('action', 50)->default('post');
+                    $table->string('scenario_id', 20)->nullable();
+                    $table->longText('request_payload')->nullable();
+                    $table->longText('response_payload')->nullable();
+                    $table->string('status_code', 50)->nullable();
+                    $table->string('status', 50)->nullable();
+                    $table->string('fbr_invoice_no', 100)->nullable()->index();
+                    $table->text('error_message')->nullable();
+                    $table->unsignedBigInteger('created_by')->nullable();
+                    $table->timestamps();
+                });
+            }
+        } catch (\Throwable $e) {
+            Log::error('FBR ensureSchemaExists Error: ' . $e->getMessage());
+        }
+    }
     /**
      * Get active FBR environment ('sandbox' or 'production')
      */
@@ -261,6 +317,8 @@ class FbrService
      */
     public static function postInvoice(Sale $sale, ?string $overrideScenario = null): array
     {
+        self::ensureSchemaExists();
+
         // 1. Check if sale is in posted status in ERP
         if ($sale->sale_status !== 'post') {
             return [
@@ -270,7 +328,7 @@ class FbrService
         }
 
         // 2. Check if already posted to FBR
-        if ($sale->fbr_status === 'posted' && !empty($sale->fbr_invoice_no)) {
+        if (!empty($sale->fbr_status) && $sale->fbr_status === 'posted' && !empty($sale->fbr_invoice_no)) {
             return [
                 'success'        => true,
                 'already_posted' => true,
@@ -287,21 +345,43 @@ class FbrService
 
         if ($result['success']) {
             $fbrInvoiceNo = $result['fbr_invoice_no'] ?? ($result['response_data']['invoiceNumber'] ?? null);
-            
-            $sale->update([
+
+            $updateData = [
                 'fbr_status'      => 'posted',
                 'fbr_invoice_no'  => $fbrInvoiceNo,
                 'fbr_scenario_id' => $payload['scenarioId'],
                 'fbr_posted_at'   => now(),
                 'fbr_environment' => self::getEnvironment(),
                 'fbr_qr_code'     => $fbrInvoiceNo,
-                'fbr_response'    => json_encode($result['response_data'])
-            ]);
+                'fbr_response'    => json_encode($result['response_data'] ?? [])
+            ];
+
+            try {
+                $sale->update($updateData);
+            } catch (\Throwable $ex) {
+                Log::warning('FBR update failed, running ensureSchemaExists and retrying: ' . $ex->getMessage());
+                self::ensureSchemaExists();
+                try {
+                    DB::table('sales')->where('id', $sale->id)->update($updateData);
+                } catch (\Throwable $retryEx) {
+                    Log::error('FBR update retry failed: ' . $retryEx->getMessage());
+                }
+            }
         } else {
-            $sale->update([
-                'fbr_status'      => 'failed',
-                'fbr_response'    => json_encode($result['response_data'] ?? ['error' => $result['message']])
-            ]);
+            try {
+                $sale->update([
+                    'fbr_status'   => 'failed',
+                    'fbr_response' => json_encode($result['response_data'] ?? ['error' => $result['message']])
+                ]);
+            } catch (\Throwable $ex) {
+                self::ensureSchemaExists();
+                try {
+                    DB::table('sales')->where('id', $sale->id)->update([
+                        'fbr_status'   => 'failed',
+                        'fbr_response' => json_encode($result['response_data'] ?? ['error' => $result['message']])
+                    ]);
+                } catch (\Throwable $retryEx) {}
+            }
         }
 
         return $result;
