@@ -773,6 +773,16 @@
                                         <button type="button" id="btnConfirm" class="btn btn-erp btn-erp-success w-100 justify-content-center">
                                             <i class="bi bi-check2-circle"></i> Confirm & Post SIN
                                         </button>
+                                        <button type="button" id="btnPostToFbr" 
+                                            class="btn btn-erp btn-erp-warning w-100 justify-content-center text-dark font-weight-bold" 
+                                            data-sale-id="{{ $sale->id }}"
+                                            {{ ($sale->sale_status !== 'post' || $sale->fbr_status === 'posted') ? 'disabled' : '' }}>
+                                            @if($sale->fbr_status === 'posted')
+                                                <i class="bi bi-check-circle-fill text-success"></i> FBR Posted ({{ $sale->fbr_invoice_no }})
+                                            @else
+                                                <i class="bi bi-cloud-arrow-up-fill"></i> POST TO FBR
+                                            @endif
+                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -786,6 +796,7 @@
     <!-- Modals -->
     @include('admin_panel.sale.sale_receipt_note.modals')
     @include('admin_panel.components.product_select_modal')
+    @include('admin_panel.sale.components.fbr_post_modal')
 
 @endsection
 
@@ -1115,6 +1126,20 @@
                     }
                 });
             }
+
+            $('#btnPostToFbr').click(function(e) {
+                e.preventDefault();
+                const saleId = $(this).attr('data-sale-id');
+                if (window.FbrPostManager && saleId) {
+                    window.FbrPostManager.open(saleId);
+                }
+            });
+
+            $(document).on('fbr:posted', function(e, data) {
+                $('#btnPostToFbr')
+                    .prop('disabled', true)
+                    .html('<i class="bi bi-check-circle-fill text-success me-1"></i> FBR Posted (' + data.fbrInvoiceNo + ')');
+            });
 
             // --- Import Logic ---
             function importBookedItem(btn) {

@@ -34,6 +34,8 @@ if (!$officerName && $sale->employee_id) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Sales Invoice - {{ $sale->invoice_no ?? $sale->id }}</title>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
@@ -108,6 +110,21 @@ if (!$officerName && $sale->employee_id) {
     <svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
     Back
   </a>
+
+  @if($sale->sale_status === 'post')
+    @if($sale->fbr_status === 'posted')
+      <span class="btn" style="background:#059669; cursor:default;" title="FBR Verified: {{ $sale->fbr_invoice_no }}">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+        FBR Posted: {{ $sale->fbr_invoice_no }}
+      </span>
+    @else
+      <button type="button" class="btn fbr-post-btn" data-id="{{ $sale->id }}" style="background:#d97706; cursor:pointer;" title="Post this invoice to FBR Digital Invoicing">
+        <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
+        Post to FBR
+      </button>
+    @endif
+  @endif
+
   <button class="btn btn-print" onclick="window.print()">
     <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
     Print
@@ -165,6 +182,16 @@ if (!$officerName && $sale->employee_id) {
         {!! DNS1D::getBarcodeHTML($sale->invoice_no ?? (string)$sale->id, 'C128', 1, 35) !!}
       </div>
       <div class="barcode-num">{{ $sale->invoice_no ?? $sale->id }}</div>
+
+      @if($sale->fbr_status === 'posted')
+      <div style="margin-top: 5px; border: 1.5px solid #059669; border-radius: 4px; padding: 3px 6px; text-align: center; background: #f0fdf4; width: 145px;">
+        <div style="font-size: 7.5px; font-weight: 800; color: #059669; letter-spacing: 0.5px;">✓ FBR DIGITAL INVOICE</div>
+        <div style="font-size: 8px; font-family: monospace; font-weight: bold; color: #1e293b; word-break: break-all;">{{ $sale->fbr_invoice_no }}</div>
+        @if($sale->fbr_posted_at)
+        <div style="font-size: 7px; color: #475569; margin-top: 1px;">{{ date('d-M-Y H:i', strtotime($sale->fbr_posted_at)) }}</div>
+        @endif
+      </div>
+      @endif
     </div>
   </div>
 
@@ -399,7 +426,16 @@ async function downloadPDF() {
   }
   pdf.save('invoice_{{ $sale->invoice_no ?? $sale->id }}.pdf');
 }
+
+// Reload invoice on successful FBR submission
+$(document).on('fbr:posted', function(e, data) {
+    setTimeout(function() {
+        window.location.reload();
+    }, 1200);
+});
 </script>
+
+@include('admin_panel.sale.components.fbr_post_modal')
 
 </body>
 </html>

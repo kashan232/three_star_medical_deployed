@@ -370,6 +370,25 @@
             box-shadow: 0 4px 6px rgba(5, 150, 105, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
+        .btn-erp-warning {
+            background: linear-gradient(to bottom, #f59e0b, #d97706);
+            color: #ffffff;
+            box-shadow: 0 1px 2px rgba(217, 119, 6, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+        }
+
+        .btn-erp-warning:hover:not(:disabled) {
+            background: linear-gradient(to bottom, #d97706, #b45309);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 6px rgba(217, 119, 6, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-erp:disabled {
+            opacity: 0.55;
+            cursor: not-allowed !important;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
         .btn-erp-secondary {
             background-color: #ffffff;
             color: #475569;
@@ -952,6 +971,15 @@
                                             id="btnSaveOnly" style="{{ request()->query('mode') != 'so' ? 'display:none;' : '' }}">
                                             <i class="bi bi-save2"></i> Save Sale Order (Draft)
                                         </button>
+                                        {{-- POST TO FBR button: disabled by default, enabled after sale is posted --}}
+                                        <button type="button"
+                                            class="btn-erp btn-erp-warning justify-content-center shadow-sm py-3 text-dark font-weight-bold"
+                                            id="btnPostToFbr"
+                                            disabled
+                                            title="Post this sale invoice to FBR Digital Invoicing system"
+                                            style="font-size: 0.95rem; letter-spacing: 0.5px; {{ request()->query('mode') == 'so' ? 'display:none;' : '' }}">
+                                            <i class="bi bi-cloud-arrow-up-fill me-1"></i> POST TO FBR
+                                        </button>
                                     </div>
                                     <div class="mt-3 text-center">
                                         <div class="form-check form-check-inline">
@@ -1278,6 +1306,7 @@
 
 {{-- Advanced Product Selection Modal --}}
 @include('admin_panel.components.product_select_modal')
+@include('admin_panel.sale.components.fbr_post_modal')
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
@@ -1566,16 +1595,45 @@
                             if (response.invoice_url && response.print_preview) {
                                 window.open(response.invoice_url, '_blank');
                             }
+
+                            // Capture created sale ID
+                            const createdSaleId = response.booking_id;
+
+                            // Update UI: Disable Confirm button and Enable POST TO FBR button
+                            if (createdSaleId) {
+                                $('#btnConfirm').prop('disabled', true).html('<i class="bi bi-check2-all me-1"></i> Sale Already Posted');
+                                $('#btnPostToFbr')
+                                    .prop('disabled', false)
+                                    .attr('data-sale-id', createdSaleId)
+                                    .addClass('shadow-lg border-2 border-warning')
+                                    .css('cursor', 'pointer');
+                            }
+
                             Swal.fire({
                                 icon: 'success',
-                                title: 'Posted Successfully!',
-                                text: 'Sale processed and ledger updated.',
-                                timer: 1500,
-                                showConfirmButton: false
-                            }).then(() => {
-                                window.location.href = response
-                                    .redirect_url ||
-                                    "{{ route('sale.receipt.index') }}";
+                                title: 'Sale Posted Successfully!',
+                                html: `
+                                    <div class="py-2">
+                                        <p class="text-muted mb-3">Sale processed, stock updated, and ledger recorded.</p>
+                                        <div class="alert alert-warning border text-start p-2 mb-0" style="font-size: 0.88rem;">
+                                            <i class="bi bi-cloud-arrow-up-fill me-1"></i> <strong>Do you want to post it to FBR?</strong>
+                                            <div class="text-muted small mt-1">You can transmit to FBR right now, or click the enabled <b>POST TO FBR</b> button at any time.</div>
+                                        </div>
+                                    </div>
+                                `,
+                                showCancelButton: true,
+                                confirmButtonColor: '#f59e0b',
+                                cancelButtonColor: '#64748b',
+                                confirmButtonText: '<i class="bi bi-cloud-arrow-up-fill me-1"></i> Yes, Post to FBR',
+                                cancelButtonText: 'View Sales List'
+                            }).then((popupRes) => {
+                                if (popupRes.isConfirmed) {
+                                    if (window.FbrPostManager && createdSaleId) {
+                                        window.FbrPostManager.open(createdSaleId);
+                                    }
+                                } else if (popupRes.dismiss === Swal.DismissReason.cancel) {
+                                    window.location.href = response.redirect_url || "{{ route('sale.receipt.index') }}";
+                                }
                             });
                         },
                         error: function(xhr) {
@@ -1592,6 +1650,33 @@
                     });
                 }
             });
+        });
+
+        // POST TO FBR Button Click Handler
+        $('#btnPostToFbr').click(function(e) {
+            e.preventDefault();
+            const saleId = $(this).attr('data-sale-id');
+            if (!saleId) {
+                Swal.fire({
+                    icon: 'info',
+                    title: 'Sale Not Yet Posted',
+                    text: 'Please confirm and post the sale first. Once posted, you can transmit this invoice to FBR.'
+                });
+                return;
+            }
+            if (window.FbrPostManager) {
+                window.FbrPostManager.open(saleId);
+            }
+        });
+
+        // Listen for FBR Posted Event
+        $(document).on('fbr:posted', function(e, data) {
+            $('#btnPostToFbr')
+                .prop('disabled', true)
+                .css('cursor', 'not-allowed')
+                .removeClass('btn-erp-warning shadow-lg border-warning')
+                .addClass('btn-erp-secondary')
+                .html('<i class="bi bi-check-circle-fill text-success me-1"></i> FBR Posted: ' + data.fbrInvoiceNo);
         });
 
         // Discount Type Toggle (Amt per pc vs Percent)

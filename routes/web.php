@@ -351,6 +351,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/sales/{id}/dc', [SaleController::class, 'saledc'])->middleware('permission:sales.view')->name('sales.dc');
     Route::get('/sales/{id}/recepit', [SaleController::class, 'salereceipt'])->middleware('permission:sales.view')->name('sales.receipt');
 
+    // FBR Digital Invoicing Routes
+    Route::get('/sales/{id}/fbr-details', [\App\Http\Controllers\FbrController::class, 'getDetails'])->middleware('permission:sales.view')->name('sales.fbr.details');
+    Route::post('/sales/{id}/fbr-post', [\App\Http\Controllers\FbrController::class, 'postToFbr'])->middleware('permission:sales.create')->name('sales.fbr.post');
+    Route::post('/sales/{id}/fbr-validate', [\App\Http\Controllers\FbrController::class, 'validateWithFbr'])->middleware('permission:sales.view')->name('sales.fbr.validate');
+
     // booking system
 
     Route::get('bookings', [ProductBookingController::class, 'index'])->middleware('permission:bookings.view')->name('bookings.index');
@@ -533,6 +538,11 @@ Route::middleware('auth')->group(function () {
     // Return Approvers Management
     Route::get('/settings/return-approvers', [App\Http\Controllers\SettingsController::class, 'returnApprovers'])->name('settings.return-approvers');
     Route::post('/settings/return-approvers/update', [App\Http\Controllers\SettingsController::class, 'updateReturnApprovers'])->name('settings.return-approvers.update');
+
+    // FBR Digital Invoicing Settings
+    Route::get('/settings/fbr', [\App\Http\Controllers\FbrController::class, 'settingsPage'])->name('settings.fbr');
+    Route::post('/settings/fbr', [\App\Http\Controllers\FbrController::class, 'updateSettings'])->name('settings.fbr.update');
+    Route::get('/settings/fbr/test-connection', [\App\Http\Controllers\FbrController::class, 'testConnection'])->name('settings.fbr.test');
 
     // Notifications
     Route::get('/notifications/fetch', [App\Http\Controllers\NotificationController::class, 'fetch'])->name('notifications.fetch');

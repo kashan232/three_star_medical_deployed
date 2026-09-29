@@ -381,6 +381,7 @@
                                 <th>Customer / Institution</th>
                                 <th>Product Details</th>
                                 <th class="text-end">Billing Detail</th>
+                                <th class="text-center">FBR Status</th>
                                 <th class="text-center">Action</th>
                             </tr>
                         </thead>
@@ -461,8 +462,24 @@
                                             @else
                                                 <span class="text-warning fw-800"><i
                                                         class="fas fa-file-signature me-1"></i>Un-posted</span>
-                                            @endif
+                                             @endif
                                         </div>
+                                    </td>
+                                    <td class="text-center">
+                                        @if ($sale->fbr_status === 'posted')
+                                            <span class="badge badge-success px-2 py-1 text-wrap d-inline-block" style="font-size: 0.72rem; line-height: 1.3;" title="FBR Invoice: {{ $sale->fbr_invoice_no }}">
+                                                <i class="fas fa-check-circle me-1"></i> FBR POSTED<br>
+                                                <small class="font-monospace text-light" style="font-size: 0.65rem;">{{ Str::limit($sale->fbr_invoice_no, 15) }}</small>
+                                            </span>
+                                        @elseif($sale->sale_status === 'post')
+                                            <button type="button" class="btn btn-sm btn-outline-warning fbr-post-btn text-nowrap py-1 px-2" data-id="{{ $sale->id }}" title="Post this invoice to FBR">
+                                                <i class="fas fa-cloud-upload-alt me-1"></i> Post to FBR
+                                            </button>
+                                        @else
+                                            <span class="badge badge-secondary px-2 py-1" style="font-size: 0.72rem;">
+                                                <i class="fas fa-minus me-1"></i> Draft
+                                            </span>
+                                        @endif
                                     </td>
                                     <td class="text-center">
                                         <div class="dropdown">
@@ -480,6 +497,16 @@
                                                             <i class="fas fa-shipping-fast text-amber"></i> Dispatch Note</a>
                                                     </li>
                                                 @endcan
+                                                @if($sale->sale_status === 'post')
+                                                    <div class="dropdown-divider"></div>
+                                                    @if($sale->fbr_status === 'posted')
+                                                        <li><a class="dropdown-item text-success fbr-post-btn" href="javascript:void(0);" data-id="{{ $sale->id }}">
+                                                            <i class="fas fa-shield-alt text-success me-1"></i> FBR Info (Posted)</a></li>
+                                                    @else
+                                                        <li><a class="dropdown-item text-warning fbr-post-btn fw-bold" href="javascript:void(0);" data-id="{{ $sale->id }}">
+                                                            <i class="fas fa-cloud-upload-alt text-warning me-1"></i> Post to FBR</a></li>
+                                                    @endif
+                                                @endif
                                                 @if (!$sale->is_fully_returned)
                                                     @if($sale->sale_status === 'post')
                                                         @can('sales.create')
@@ -552,6 +579,14 @@
                     }
                 });
             });
+
+            // Reload page on successful FBR post to reflect badge & invoice number
+            $(document).on('fbr:posted', function(e, data) {
+                setTimeout(function() {
+                    window.location.reload();
+                }, 1200);
+            });
         });
     </script>
+    @include('admin_panel.sale.components.fbr_post_modal')
 @endsection
