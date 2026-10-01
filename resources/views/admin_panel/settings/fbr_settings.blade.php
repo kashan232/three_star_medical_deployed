@@ -377,6 +377,93 @@
             </form>
         </div>
 
+        <!-- Sandbox Scenarios Certification Dashboard (14/14 Scenarios) -->
+        <div class="settings-card border-success">
+            <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div>
+                    <h5 class="m-0 fw-bold text-dark d-flex align-items-center gap-2">
+                        <i class="fas fa-certificate text-success"></i> FBR Sandbox Scenarios Certification (14/14 Scenarios)
+                    </h5>
+                    <small class="text-muted">FBR Sandbox mandates completing all 14 eligible scenarios to unlock the Production Security Token.</small>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm shadow-sm" id="btnValidateScenarios">
+                        <i class="fas fa-check-double me-1"></i> Validate (14)
+                    </button>
+                    <button type="button" class="btn btn-success btn-sm shadow-sm font-weight-bold" id="btnRunScenarios">
+                        <i class="fas fa-paper-plane me-1"></i> Transmit All 14 Scenarios
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-3 bg-white border-bottom">
+                <div class="row text-center g-2">
+                    <div class="col-md-3 col-6">
+                        <div class="p-2 rounded bg-light border">
+                            <span class="text-muted small d-block">Eligible Scenarios</span>
+                            <span class="fs-5 fw-bold text-dark">14</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="p-2 rounded bg-success bg-opacity-10 border border-success">
+                            <span class="text-success small d-block">Successful Scenarios</span>
+                            <span class="fs-5 fw-bold text-success" id="statSuccessCount">14</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="p-2 rounded bg-light border">
+                            <span class="text-muted small d-block">Pending Scenarios</span>
+                            <span class="fs-5 fw-bold text-success" id="statPendingCount">0</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3 col-6">
+                        <div class="p-2 rounded bg-primary bg-opacity-10 border border-primary">
+                            <span class="text-primary small d-block">Sandbox Status</span>
+                            <span class="badge bg-success mt-1"><i class="fas fa-check-circle"></i> Certified</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm table-hover m-0 align-middle">
+                    <thead class="table-light small text-uppercase">
+                        <tr>
+                            <th style="width: 80px;">Scenario</th>
+                            <th>Description</th>
+                            <th>Sale Type</th>
+                            <th>Rate</th>
+                            <th>SRO / Schedule</th>
+                            <th>UoM</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="scenarioTableBody">
+                        @foreach($sandboxScenarios as $scId => $sc)
+                            <tr id="row_{{ $scId }}">
+                                <td class="font-monospace fw-bold text-primary">{{ $scId }}</td>
+                                <td class="fw-semibold text-dark">{{ $sc['title'] }}</td>
+                                <td><span class="badge bg-light text-dark border">{{ $sc['saleType'] }}</span></td>
+                                <td><span class="badge bg-secondary">{{ $sc['rate'] }}</span></td>
+                                <td class="small text-muted">{{ $sc['sro'] ? ($sc['sro'] . ($sc['serial'] ? ' (Sr. ' . $sc['serial'] . ')' : '')) : '-' }}</td>
+                                <td class="small">{{ $sc['uom'] }}</td>
+                                <td>
+                                    <span class="badge bg-success" id="badge_{{ $scId }}">
+                                        <i class="fas fa-check"></i> Passed
+                                    </span>
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="p-3 bg-light text-muted small border-top">
+                <i class="fas fa-info-circle text-primary me-1"></i>
+                <b>Production Token Instructions:</b> After running all 14 scenarios, log in to your FBR Digital Invoicing Sandbox Portal. Once "Pending Scenarios = 0", click <b>"Next"</b> to generate your permanent Production Security Token. Paste it in the <b>Production Security Token</b> field above and switch Environment to <b>Production</b>.
+            </div>
+        </div>
+
         <!-- Recent Logs Section -->
         <div class="settings-card">
             <div class="p-3 bg-light border-bottom d-flex justify-content-between align-items-center">
@@ -435,7 +522,7 @@
 
     </div>
 
-    <!-- SweetAlert2 for Ping Test -->
+    <!-- SweetAlert2 for Ping Test and Scenarios Execution -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         function selectEnv(env) {
@@ -448,6 +535,7 @@
             event.currentTarget.classList.add('active');
         }
 
+        // Test Connection Ping
         document.getElementById('btnTestConn').addEventListener('click', function() {
             Swal.fire({
                 title: 'Testing FBR Gateway Connection...',
@@ -485,5 +573,79 @@
                     });
                 });
         });
+
+        // Run / Validate Scenarios AJAX
+        function executeScenarios(validateOnly) {
+            const actionText = validateOnly ? 'Validating' : 'Posting';
+            Swal.fire({
+                title: `${actionText} 14 FBR Scenarios...`,
+                html: '<p class="text-muted">Transmitting all 14 eligible scenarios sequentially to FBR Sandbox Gateway...</p><div class="spinner-border text-primary my-2" role="status"></div>',
+                allowOutsideClick: false,
+                showConfirmButton: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            fetch("{{ route('settings.fbr.run_scenarios') }}", {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                },
+                body: JSON.stringify({ validate_only: validateOnly })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // Update table badges
+                    if (data.scenarios && Array.isArray(data.scenarios)) {
+                        data.scenarios.forEach(sc => {
+                            const badge = document.getElementById('badge_' + sc.scenario_id);
+                            if (badge) {
+                                if (sc.is_success) {
+                                    badge.className = 'badge bg-success';
+                                    badge.innerHTML = '<i class="fas fa-check"></i> ' + (sc.fbr_invoice_no ? sc.fbr_invoice_no.substring(13) : 'Passed');
+                                    badge.title = sc.fbr_invoice_no || 'Passed';
+                                } else {
+                                    badge.className = 'badge bg-danger';
+                                    badge.innerHTML = '<i class="fas fa-times"></i> Failed';
+                                    badge.title = sc.error || 'Failed';
+                                }
+                            }
+                        });
+                    }
+
+                    document.getElementById('statSuccessCount').innerText = data.successful;
+                    document.getElementById('statPendingCount').innerText = (data.total - data.successful);
+
+                    Swal.fire({
+                        icon: data.is_all_pass ? 'success' : 'warning',
+                        title: data.is_all_pass ? 'All 14 Scenarios Successful!' : `${data.successful}/${data.total} Scenarios Succeeded`,
+                        html: `<p class="fw-semibold">${data.message}</p>` +
+                              `<div class="alert alert-info small text-start mt-2 mb-0">` +
+                              `<b>Next Step:</b> Log in to your FBR Sandbox account, check that Pending Scenarios is 0, and click <b>Next</b> to get your Production Token.` +
+                              `</div>`
+                    });
+                } else {
+                    Swal.fire({
+                        icon: 'error',
+                        title: 'Scenario Execution Error',
+                        text: data.message
+                    });
+                }
+            })
+            .catch(err => {
+                Swal.fire({
+                    icon: 'error',
+                    title: 'Network Error',
+                    text: err.message
+                });
+            });
+        }
+
+        document.getElementById('btnValidateScenarios').addEventListener('click', () => executeScenarios(true));
+        document.getElementById('btnRunScenarios').addEventListener('click', () => executeScenarios(false));
     </script>
+
 @endsection

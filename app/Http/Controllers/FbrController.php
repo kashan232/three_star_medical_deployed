@@ -120,6 +120,7 @@ class FbrController extends Controller
         $sellerAddress = SystemSetting::get('fbr_seller_address', 'M17-M18 SAITH CENTRE SYED MOJ DARYA ROAD LAHORE');
         $defaultHs     = SystemSetting::get('fbr_default_hs_code', '9018.9090');
         $scenarios     = FbrService::getScenarios();
+        $sandboxScenarios = FbrService::getAllSandboxScenarios();
         $defaultScenario = SystemSetting::get('fbr_default_scenario', 'SN001');
 
         $logs = DB::table('fbr_invoice_logs')
@@ -132,8 +133,9 @@ class FbrController extends Controller
         return view('admin_panel.settings.fbr_settings', compact(
             'environment', 'enabled', 'sandboxUrl', 'sandboxValUrl', 'sandboxToken',
             'prodUrl', 'prodValUrl', 'prodToken', 'sellerNtn', 'sellerName',
-            'sellerProvince', 'sellerAddress', 'defaultHs', 'scenarios', 'defaultScenario', 'logs'
+            'sellerProvince', 'sellerAddress', 'defaultHs', 'scenarios', 'sandboxScenarios', 'defaultScenario', 'logs'
         ));
+
     }
 
     /**
@@ -256,4 +258,34 @@ class FbrController extends Controller
             'message'     => $isOk ? 'Successfully connected to FBR Digital Invoicing Gateway!' : 'Could not reach FBR Gateway: ' . ($err ?: 'HTTP ' . $httpCode)
         ]);
     }
+
+    /**
+     * Run all 14 Sandbox Scenarios (API endpoint for the Settings UI)
+     */
+    public function runAllScenarios(Request $request)
+    {
+        try {
+            $validateOnly = $request->boolean('validate_only', false);
+            $res = FbrService::runAllSandboxScenarios($validateOnly);
+
+            return response()->json([
+                'success'     => true,
+                'is_all_pass' => $res['is_all_pass'],
+                'total'       => $res['total'],
+                'successful'  => $res['successful'],
+                'failed'      => $res['failed'],
+                'scenarios'   => array_values($res['scenarios']),
+                'message'     => $res['is_all_pass'] 
+                    ? "All {$res['total']} scenarios passed successfully! Your FBR Sandbox is ready for Production Security Token generation."
+                    : "{$res['successful']} of {$res['total']} scenarios succeeded."
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('FBR runAllScenarios Error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error running scenarios: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
+

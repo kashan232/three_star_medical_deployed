@@ -184,15 +184,9 @@ class FbrService
         $buyerAddress = $customer && !empty($customer->address) ? trim($customer->address) : 'Lahore, Pakistan';
         $buyerProvince = $customer && !empty($customer->city) ? self::mapCityToProvince($customer->city) : $seller['sellerProvince'];
 
-        // 2. Scenario Determination
-        if (!empty($overrideScenario)) {
-            $scenarioId = $overrideScenario;
-        } else {
-            // Default scenarios from user specification:
-            // SN001: Standard rate to Registered
-            // SN002: Standard rate to Unregistered
-            $scenarioId = $isRegistered ? 'SN001' : 'SN002';
-        }
+        // 2. Intelligent Scenario Determination & Line Item Mapping
+        // Determine whether buyer is end-consumer / retail or standard distributor
+        $isRetailCustomer = (!$isRegistered && (empty($rawNtn) || $buyerNtnCnic === '0000000000000'));
 
         // 3. Invoice Header
         $invoiceDate = $sale->sale_date 
@@ -202,9 +196,10 @@ class FbrService
         $defaultHsCode = SystemSetting::get('fbr_default_hs_code', '9018.9090');
         $defaultUom = SystemSetting::get('fbr_default_uom', 'Numbers, pieces, units');
 
-        // 4. Transform Line Items
+        // 4. Transform Line Items & Detect Scenario Profile
         $items = [];
         $descCounts = [];
+        $detectedScenario = null;
 
         foreach ($sale->items as $index => $item) {
             $product = $item->product;
@@ -223,8 +218,79 @@ class FbrService
             $gstAmt = (float)($item->gst_amount ?? round($valExclSt * ($gstRateNum / 100), 2));
             $totalVal = round($valExclSt + $gstAmt, 2);
 
-            $rateStr = $gstRateNum > 0 ? (rtrim(rtrim(number_format($gstRateNum, 2), '0'), '.') . '%') : '0%';
-            $saleType = $gstRateNum > 0 ? 'Goods at standard rate (default)' : 'Exempt goods';
+            // Determine line saleType, rate, SRO schedule and serial
+            $itemSaleType = $item->sale_type ?? ($product?->sale_type ?? '');
+            $sroSchedule = $item->sro_schedule ?? ($product?->sro_schedule ?? '');
+            $sroSerial = $item->sro_item_serial ?? ($product?->sro_item_serial ?? '');
+            $retailPrice = (float)($item->retail_price ?? ($product?->retail_price ?? 0.0));
+            $uom = $defaultUom;
+
+            if (str_contains(strtolower($itemSaleType), '3rd schedule') || (!empty($retailPrice) && $retailPrice > 0 && $gstRateNum == 18)) {
+                // 3rd Schedule Goods
+                $saleType = ' 3rd Schedule Goods ';
+                $rateStr = '18%';
+                $retailPrice = ($retailPrice > 0) ? $retailPrice : $valExclSt;
+                $sroSchedule = '';
+                $sroSerial = '';
+                $lineScenario = $isRetailCustomer ? 'SN027' : 'SN008';
+            } elseif ($gstRateNum == 0 && (str_contains(strtolower($itemSaleType), 'zero') || str_contains(strtolower($sroSchedule), 'fifth'))) {
+                // Zero-Rated Goods (Fifth Schedule)
+                $saleType = 'Goods at zero-rate';
+                $rateStr = '0%';
+                $sroSchedule = 'FIFTH SCHEDULE';
+                $sroSerial = !empty($sroSerial) ? $sroSerial : '10';
+                $lineScenario = 'SN007';
+            } elseif ($gstRateNum == 0 && (str_contains(strtolower($itemSaleType), 'exempt') || str_contains(strtolower($rateStr ?? ''), 'exempt') || empty($itemSaleType))) {
+                // Exempt Goods (Sixth Schedule)
+                $saleType = 'Exempt goods';
+                $rateStr = 'Exempt';
+                $sroSchedule = '6th Schd Table I';
+                $sroSerial = !empty($sroSerial) ? $sroSerial : '100';
+                $lineScenario = 'SN006';
+            } elseif ($gstRateNum > 0 && $gstRateNum < 18) {
+                // Reduced Rate Goods (Eighth Schedule)
+                $saleType = 'Goods at Reduced Rate';
+                $rateStr = rtrim(rtrim(number_format($gstRateNum, 2), '0'), '.') . '%';
+                $sroSchedule = 'EIGHTH SCHEDULE Table 1';
+                $sroSerial = !empty($sroSerial) ? $sroSerial : '70';
+                $lineScenario = $isRetailCustomer ? 'SN028' : 'SN005';
+            } elseif ($gstRateNum == 25 || str_contains(strtolower($itemSaleType), '297')) {
+                // SRO 297(I)/2023
+                $saleType = 'Goods as per SRO.297(|)/2023';
+                $rateStr = '25%';
+                $sroSchedule = '297(I)/2023-Table-I';
+                $sroSerial = !empty($sroSerial) ? $sroSerial : '12';
+                $lineScenario = 'SN024';
+            } elseif (str_contains(strtolower($itemSaleType), 'service')) {
+                // Services
+                $saleType = ' Services ';
+                $rateStr = '16%';
+                $sroSchedule = '';
+                $sroSerial = '';
+                $lineScenario = 'SN019';
+            } elseif (str_contains(strtolower($itemSaleType), 'processing')) {
+                // Processing/Conversion
+                $saleType = 'Processing/Conversion of Goods';
+                $rateStr = '18%';
+                $sroSchedule = '';
+                $sroSerial = '';
+                $lineScenario = 'SN016';
+            } else {
+                // Standard Rate Goods (18%)
+                $saleType = 'Goods at standard rate (default)';
+                $rateStr = '18%';
+                $sroSchedule = '';
+                $sroSerial = '';
+                if ($isRegistered) {
+                    $lineScenario = 'SN001';
+                } else {
+                    $lineScenario = $isRetailCustomer ? 'SN026' : 'SN002';
+                }
+            }
+
+            if (!$detectedScenario) {
+                $detectedScenario = $lineScenario;
+            }
 
             $baseDesc = trim(($item->product_name ?: $product?->item_name ?: 'Medical Item') . ' ' . ($product?->brand?->name ?? ''));
             // Ensure unique description per line to avoid FBR "DUPLICATE INVOICE EXISTS" error on multi-line same items
@@ -242,22 +308,26 @@ class FbrService
                 'hsCode'                          => $cleanHs,
                 'productDescription'             => $finalDesc,
                 'rate'                            => $rateStr,
-                'uoM'                             => $defaultUom,
+                'uoM'                             => $uom,
                 'quantity'                        => $qty,
                 'totalValues'                     => $totalVal,
                 'valueSalesExcludingST'           => $valExclSt,
-                'fixedNotifiedValueOrRetailPrice' => 0.0,
+                'fixedNotifiedValueOrRetailPrice' => $retailPrice,
                 'salesTaxApplicable'              => $gstAmt,
                 'salesTaxWithheldAtSource'        => 0.0,
                 'extraTax'                        => '',
                 'furtherTax'                      => 0.0,
-                'sroScheduleNo'                   => '',
+                'sroScheduleNo'                   => $sroSchedule,
                 'fedPayable'                      => 0.0,
                 'discount'                        => $disc,
                 'saleType'                        => $saleType,
-                'sroItemSerialNo'                 => ''
+                'sroItemSerialNo'                 => $sroSerial
             ];
         }
+
+        // Final Scenario selection
+        $scenarioId = !empty($overrideScenario) ? $overrideScenario : ($detectedScenario ?? ($isRegistered ? 'SN001' : 'SN002'));
+
 
         // Fallback item if invoice has no lines
         if (empty($items)) {
@@ -529,6 +599,388 @@ class FbrService
     }
 
     /**
+     * Get definitions of all 14 FBR Sandbox Scenarios required for production authorization
+     */
+    public static function getAllSandboxScenarios(): array
+    {
+        return [
+            'SN001' => [
+                'title'     => 'Standard Rate Goods to Registered Buyers',
+                'saleType'  => 'Goods at standard rate (default)',
+                'rate'      => '18%',
+                'val'       => 1000.0,
+                'tax'       => 180.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => '',
+                'serial'    => '',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '2046004',
+                'buyerName' => 'FERTILIZER MANUFACTURERS NEW',
+                'buyerReg'  => 'Registered',
+            ],
+            'SN002' => [
+                'title'     => 'Standard Rate Goods to Unregistered Buyers',
+                'saleType'  => 'Goods at standard rate (default)',
+                'rate'      => '18%',
+                'val'       => 1000.0,
+                'tax'       => 180.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => '',
+                'serial'    => '',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN005' => [
+                'title'     => 'Reduced Rate Goods (Eighth Schedule)',
+                'saleType'  => 'Goods at Reduced Rate',
+                'rate'      => '1%',
+                'val'       => 1000.0,
+                'tax'       => 10.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => 'EIGHTH SCHEDULE Table 1',
+                'serial'    => '70',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN006' => [
+                'title'     => 'Exempt Goods (Sixth Schedule)',
+                'saleType'  => 'Exempt goods',
+                'rate'      => 'Exempt',
+                'val'       => 1000.0,
+                'tax'       => 0.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => '6th Schd Table I',
+                'serial'    => '100',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN007' => [
+                'title'     => 'Zero-Rated Goods (Fifth Schedule)',
+                'saleType'  => 'Goods at zero-rate',
+                'rate'      => '0%',
+                'val'       => 1000.0,
+                'tax'       => 0.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => 'FIFTH SCHEDULE',
+                'serial'    => '10',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN008' => [
+                'title'     => 'Sale of 3rd Schedule Goods',
+                'saleType'  => ' 3rd Schedule Goods ',
+                'rate'      => '18%',
+                'val'       => 1000.0,
+                'tax'       => 180.0,
+                'retail'    => 1000.0,
+                'fed'       => 0.0,
+                'sro'       => '',
+                'serial'    => '',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN016' => [
+                'title'     => 'Processing / Conversion of Goods',
+                'saleType'  => 'Processing/Conversion of Goods',
+                'rate'      => '18%',
+                'val'       => 1000.0,
+                'tax'       => 180.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => '',
+                'serial'    => '',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN017' => [
+                'title'     => 'Goods Subject to FED in ST Mode',
+                'saleType'  => 'Goods (FED in ST Mode)',
+                'rate'      => '17%',
+                'val'       => 1000.0,
+                'tax'       => 170.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => '',
+                'serial'    => '',
+                'hs'        => '2710.1240',
+                'uom'       => 'KG',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+                'invoiceDate' => '2025-06-15',
+            ],
+            'SN018' => [
+                'title'     => 'Services Where FED Is Charged in ST Mode',
+                'saleType'  => ' Services (FED in ST Mode) ',
+                'rate'      => '16%',
+                'val'       => 1000.0,
+                'tax'       => 160.0,
+                'retail'    => 0.0,
+                'fed'       => 50.0,
+                'sro'       => '',
+                'serial'    => '',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN019' => [
+                'title'     => 'Services (as per ICT Ordinance)',
+                'saleType'  => ' Services ',
+                'rate'      => '16%',
+                'val'       => 1000.0,
+                'tax'       => 160.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => '',
+                'serial'    => '',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN024' => [
+                'title'     => 'Goods Listed in SRO 297(I)/2023',
+                'saleType'  => 'Goods as per SRO.297(|)/2023',
+                'rate'      => '25%',
+                'val'       => 1000.0,
+                'tax'       => 250.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => '297(I)/2023-Table-I',
+                'serial'    => '12',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN025' => [
+                'title'     => 'Drugs Sold at Fixed ST Rate (Serial 81)',
+                'saleType'  => 'Non-Adjustable Supplies',
+                'rate'      => '0%',
+                'val'       => 1000.0,
+                'tax'       => 0.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => 'Eighth Schedule Table 1',
+                'serial'    => '81',
+                'hs'        => '3004.9099',
+                'uom'       => 'KG',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN026' => [
+                'title'     => 'Standard Rate Goods to End Consumers by Retailers',
+                'saleType'  => 'Goods at standard rate (default)',
+                'rate'      => '18%',
+                'val'       => 1000.0,
+                'tax'       => 180.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => '',
+                'serial'    => '',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN027' => [
+                'title'     => '3rd Schedule Goods to End Consumers by Retailers',
+                'saleType'  => ' 3rd Schedule Goods ',
+                'rate'      => '18%',
+                'val'       => 1000.0,
+                'tax'       => 180.0,
+                'retail'    => 1000.0,
+                'fed'       => 0.0,
+                'sro'       => '',
+                'serial'    => '',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+            'SN028' => [
+                'title'     => 'Reduced Rate Goods to End Consumers by Retailers',
+                'saleType'  => 'Goods at Reduced Rate',
+                'rate'      => '1%',
+                'val'       => 1000.0,
+                'tax'       => 10.0,
+                'retail'    => 0.0,
+                'fed'       => 0.0,
+                'sro'       => 'EIGHTH SCHEDULE Table 1',
+                'serial'    => '70',
+                'hs'        => '9018.9090',
+                'uom'       => 'Numbers, pieces, units',
+                'buyerNtn'  => '0000000000000',
+                'buyerName' => 'Walk-in Consumer',
+                'buyerReg'  => 'Unregistered',
+            ],
+        ];
+    }
+
+    /**
+     * Run all 14 Sandbox Scenarios against FBR gateway (Validate or Post)
+     */
+    public static function runAllSandboxScenarios(bool $validateOnly = false): array
+    {
+        self::ensureSchemaExists();
+
+        $scenarios = self::getAllSandboxScenarios();
+        $seller = self::getSellerDetails();
+        $token = self::getToken();
+        $url = $validateOnly ? self::getValidateUrl() : self::getPostUrl();
+
+        $results = [];
+        $successful = 0;
+        $failed = 0;
+
+        foreach ($scenarios as $scId => $item) {
+            $payload = [
+                'invoiceType'           => 'Sale Invoice',
+                'invoiceDate'           => $item['invoiceDate'] ?? date('Y-m-d'),
+                'sellerNTNCNIC'         => $seller['sellerNTNCNIC'],
+                'sellerBusinessName'    => $seller['sellerBusinessName'],
+                'sellerProvince'        => $seller['sellerProvince'],
+                'sellerAddress'         => $seller['sellerAddress'],
+                'buyerNTNCNIC'          => $item['buyerNtn'],
+                'buyerBusinessName'     => $item['buyerName'],
+                'buyerProvince'         => $seller['sellerProvince'],
+                'buyerAddress'          => 'Lahore, Pakistan',
+                'buyerRegistrationType' => $item['buyerReg'],
+                'invoiceRefNo'          => '',
+                'scenarioId'            => $scId,
+                'items'                 => [
+                    [
+                        'hsCode'                          => $item['hs'],
+                        'productDescription'             => 'Sample - ' . $scId . ' (' . $item['title'] . ')',
+                        'rate'                            => $item['rate'],
+                        'uoM'                             => $item['uom'],
+                        'quantity'                        => 1,
+                        'totalValues'                     => $item['val'] + $item['tax'] + $item['fed'],
+                        'valueSalesExcludingST'           => $item['val'],
+                        'fixedNotifiedValueOrRetailPrice' => $item['retail'],
+                        'salesTaxApplicable'              => $item['tax'],
+                        'salesTaxWithheldAtSource'        => 0.0,
+                        'extraTax'                        => '',
+                        'furtherTax'                      => 0.0,
+                        'sroScheduleNo'                   => $item['sro'],
+                        'fedPayable'                      => $item['fed'],
+                        'discount'                        => 0.0,
+                        'saleType'                        => $item['saleType'],
+                        'sroItemSerialNo'                 => $item['serial']
+                    ]
+                ]
+            ];
+
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Authorization: Bearer ' . $token,
+                'Content-Type: application/json',
+                'Accept: application/json'
+            ]);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload, JSON_UNESCAPED_SLASHES));
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+
+            $resp = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+
+            $json = json_decode($resp, true);
+            $status = $json['validationResponse']['status'] ?? 'HTTP ' . $httpCode;
+            $fbrInv = $json['invoiceNumber'] ?? ($json['validationResponse']['invoiceStatuses'][0]['invoiceNo'] ?? null);
+            $err = $json['validationResponse']['error'] ?? '';
+            if (!$err && !empty($json['validationResponse']['invoiceStatuses'][0]['error'])) {
+                $err = $json['validationResponse']['invoiceStatuses'][0]['error'];
+            }
+
+            $isSuccess = ($status === 'Valid');
+            if ($isSuccess) {
+                $successful++;
+            } else {
+                $failed++;
+            }
+
+            // Log attempt
+            try {
+                \Illuminate\Support\Facades\DB::table('fbr_invoice_logs')->insert([
+                    'sale_id'          => 1,
+                    'action'           => $validateOnly ? 'validate' : 'post',
+                    'environment'      => 'sandbox',
+                    'scenario_id'      => $scId,
+                    'request_payload'  => json_encode($payload),
+                    'response_payload' => $resp,
+                    'http_code'        => $httpCode,
+                    'status_code'      => $json['validationResponse']['statusCode'] ?? (string)$httpCode,
+                    'status'           => $status,
+                    'fbr_invoice_no'   => $fbrInv,
+                    'error_message'    => $err,
+                    'created_by'       => auth()->id() ?? 1,
+                    'created_at'       => now(),
+                    'updated_at'       => now(),
+                ]);
+            } catch (\Throwable $e) {
+                // ignore log error
+            }
+
+            $results[$scId] = [
+                'scenario_id'    => $scId,
+                'title'          => $item['title'],
+                'sale_type'      => $item['saleType'],
+                'rate'           => $item['rate'],
+                'sro'            => $item['sro'],
+                'serial'         => $item['serial'],
+                'status'         => $status,
+                'is_success'     => $isSuccess,
+                'fbr_invoice_no' => $fbrInv,
+                'error'          => $err,
+            ];
+
+            usleep(250000);
+        }
+
+        return [
+            'total'       => count($scenarios),
+            'successful'  => $successful,
+            'failed'      => $failed,
+            'is_all_pass' => ($successful === count($scenarios)),
+            'scenarios'   => $results
+        ];
+    }
+
+    /**
      * Get list of all FBR Digital Invoicing scenarios for dropdowns
      */
     public static function getScenarios(): array
@@ -536,13 +988,14 @@ class FbrService
         return [
             'SN001' => 'SN001: Sale of Standard Rate Goods to Registered Buyers',
             'SN002' => 'SN002: Sale of Standard Rate Goods to Unregistered Buyers',
-            'SN003' => 'SN003: Sale of Steel (Melted and Re-Rolled)',
-            'SN004' => 'SN004: Sale of Steel Scrap by Ship Breakers',
             'SN005' => 'SN005: Sale of Reduced Rate Goods (Eighth Schedule)',
             'SN006' => 'SN006: Sale of Exempt Goods (Sixth Schedule)',
             'SN007' => 'SN007: Sale of Zero-Rated Goods (Fifth Schedule)',
             'SN008' => 'SN008: Sale of 3rd Schedule Goods',
-            'SN024' => 'SN024: Sale Of Goods Listed In SRO 297(I)/2023',
+            'SN016' => 'SN016: Processing / Conversion of Goods',
+            'SN018' => 'SN018: Services Where FED Is Charged in ST Mode',
+            'SN019' => 'SN019: Services (as per ICT Ordinance)',
+            'SN024' => 'SN024: Sale Of Goods Listed in SRO 297(I)/2023',
             'SN025' => 'SN025: Drugs Sold at Fixed ST Rate Under Serial 81 Of Eighth Schedule Table 1',
             'SN026' => 'SN026: Sale Of Goods at Standard Rate to End Consumers by Retailers',
             'SN027' => 'SN027: Sale Of 3rd Schedule Goods to End Consumers by Retailers',
@@ -550,3 +1003,4 @@ class FbrService
         ];
     }
 }
+
