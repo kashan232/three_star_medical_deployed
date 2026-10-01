@@ -62,6 +62,34 @@ class FbrService
                     $table->timestamps();
                 });
             }
+
+            if (Schema::hasTable('system_settings')) {
+                DB::table('system_settings')->updateOrInsert(
+                    ['key' => 'fbr_environment'],
+                    ['value' => 'production', 'type' => 'string', 'group' => 'fbr', 'label' => 'FBR Environment', 'created_at' => now(), 'updated_at' => now()]
+                );
+                DB::table('system_settings')->updateOrInsert(
+                    ['key' => 'fbr_production_token'],
+                    ['value' => '355f0259-8d4e-355c-8b97-0ce8d0abe39f', 'type' => 'string', 'group' => 'fbr', 'label' => 'FBR Production Security Token', 'created_at' => now(), 'updated_at' => now()]
+                );
+                DB::table('system_settings')->updateOrInsert(
+                    ['key' => 'fbr_production_url'],
+                    ['value' => 'https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata', 'type' => 'string', 'group' => 'fbr', 'label' => 'FBR Production Post URL', 'created_at' => now(), 'updated_at' => now()]
+                );
+                DB::table('system_settings')->updateOrInsert(
+                    ['key' => 'fbr_production_validate_url'],
+                    ['value' => 'https://gw.fbr.gov.pk/di_data/v1/di/validateinvoicedata', 'type' => 'string', 'group' => 'fbr', 'label' => 'FBR Production Validate URL', 'created_at' => now(), 'updated_at' => now()]
+                );
+                DB::table('system_settings')->updateOrInsert(
+                    ['key' => 'fbr_enabled'],
+                    ['value' => '1', 'type' => 'boolean', 'group' => 'fbr', 'label' => 'Enable FBR Integration', 'created_at' => now(), 'updated_at' => now()]
+                );
+                \Illuminate\Support\Facades\Cache::forget('setting_fbr_environment');
+                \Illuminate\Support\Facades\Cache::forget('setting_fbr_production_token');
+                \Illuminate\Support\Facades\Cache::forget('setting_fbr_production_url');
+                \Illuminate\Support\Facades\Cache::forget('setting_fbr_production_validate_url');
+                \Illuminate\Support\Facades\Cache::forget('setting_fbr_enabled');
+            }
         } catch (\Throwable $e) {
             Log::error('FBR ensureSchemaExists Error: ' . $e->getMessage());
         }
@@ -71,7 +99,7 @@ class FbrService
      */
     public static function getEnvironment(): string
     {
-        return SystemSetting::get('fbr_environment', 'sandbox');
+        return SystemSetting::get('fbr_environment', 'production');
     }
 
     /**
@@ -113,7 +141,7 @@ class FbrService
     {
         $env = self::getEnvironment();
         if ($env === 'production') {
-            return SystemSetting::get('fbr_production_token', '');
+            return SystemSetting::get('fbr_production_token', '355f0259-8d4e-355c-8b97-0ce8d0abe39f');
         }
         return SystemSetting::get('fbr_sandbox_token', 'c2bb2ccd-c57d-3f97-9b8b-0fbc84d598d8');
     }

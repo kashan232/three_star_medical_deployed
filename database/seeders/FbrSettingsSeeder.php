@@ -11,13 +11,13 @@ class FbrSettingsSeeder extends Seeder
     {
         $settings = [
             ['key' => 'fbr_enabled', 'value' => '1', 'type' => 'boolean', 'group' => 'fbr', 'label' => 'Enable FBR Digital Invoicing', 'description' => 'Toggle FBR integration on or off'],
-            ['key' => 'fbr_environment', 'value' => 'sandbox', 'type' => 'string', 'group' => 'fbr', 'label' => 'FBR Environment', 'description' => 'Current active mode: sandbox or production'],
+            ['key' => 'fbr_environment', 'value' => 'production', 'type' => 'string', 'group' => 'fbr', 'label' => 'FBR Environment', 'description' => 'Current active mode: sandbox or production'],
             ['key' => 'fbr_sandbox_url', 'value' => 'https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata_sb', 'type' => 'string', 'group' => 'fbr', 'label' => 'Sandbox Post URL', 'description' => 'Endpoint to submit invoices in sandbox'],
             ['key' => 'fbr_sandbox_validate_url', 'value' => 'https://gw.fbr.gov.pk/di_data/v1/di/validateinvoicedata_sb', 'type' => 'string', 'group' => 'fbr', 'label' => 'Sandbox Validate URL', 'description' => 'Endpoint to validate invoice data in sandbox'],
             ['key' => 'fbr_sandbox_token', 'value' => 'c2bb2ccd-c57d-3f97-9b8b-0fbc84d598d8', 'type' => 'string', 'group' => 'fbr', 'label' => 'Sandbox Bearer Token', 'description' => 'Security token for sandbox API'],
             ['key' => 'fbr_production_url', 'value' => 'https://gw.fbr.gov.pk/di_data/v1/di/postinvoicedata', 'type' => 'string', 'group' => 'fbr', 'label' => 'Production Post URL', 'description' => 'Endpoint to submit invoices in production'],
             ['key' => 'fbr_production_validate_url', 'value' => 'https://gw.fbr.gov.pk/di_data/v1/di/validateinvoicedata', 'type' => 'string', 'group' => 'fbr', 'label' => 'Production Validate URL', 'description' => 'Endpoint to validate invoice data in production'],
-            ['key' => 'fbr_production_token', 'value' => '', 'type' => 'string', 'group' => 'fbr', 'label' => 'Production Bearer Token', 'description' => 'Security token for production API'],
+            ['key' => 'fbr_production_token', 'value' => '355f0259-8d4e-355c-8b97-0ce8d0abe39f', 'type' => 'string', 'group' => 'fbr', 'label' => 'Production Bearer Token', 'description' => 'Security token for production API'],
             ['key' => 'fbr_seller_ntn', 'value' => '3520224331243', 'type' => 'string', 'group' => 'fbr', 'label' => 'Seller NTN / CNIC', 'description' => 'Registered NTN or CNIC of the seller'],
             ['key' => 'fbr_seller_name', 'value' => 'THREE STARS MEDICAL SUPPLIES', 'type' => 'string', 'group' => 'fbr', 'label' => 'Seller Business Name', 'description' => 'Registered business name of the seller'],
             ['key' => 'fbr_seller_province', 'value' => 'Punjab', 'type' => 'string', 'group' => 'fbr', 'label' => 'Seller Province', 'description' => 'Province of the business location'],
