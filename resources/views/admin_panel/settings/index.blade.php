@@ -54,6 +54,10 @@
                             <h6 class="text-muted mb-3 font-weight-bold text-uppercase"
                                 style="font-size: 0.8rem; letter-spacing: 1px;">Advanced Actions</h6>
                             <div class="d-flex flex-wrap">
+                                <a href="{{ route('settings.fbr') }}"
+                                    class="btn btn-outline-success mr-2 mb-2 shadow-sm font-weight-bold">
+                                    <i class="fas fa-university mr-2"></i> FBR Settings
+                                </a>
                                 <a href="{{ route('settings.return-policy') }}"
                                     class="btn btn-outline-primary mr-2 mb-2 shadow-sm">
                                     <i class="fas fa-undo-alt mr-2"></i> Return Policy
