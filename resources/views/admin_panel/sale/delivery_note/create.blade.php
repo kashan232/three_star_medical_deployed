@@ -973,6 +973,7 @@
             <td>
                 <input type="hidden" name="product_id[]" value="${item.product_id}" id="pid-${i}">
                 <input type="hidden" name="sale_item_id[]" value="${item.sale_item_id}" id="siid-${i}">
+                <input type="hidden" name="uom_id[]" value="${item.uom_id || ''}" id="uomid-${i}">
                 <input type="hidden" id="ppb-${i}" value="${ppb}">
                 <input type="hidden" id="stock-${i}" value="${stockPieces}">
                 <div class="fw-600 text-dark">${item.product_name}</div>

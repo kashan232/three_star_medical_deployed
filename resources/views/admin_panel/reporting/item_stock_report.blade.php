@@ -863,6 +863,7 @@
                             <div class="filter-group" style="flex-direction: row; gap: 6px; align-items: flex-end; min-width: 400px; margin-left: 10px; flex: 1.5;">
                                 <button type="button" class="btn-filter-action btn-filter-search" id="btnSearch" style="flex: 1;">🔍 Search</button>
                                 <button type="button" class="btn-filter-action btn-filter-reset" id="btnReset" style="flex: 1;">↺ Reset</button>
+                                <button type="button" id="btnSyncStock" class="btn-filter-action" style="flex: 1.1; background:#0284c7; color:#fff;" title="Reconcile and sync stock with ledger">🔄 Sync Stock</button>
                                 <button type="button" id="btnExportExcel" class="btn-filter-action btn-excel-action" style="flex: 1.2;" title="Export Excel Spreadsheet">📊 Export Excel</button>
                                 <button type="button" id="btnExportPdf" class="btn-filter-action btn-pdf-action" style="flex: 1.2;" title="Export Detail PDF">📄 Export PDF</button>
                                 <button type="button" onclick="printReport()" class="btn-filter-action btn-print-action" style="flex: 1;" title="Print View">🖨 Print</button>
@@ -1587,6 +1588,27 @@
             // ── Event bindings ───────────────────────────────────────────────────
             $('#btnSearch').on('click', function() {
                 fetchReport();
+            });
+
+            $('#btnSyncStock').on('click', function() {
+                if (!confirm('Are you sure you want to reconcile and synchronize physical warehouse stock with ledger transactions?')) return;
+                $('#loaderOverlay').css('display', 'flex');
+                $.ajax({
+                    url: "{{ route('report.item_stock.sync') }}",
+                    type: 'POST',
+                    data: {
+                        _token: "{{ csrf_token() }}",
+                        product_id: $('#product_id').val() || 'all'
+                    },
+                    success: function(res) {
+                        alert(res.message || 'Stock successfully synchronized!');
+                        fetchReport();
+                    },
+                    error: function() {
+                        $('#loaderOverlay').hide();
+                        alert('Stock sync error. Please try again.');
+                    }
+                });
             });
 
             // Handle Category change to cascade Sub-Category

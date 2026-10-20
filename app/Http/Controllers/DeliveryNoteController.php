@@ -166,7 +166,8 @@ class DeliveryNoteController extends Controller
 
                     $warehouseId = (int)$warehouseIds[$i];
                     $selectedBatchId = (int)($batchIds[$i] ?? 0) ?: null;
-                    $deductions = \App\Http\Controllers\ProductBatchController::deductFromBatches($pid, $totalPiecesToDeduct, $warehouseId, $selectedBatchId, $branchId);
+                    $targetBranchId = \App\Models\Warehouse::find($warehouseId)?->branch_id ?? $branchId;
+                    $deductions = \App\Http\Controllers\ProductBatchController::deductFromBatches($pid, $totalPiecesToDeduct, $warehouseId, $selectedBatchId, $targetBranchId);
 
                     $pBatchId = null; $pLot = null; $pMfg = null; $pExp = null;
                     if (!empty($deductions)) {
@@ -193,7 +194,7 @@ class DeliveryNoteController extends Controller
                         }
                     }
 
-                    \App\Services\StockService::debit($pid, $dcItem->uom_id, $warehouseId, $branchId, $totalPiecesToDeduct);
+                    \App\Services\StockService::debit($pid, $dcItem->uom_id, $warehouseId, $targetBranchId, $totalPiecesToDeduct);
                     
                     $refType = ($deliveryType === 'donation') ? 'donation' : 'dc';
                     $movementNote = ($deliveryType === 'donation') ? 'Donation/Sample DC #' . $dcNote->dc_no : 'DC #' . $dcNote->dc_no;
@@ -281,7 +282,8 @@ class DeliveryNoteController extends Controller
                     $lineTotal = $pieces * (float)($prices[$i] ?? 0);
                     $subtotal += $lineTotal;
 
-                    $deductions = \App\Http\Controllers\ProductBatchController::deductFromBatches($pid, $totalPcs, (int)$wIds[$i], (int)($bIds[$i] ?? 0) ?: null, $branchId);
+                    $targetBranchId = \App\Models\Warehouse::find((int)$wIds[$i])?->branch_id ?? $branchId;
+                    $deductions = \App\Http\Controllers\ProductBatchController::deductFromBatches($pid, $totalPcs, (int)$wIds[$i], (int)($bIds[$i] ?? 0) ?: null, $targetBranchId);
                     $pB = null; $pL = null; $pM = null; $pE = null;
                     if (!empty($deductions)) {
                         $b = \App\Models\ProductBatch::find($deductions[0]['batch_id']);
@@ -307,7 +309,7 @@ class DeliveryNoteController extends Controller
                         }
                     }
 
-                    \App\Services\StockService::debit($pid, $dcItem->uom_id, (int)$wIds[$i], $branchId, $totalPcs);
+                    \App\Services\StockService::debit($pid, $dcItem->uom_id, (int)$wIds[$i], $targetBranchId, $totalPcs);
                     $refType = ($dcNote->delivery_type === 'donation') ? 'donation' : 'dc';
                     $movementNote = ($dcNote->delivery_type === 'donation') ? 'Donation/Sample DC Update #' . $dcNote->dc_no : 'DC Update #'.$dcNote->dc_no;
                     DB::table('stock_movements')->insert([
@@ -404,6 +406,7 @@ class DeliveryNoteController extends Controller
                 'product_code' => $i->product->item_code ?? '', 'hs_code' => $i->product->hs_code ?? '', 'ppb' => $ppb,
                 'so_total_pieces' => $i->total_pieces, 'remaining_pieces' => $rem, 'price' => $i->price,
                 'warehouse_id' => $i->warehouse_id, 'warehouse_stock' => $wStock ? (int)$wStock->total_pieces : 0,
+                'uom_id' => $i->uom_id,
                 'uom' => $i->uom->name ?? ($i->uom_name ?? ($i->product->unit->name ?? 'Piece')),
             ];
         });

@@ -1692,6 +1692,8 @@ class SaleController extends Controller
 
         foreach ($sale->items as $item) {
             $warehouseId = $item->warehouse_id;
+            $whObj       = Warehouse::find($warehouseId);
+            $itemBranchId = $whObj?->branch_id ?? $branchId;
             $productId   = $item->product_id;
             $uomId       = $item->uom_id ?? null;
             $qtyPieces   = (float) ($item->total_pieces ?? 0);
@@ -1702,7 +1704,7 @@ class SaleController extends Controller
 
             if ($type === 'out') {
                 // Deduct main warehouse inventory via StockService
-                StockService::debit($productId, $uomId, $warehouseId, $branchId, $qtyPieces);
+                StockService::debit($productId, $uomId, $warehouseId, $itemBranchId, $qtyPieces);
 
                 // Movement log
                 DB::table('stock_movements')->insert([
@@ -1717,7 +1719,7 @@ class SaleController extends Controller
                 ]);
 
             } elseif ($type === 'in' || $type === 'return') {
-                StockService::credit($productId, $uomId, $warehouseId, $branchId, $qtyPieces);
+                StockService::credit($productId, $uomId, $warehouseId, $itemBranchId, $qtyPieces);
 
                 DB::table('stock_movements')->insert([
                     'product_id'  => $productId,

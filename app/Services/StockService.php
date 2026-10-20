@@ -56,6 +56,12 @@ class StockService
         int   $branchId,
         float $pieceDelta
     ): void {
+        // Ensure branch_id matches warehouse if available
+        $wh = Warehouse::find($warehouseId);
+        if ($wh && $wh->branch_id) {
+            $branchId = (int)$wh->branch_id;
+        }
+
         // Resolve pieces_per_box from UOM record, or from product master
         $ppb = static::resolvePpb($productId, $uomId);
 
@@ -81,13 +87,42 @@ class StockService
                 ->first();
         }
 
+        if ($pieceDelta < 0) {
+            $remainingToDebit = abs($pieceDelta);
+
+            if ($stock) {
+                $deduct = min((float)$stock->total_pieces, $remainingToDebit);
+                $stock->total_pieces = max(0, $stock->total_pieces - $deduct);
+                $stock->quantity     = static::piecesToDisplay($stock->total_pieces, $ppb);
+                $stock->branch_id    = $branchId;
+                $stock->save();
+                $remainingToDebit   -= $deduct;
+            }
+
+            if ($remainingToDebit > 0) {
+                $otherStocks = WarehouseStock::where('warehouse_id', $warehouseId)
+                    ->where('product_id', $productId)
+                    ->where('total_pieces', '>', 0)
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($otherStocks as $os) {
+                    if ($remainingToDebit <= 0) break;
+                    $deduct = min((float)$os->total_pieces, $remainingToDebit);
+                    $os->total_pieces = max(0, $os->total_pieces - $deduct);
+                    $osPpb = static::resolvePpb($productId, $os->uom_id);
+                    $os->quantity = static::piecesToDisplay($os->total_pieces, $osPpb);
+                    $os->branch_id = $branchId;
+                    $os->save();
+                    $remainingToDebit -= $deduct;
+                }
+            }
+            return;
+        }
+
         if ($stock) {
             $newPieces = $stock->total_pieces + $pieceDelta;
-
-            // Guard: never go below 0
-            if ($newPieces < 0) {
-                $newPieces = 0;
-            }
+            if ($newPieces < 0) $newPieces = 0;
 
             $stock->total_pieces = $newPieces;
             $stock->quantity     = static::piecesToDisplay($newPieces, $ppb);
@@ -96,7 +131,6 @@ class StockService
         } else {
             // Only create a new row on CREDIT operations
             if ($pieceDelta <= 0) {
-                // Nothing to debit — stock row does not exist; ignore
                 return;
             }
 

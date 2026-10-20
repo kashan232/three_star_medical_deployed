@@ -458,6 +458,7 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/report/item-stock', [ReportingController::class, 'item_stock_report'])->middleware('permission:item.stock.report.view')->name('report.item_stock');
     Route::post('/report/item-stock-fetch', [ReportingController::class, 'fetchItemStock'])->middleware('permission:item.stock.report.view')->name('report.item_stock.fetch');
+    Route::post('/report/item-stock/sync', [ReportingController::class, 'syncItemStock'])->middleware('permission:item.stock.report.view')->name('report.item_stock.sync');
     Route::get('report/item-stock/export/excel', [ReportingController::class, 'exportItemStockExcel'])->middleware('permission:item.stock.report.view')->name('report.item_stock.export.excel');
     Route::get('report/item-stock/export/pdf', [ReportingController::class, 'exportItemStockPdf'])->middleware('permission:item.stock.report.view')->name('report.item_stock.export.pdf');
 

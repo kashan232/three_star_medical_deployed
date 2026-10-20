@@ -658,6 +658,13 @@ class ReportingController extends Controller
         return response()->json($data);
     }
 
+    public function syncItemStock(Request $request)
+    {
+        $productId = $request->filled('product_id') && $request->product_id !== 'all' && is_numeric($request->product_id) ? (int)$request->product_id : null;
+        $result = \App\Services\StockReconciliationService::reconcile($productId);
+        return response()->json($result);
+    }
+
     public function exportItemStockExcel(Request $request)
     {
         $d = $this->buildItemStockData($request);

@@ -255,7 +255,8 @@ class ProductBatchController extends Controller
      */
     public static function deductFromBatches(int $productId, float $qtyNeeded, int $warehouseId, ?int $batchId = null, ?int $branchId = null): array
     {
-        $branchId = $branchId ?? request()->active_branch_id ?? session('super_admin_branch_id') ?? 1;
+        $warehouse = \App\Models\Warehouse::find($warehouseId);
+        $branchId = $branchId ?? $warehouse?->branch_id ?? request()->active_branch_id ?? session('super_admin_branch_id') ?? 1;
 
         return DB::transaction(function () use ($productId, $qtyNeeded, $warehouseId, $batchId, $branchId) {
             $deductions = [];
@@ -265,7 +266,6 @@ class ProductBatchController extends Controller
                 // Manual batch selection
                 $batch = ProductBatch::where('id', $batchId)
                     ->where('product_id', $productId)
-                    ->where('branch_id', $branchId)
                     ->lockForUpdate()
                     ->first();
 
@@ -289,18 +289,19 @@ class ProductBatchController extends Controller
                 $batches = ProductBatch::available()
                     ->where('product_id', $productId)
                     ->where('warehouse_id', $warehouseId)
-                    ->where('branch_id', $branchId)
                     ->orderByRaw('CASE WHEN exp_date IS NULL THEN 1 ELSE 0 END, exp_date ASC, id ASC')
                     ->lockForUpdate()
                     ->get();
 
                 // 2. Fallback: If preferred warehouse doesn't have enough stock, query other warehouses in the same branch
                 if ($batches->sum('qty_remaining') < $remaining) {
-                    $otherBatches = ProductBatch::available()
+                    $otherBatchesQ = ProductBatch::available()
                         ->where('product_id', $productId)
-                        ->where('branch_id', $branchId)
-                        ->where('warehouse_id', '!=', $warehouseId)
-                        ->orderByRaw('CASE WHEN exp_date IS NULL THEN 1 ELSE 0 END, exp_date ASC, id ASC')
+                        ->where('warehouse_id', '!=', $warehouseId);
+                    if ($branchId) {
+                        $otherBatchesQ->where('branch_id', $branchId);
+                    }
+                    $otherBatches = $otherBatchesQ->orderByRaw('CASE WHEN exp_date IS NULL THEN 1 ELSE 0 END, exp_date ASC, id ASC')
                         ->lockForUpdate()
                         ->get();
                     $batches = $batches->concat($otherBatches);
