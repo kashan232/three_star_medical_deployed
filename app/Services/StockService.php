@@ -185,7 +185,7 @@ class StockService
     /**
      * Resolve pieces_per_box: UOM record → product master → 1
      */
-    private static function resolvePpb(int $productId, ?int $uomId): int
+    public static function resolvePpb(int $productId, ?int $uomId): int
     {
         if ($uomId) {
             $uom = ProductUom::find($uomId);
@@ -203,7 +203,7 @@ class StockService
      * Convert piece count to Box.Loose display format (e.g. 253 pcs @ 100/box = "2.53")
      * If ppb = 1 → just return the piece count as float.
      */
-    private static function piecesToDisplay(float $pieces, int $ppb): float
+    public static function piecesToDisplay(float $pieces, int $ppb): float
     {
         if ($ppb <= 1) {
             return $pieces;
