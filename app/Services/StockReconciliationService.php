@@ -167,7 +167,25 @@ class StockReconciliationService
                 }
             }
 
-            // ── 2. Reconcile stock_movements for Delivery Notes (DCs) ──
+            // ── 2. Clean up rogue duplicate sale movements on sales that have active DCs ──
+            // If a sale has active Delivery Notes, DC manages all stock deduction. Any 'sale' or 'sale_in'
+            // movement linked to that sale was created accidentally before the DC-check fix and causes phantom stock.
+            $duplicateSaleMovs = DB::table('stock_movements')
+                ->where('product_id', $pId)
+                ->whereIn('ref_type', ['sale', 'sale_in', 'sale_cancel'])
+                ->whereExists(function ($query) {
+                    $query->select(DB::raw(1))
+                        ->from('delivery_notes')
+                        ->whereColumn('delivery_notes.sale_id', 'stock_movements.ref_id')
+                        ->where('delivery_notes.status', '!=', 'cancelled');
+                })
+                ->delete();
+
+            if ($duplicateSaleMovs > 0) {
+                $updatedMovements += $duplicateSaleMovs;
+            }
+
+            // ── 3. Reconcile stock_movements for Delivery Notes (DCs) ──
             $dcGroups = DB::table('delivery_note_items')
                 ->join('delivery_notes', 'delivery_notes.id', '=', 'delivery_note_items.dc_note_id')
                 ->where('delivery_note_items.product_id', $pId)
@@ -195,7 +213,6 @@ class StockReconciliationService
                 $expectedPieces = (float) $dcg->total_dc_pieces;
                 if ($expectedPieces <= 0) continue;
 
-                // Check existing OUT movements for this DC & product
                 $existingOut = (float) DB::table('stock_movements')
                     ->where('product_id', $pId)
                     ->where('ref_id', $dcg->dc_id)
@@ -235,7 +252,7 @@ class StockReconciliationService
                 }
             }
 
-            // ── 3. Reconcile stock_movements for Direct Sales (without active DCs) ──
+            // ── 4. Reconcile stock_movements for Direct Sales (without active DCs) ──
             $saleGroups = DB::table('sale_items')
                 ->join('sales', 'sales.id', '=', 'sale_items.sale_id')
                 ->where('sale_items.product_id', $pId)
@@ -301,64 +318,36 @@ class StockReconciliationService
                 }
             }
 
-            // ── 4. Reconcile stock_movements for Purchases ──
-            $purchaseGroups = DB::table('purchase_items')
-                ->join('purchases', 'purchases.id', '=', 'purchase_items.purchase_id')
-                ->where('purchase_items.product_id', $pId)
-                ->where('purchases.status_purchase', '!=', 'draft')
-                ->select(
-                    'purchases.id as purchase_id',
-                    'purchases.invoice_no',
-                    'purchases.purchase_date',
-                    'purchases.created_at as purch_created_at',
-                    'purchases.branch_id as purch_branch_id',
-                    DB::raw("SUM(COALESCE(NULLIF(purchase_items.boxes_qty * COALESCE(purchase_items.pieces_per_box, 1), 0), NULLIF(purchase_items.qty * COALESCE(purchase_items.uom_factor, 1), 0), purchase_items.qty, 0)) as total_purch_pieces")
-                )
-                ->groupBy(
-                    'purchases.id',
-                    'purchases.invoice_no',
-                    'purchases.purchase_date',
-                    'purchases.created_at',
-                    'purchases.branch_id'
-                )
-                ->get();
+            // ── 5. Reconcile total net movements with netRealPieces ──
+            $realTotalNetPieces = (float) DB::table('warehouse_stocks')
+                ->where('product_id', $pId)
+                ->sum('total_pieces');
 
-            foreach ($purchaseGroups as $pg) {
-                $expectedPieces = (float) $pg->total_purch_pieces;
-                if ($expectedPieces <= 0) continue;
+            $totalMovementsNet = (float) DB::table('stock_movements')
+                ->where('product_id', $pId)
+                ->sum(DB::raw("CASE WHEN type = 'out' OR qty < 0 THEN -ABS(qty) ELSE ABS(qty) END"));
 
-                $existingIn = (float) DB::table('stock_movements')
-                    ->where('product_id', $pId)
-                    ->where('ref_id', $pg->purchase_id)
-                    ->whereIn('ref_type', ['PURCHASE', 'purchase', 'GRN', 'grn', 'PUR', 'pur', 'PURCHASE_ITEM', 'INWARD'])
-                    ->where(function ($q) {
-                        $q->where('type', 'in')->orWhere('qty', '>', 0);
-                    })
-                    ->sum(DB::raw('ABS(qty)'));
+            $diff = $realTotalNetPieces - $totalMovementsNet;
+            if (abs($diff) > 0.001) {
+                $adjType = $diff > 0 ? 'in' : 'out';
+                $adjQty = $diff; // positive for in, negative for out
+                $dt = now();
 
-                if ($existingIn < ($expectedPieces - 0.001)) {
-                    $missingPieces = $expectedPieces - $existingIn;
-                    $movDate = $pg->purch_created_at
-                        ? date('Y-m-d H:i:s', strtotime($pg->purch_created_at))
-                        : ($pg->purchase_date ? $pg->purchase_date . ' 12:00:00' : now());
-
-                    $ins = [
-                        'product_id' => $pId,
-                        'type'       => 'in',
-                        'qty'        => $missingPieces,
-                        'ref_type'   => 'PURCHASE',
-                        'ref_id'     => $pg->purchase_id,
-                        'note'       => 'Purchase #' . ($pg->invoice_no ?? $pg->purchase_id),
-                        'created_at' => $movDate,
-                        'updated_at' => $movDate,
-                    ];
-                    if ($hasBranchOnSm) {
-                        $ins['branch_id'] = $pg->purch_branch_id ?: 1;
-                    }
-
-                    DB::table('stock_movements')->insert($ins);
-                    $updatedMovements++;
+                $ins = [
+                    'product_id' => $pId,
+                    'type'       => $adjType,
+                    'qty'        => $adjQty,
+                    'ref_type'   => 'ADJUSTMENT',
+                    'ref_id'     => null,
+                    'note'       => 'Stock Reconciliation Auto-Adjustment',
+                    'created_at' => $dt,
+                    'updated_at' => $dt,
+                ];
+                if ($hasBranchOnSm) {
+                    $ins['branch_id'] = 1;
                 }
+                DB::table('stock_movements')->insert($ins);
+                $updatedMovements++;
             }
 
             $updatedProducts++;
