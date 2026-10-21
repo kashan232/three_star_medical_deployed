@@ -39,6 +39,7 @@ class SyncStockBalances extends Command
                 ['Products Scanned', $result['products_scanned']],
                 ['Warehouse Stock Records Updated', $result['stocks_updated']],
                 ['Batch Records Updated', $result['batches_updated']],
+                ['Stock Movements Synchronized', $result['movements_updated'] ?? 0],
             ]
         );
 
