@@ -25,7 +25,7 @@ class PayrollValidationService
         }
 
         // Check if month is not in future
-        if ($this->isF utureMonth($month)) {
+        if ($this->isFutureMonth($month)) {
             $errors[] = 'Cannot generate payroll for future months';
         }
 
