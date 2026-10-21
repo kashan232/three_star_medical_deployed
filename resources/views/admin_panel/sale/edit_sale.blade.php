@@ -340,33 +340,6 @@
             transform: none !important;
         }
 
-        .btn-sale-fbr {
-            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-            color: #ffffff !important;
-            box-shadow: 0 4px 10px rgba(2, 132, 199, 0.25);
-        }
-        .btn-sale-fbr:hover:not(:disabled) {
-            background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 14px rgba(2, 132, 199, 0.35);
-            color: #ffffff !important;
-        }
-        .btn-sale-fbr:disabled {
-            background: #f8fafc !important;
-            color: #64748b !important;
-            border: 1.5px dashed #cbd5e1 !important;
-            box-shadow: none !important;
-            cursor: not-allowed !important;
-            transform: none !important;
-            opacity: 1 !important;
-        }
-        .btn-sale-fbr.is-posted {
-            background: #ecfdf5 !important;
-            color: #047857 !important;
-            border: 1.5px solid #10b981 !important;
-            box-shadow: none !important;
-            cursor: default !important;
-        }
 
         .btn-sale-draft {
             background: #ffffff;
@@ -853,16 +826,6 @@
                                         <button type="button" id="btnConfirm" class="btn-sale-action btn-sale-confirm">
                                             <i class="bi bi-check2-circle fs-6"></i> Confirm & Post SIN
                                         </button>
-                                        <button type="button" id="btnPostToFbr" 
-                                            class="btn-sale-action btn-sale-fbr {{ $sale->fbr_status === 'posted' ? 'is-posted' : '' }}" 
-                                            data-sale-id="{{ $sale->id }}"
-                                            {{ ($sale->sale_status !== 'post' || $sale->fbr_status === 'posted') ? 'disabled' : '' }}>
-                                            @if($sale->fbr_status === 'posted')
-                                                <i class="bi bi-check-circle-fill text-success fs-6"></i> FBR Posted ({{ $sale->fbr_invoice_no }})
-                                            @else
-                                                <i class="bi bi-cloud-arrow-up-fill fs-6"></i> POST TO FBR
-                                            @endif
-                                        </button>
                                     </div>
                                 </div>
                             </div>
@@ -876,7 +839,6 @@
     <!-- Modals -->
     @include('admin_panel.sale.sale_receipt_note.modals')
     @include('admin_panel.components.product_select_modal')
-    @include('admin_panel.sale.components.fbr_post_modal')
 
 @endsection
 
@@ -1207,20 +1169,6 @@
                 });
             }
 
-            $('#btnPostToFbr').click(function(e) {
-                e.preventDefault();
-                const saleId = $(this).attr('data-sale-id');
-                if (window.FbrPostManager && saleId) {
-                    window.FbrPostManager.open(saleId);
-                }
-            });
-
-            $(document).on('fbr:posted', function(e, data) {
-                $('#btnPostToFbr')
-                    .prop('disabled', true)
-                    .addClass('is-posted')
-                    .html('<i class="bi bi-check-circle-fill text-success me-1"></i> FBR Posted (' + data.fbrInvoiceNo + ')');
-            });
 
             // --- Import Logic ---
             function importBookedItem(btn) {

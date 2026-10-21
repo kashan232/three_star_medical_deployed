@@ -428,33 +428,6 @@
             transform: none !important;
         }
 
-        .btn-sale-fbr {
-            background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-            color: #ffffff !important;
-            box-shadow: 0 4px 10px rgba(2, 132, 199, 0.25);
-        }
-        .btn-sale-fbr:hover:not(:disabled) {
-            background: linear-gradient(135deg, #0369a1 0%, #075985 100%);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 14px rgba(2, 132, 199, 0.35);
-            color: #ffffff !important;
-        }
-        .btn-sale-fbr:disabled {
-            background: #f8fafc !important;
-            color: #64748b !important;
-            border: 1.5px dashed #cbd5e1 !important;
-            box-shadow: none !important;
-            cursor: not-allowed !important;
-            transform: none !important;
-            opacity: 1 !important;
-        }
-        .btn-sale-fbr.is-posted {
-            background: #ecfdf5 !important;
-            color: #047857 !important;
-            border: 1.5px solid #10b981 !important;
-            box-shadow: none !important;
-            cursor: default !important;
-        }
 
         .btn-sale-draft {
             background: #ffffff;
@@ -1051,15 +1024,6 @@
                                             id="btnSaveOnly" style="{{ request()->query('mode') != 'so' ? 'display:none;' : '' }}">
                                             <i class="bi bi-save2 fs-6"></i> Save Sale Order (Draft)
                                         </button>
-                                        {{-- POST TO FBR button: disabled by default, enabled after sale is posted --}}
-                                        <button type="button"
-                                            class="btn-sale-action btn-sale-fbr"
-                                            id="btnPostToFbr"
-                                            disabled
-                                            title="Post this sale invoice to FBR Digital Invoicing system"
-                                            style="{{ request()->query('mode') == 'so' ? 'display:none;' : '' }}">
-                                            <i class="bi bi-cloud-arrow-up-fill fs-6"></i> POST TO FBR
-                                        </button>
                                     </div>
                                     <div class="mt-3 text-center">
                                         <div class="form-check form-check-inline">
@@ -1386,7 +1350,6 @@
 
 {{-- Advanced Product Selection Modal --}}
 @include('admin_panel.components.product_select_modal')
-@include('admin_panel.sale.components.fbr_post_modal')
 
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
 <script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
@@ -1679,40 +1642,17 @@
                             // Capture created sale ID
                             const createdSaleId = response.booking_id;
 
-                            // Update UI: Disable Confirm button and Enable POST TO FBR button
                             if (createdSaleId) {
                                 $('#btnConfirm').prop('disabled', true).html('<i class="bi bi-check2-all me-1"></i> Sale Already Posted');
-                                $('#btnPostToFbr')
-                                    .prop('disabled', false)
-                                    .attr('data-sale-id', createdSaleId)
-                                    .css('cursor', 'pointer');
                             }
 
                             Swal.fire({
                                 icon: 'success',
                                 title: 'Sale Posted Successfully!',
-                                html: `
-                                    <div class="py-2">
-                                        <p class="text-muted mb-3">Sale processed, stock updated, and ledger recorded.</p>
-                                        <div class="alert alert-warning border text-start p-2 mb-0" style="font-size: 0.88rem;">
-                                            <i class="bi bi-cloud-arrow-up-fill me-1"></i> <strong>Do you want to post it to FBR?</strong>
-                                            <div class="text-muted small mt-1">You can transmit to FBR right now, or click the enabled <b>POST TO FBR</b> button at any time.</div>
-                                        </div>
-                                    </div>
-                                `,
-                                showCancelButton: true,
-                                confirmButtonColor: '#f59e0b',
-                                cancelButtonColor: '#64748b',
-                                confirmButtonText: '<i class="bi bi-cloud-arrow-up-fill me-1"></i> Yes, Post to FBR',
-                                cancelButtonText: 'View Sales List'
-                            }).then((popupRes) => {
-                                if (popupRes.isConfirmed) {
-                                    if (window.FbrPostManager && createdSaleId) {
-                                        window.FbrPostManager.open(createdSaleId);
-                                    }
-                                } else if (popupRes.dismiss === Swal.DismissReason.cancel) {
-                                    window.location.href = response.redirect_url || "{{ route('sale.receipt.index') }}";
-                                }
+                                text: 'Sale processed, stock updated, and ledger recorded.',
+                                confirmButtonText: 'OK'
+                            }).then(() => {
+                                window.location.href = response.redirect_url || "{{ route('sale.receipt.index') }}";
                             });
                         },
                         error: function(xhr) {
@@ -1729,32 +1669,6 @@
                     });
                 }
             });
-        });
-
-        // POST TO FBR Button Click Handler
-        $('#btnPostToFbr').click(function(e) {
-            e.preventDefault();
-            const saleId = $(this).attr('data-sale-id');
-            if (!saleId) {
-                Swal.fire({
-                    icon: 'info',
-                    title: 'Sale Not Yet Posted',
-                    text: 'Please confirm and post the sale first. Once posted, you can transmit this invoice to FBR.'
-                });
-                return;
-            }
-            if (window.FbrPostManager) {
-                window.FbrPostManager.open(saleId);
-            }
-        });
-
-        // Listen for FBR Posted Event
-        $(document).on('fbr:posted', function(e, data) {
-            $('#btnPostToFbr')
-                .prop('disabled', true)
-                .css('cursor', 'default')
-                .addClass('is-posted')
-                .html('<i class="bi bi-check-circle-fill text-success me-1"></i> FBR Posted: ' + data.fbrInvoiceNo);
         });
 
         // Discount Type Toggle (Amt per pc vs Percent)

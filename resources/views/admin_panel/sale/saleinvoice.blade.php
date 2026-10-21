@@ -32,25 +32,6 @@ $logoSrc = file_exists($logoPath)
     ? 'data:image/jpeg;base64,' . base64_encode(file_get_contents($logoPath))
     : asset('assets/images/three_star_logo.jpg');
 
-$fbrLogoPath = public_path('assets/images/fbr_logo.png');
-$fbrLogoSrc = file_exists($fbrLogoPath)
-    ? 'data:image/png;base64,' . base64_encode(file_get_contents($fbrLogoPath))
-    : asset('assets/images/fbr_logo.png');
-
-$fbrInvoiceNumber = !empty($sale->fbr_invoice_no)
-    ? trim($sale->fbr_invoice_no)
-    : (!empty($sale->fbr_qr_code) ? trim($sale->fbr_qr_code) : null);
-
-$fbrQrBase64 = null;
-if (!empty($fbrInvoiceNumber)) {
-    try {
-        $dns2d = new \Milon\Barcode\DNS2D();
-        $dns2d->setStorPath(storage_path('framework/cache'));
-        $fbrQrBase64 = 'data:image/png;base64,' . $dns2d->getBarcodePNG($fbrInvoiceNumber, 'QRCODE', 4, 4);
-    } catch (\Throwable $e) {
-        $fbrQrBase64 = null;
-    }
-}
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -90,13 +71,6 @@ if (!empty($fbrInvoiceNumber)) {
   .plbl { font-weight: bold; min-width: 68px; }
   .barcode-right { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; padding-top: 2px; }
   .barcode-num { font-size: 8.5px; letter-spacing: 0.5px; text-align: center; margin-top: 1px; font-weight: bold; }
-  .fbr-footer-wrap { margin-top: 18px; display: flex; justify-content: center; width: 100%; }
-  .fbr-box-wrapper { text-align: center; display: flex; flex-direction: column; align-items: center; }
-  .fbr-box-title { font-size: 9.5px; font-weight: bold; color: #000; margin-bottom: 6px; white-space: nowrap; letter-spacing: 0.2px; text-align: center; }
-  .fbr-box-num { font-size: 9.5px; font-weight: bold; font-family: Arial, sans-serif; margin-left: 6px; }
-  .fbr-box-badges { display: flex; align-items: center; justify-content: center; gap: 10px; }
-  .fbr-qr-img { width: 72px; height: 72px; display: block; image-rendering: pixelated; }
-  .fbr-badge-img { height: 72px; width: auto; max-width: 90px; object-fit: contain; display: block; }
 
   .meta-strip { display: flex; justify-content: space-between; align-items: center; font-size: 10.5px; border-top: 1px solid #555; border-bottom: 1px solid #555; padding: 3px 3px; margin-bottom: 0; }
 
@@ -140,19 +114,6 @@ if (!empty($fbrInvoiceNumber)) {
     Back
   </a>
 
-  @if($sale->sale_status === 'post')
-    @if($sale->fbr_status === 'posted')
-      <span class="btn" style="background:#059669; cursor:default;" title="FBR Verified: {{ $sale->fbr_invoice_no }}">
-        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
-        FBR Posted: {{ $sale->fbr_invoice_no }}
-      </span>
-    @else
-      <button type="button" class="btn fbr-post-btn" data-id="{{ $sale->id }}" style="background:#d97706; cursor:pointer;" title="Post this invoice to FBR Digital Invoicing">
-        <svg viewBox="0 0 24 24"><path d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM14 13v4h-4v-4H7l5-5 5 5h-3z"/></svg>
-        Post to FBR
-      </button>
-    @endif
-  @endif
 
   <button class="btn btn-print" onclick="window.print()">
     <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
@@ -423,24 +384,6 @@ if (!empty($fbrInvoiceNumber)) {
     </div>
   </div>
 
-  <!-- FBR DIGITAL INVOICING FOOTER -->
-  @if(!empty($fbrInvoiceNumber))
-  <div class="fbr-footer-wrap">
-    <div class="fbr-box-wrapper">
-      <div class="fbr-box-title">
-        FBR Invoice No : <span class="fbr-box-num">{{ $fbrInvoiceNumber }}</span>
-      </div>
-      <div class="fbr-box-badges">
-        @if(!empty($fbrQrBase64))
-          <img src="{{ $fbrQrBase64 }}" alt="FBR QR Code" class="fbr-qr-img">
-        @endif
-        @if(!empty($fbrLogoSrc))
-          <img src="{{ $fbrLogoSrc }}" alt="FBR Digital Invoicing System" class="fbr-badge-img">
-        @endif
-      </div>
-    </div>
-  </div>
-  @endif
 
 </div>
 
@@ -463,15 +406,8 @@ async function downloadPDF() {
   pdf.save('invoice_{{ $sale->invoice_no ?? $sale->id }}.pdf');
 }
 
-// Reload invoice on successful FBR submission
-$(document).on('fbr:posted', function(e, data) {
-    setTimeout(function() {
-        window.location.reload();
-    }, 1200);
-});
 </script>
 
-@include('admin_panel.sale.components.fbr_post_modal')
 
 </body>
 </html>
