@@ -27,10 +27,23 @@ if (!$officerName && $sale->employee_id) {
     $emp = \App\Models\Hr\Employee::find($sale->employee_id);
     $officerName = $emp ? ($emp->first_name . ' ' . $emp->last_name) : null;
 }
-$logoPath = public_path('assets/images/three_star_logo.jpg');
-$logoSrc = file_exists($logoPath)
-    ? 'data:image/jpeg;base64,' . base64_encode(file_get_contents($logoPath))
-    : asset('assets/images/three_star_logo.jpg');
+$logoCandidates = [
+    public_path('assets/images/three_star_logo.jpg'),
+    base_path('public/assets/images/three_star_logo.jpg'),
+    base_path('assets/images/three_star_logo.jpg'),
+    public_path('admin_panel/assets/images/logo/three_star_logo.jpg'),
+    base_path('public/admin_panel/assets/images/logo/three_star_logo.jpg'),
+];
+$logoSrc = null;
+foreach ($logoCandidates as $cand) {
+    if (file_exists($cand)) {
+        $logoSrc = 'data:image/jpeg;base64,' . base64_encode(file_get_contents($cand));
+        break;
+    }
+}
+if (!$logoSrc) {
+    $logoSrc = asset('assets/images/three_star_logo.jpg');
+}
 
 @endphp
 <!DOCTYPE html>

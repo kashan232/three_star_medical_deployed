@@ -1,3 +1,22 @@
+@php
+$logoCandidates = [
+    public_path('assets/images/three_star_logo.jpg'),
+    base_path('public/assets/images/three_star_logo.jpg'),
+    base_path('assets/images/three_star_logo.jpg'),
+    public_path('admin_panel/assets/images/logo/three_star_logo.jpg'),
+    base_path('public/admin_panel/assets/images/logo/three_star_logo.jpg'),
+];
+$logoSrc = null;
+foreach ($logoCandidates as $cand) {
+    if (file_exists($cand)) {
+        $logoSrc = 'data:image/jpeg;base64,' . base64_encode(file_get_contents($cand));
+        break;
+    }
+}
+if (!$logoSrc) {
+    $logoSrc = asset('assets/images/three_star_logo.jpg');
+}
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 
@@ -128,6 +147,11 @@
     <a href="javascript:window.print()" class="btn-print no-print">PRINT RECEIPT</a>
 
     <div class="header">
+        @if(!empty($logoSrc))
+            <div style="text-align: center; margin-bottom: 6px;">
+                <img src="{{ $logoSrc }}" alt="Three Stars Medical" style="height: 55px; width: auto; max-width: 140px; display: inline-block; object-fit: contain;">
+            </div>
+        @endif
         <div class="company-name">THREE STARS MEDICAL</div>
         <div class="sub-header">Seth Centre, Edward Road, Lahore</div>
         <div class="sub-header">Ph: 0092-42-37353433</div>
