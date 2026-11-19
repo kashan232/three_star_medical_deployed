@@ -220,6 +220,23 @@ class PartyController extends Controller
                 }
             }
 
+            if (isset($vendor)) {
+                $ob = (float)($mappedData['opening_balance'] ?? 0);
+                $initVl = VendorLedger::where('vendor_id', $vendor->id)
+                    ->where('debit', 0)
+                    ->where('credit', 0)
+                    ->whereNull('description')
+                    ->first();
+                if ($initVl) {
+                    $initVl->update([
+                        'opening_balance' => $ob,
+                        'previous_balance' => $ob,
+                        'closing_balance' => $ob,
+                    ]);
+                }
+                app(\App\Services\TransactionService::class)->recalculateVendorLedger($vendor->id);
+            }
+
             DB::commit();
             $redirectRoute = ($type === 'Vendor') ? 'vendors.index' : 'customers.index';
             return redirect()->route($redirectRoute)->with('success', "Profile for '{$data['title']}' has been updated successfully.");

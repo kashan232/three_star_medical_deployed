@@ -47,4 +47,9 @@ class SaleItem extends Model
         return $this->belongsToMany(ProductBatch::class, 'sale_item_batches', 'sale_item_id', 'product_batch_id')
             ->withPivot('qty_deducted');
     }
+
+    public function getGstAttribute()
+    {
+        return $this->attributes['gst_percent'] ?? 0;
+    }
 }

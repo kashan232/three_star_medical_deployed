@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
         $this->call([
             CategorySeeder::class,
             BrandSeeder::class,
-            WarehouseSeeder::class,          // Run before ProductSeeder so default warehouse exists
+            // WarehouseSeeder::class,          // Disabled: default demo warehouses removed
             // ProductSeeder::class,         // Disabled: products are uploaded directly/manually now
             // WarehouseStockSeeder::class,  // Disabled: stock records are created during product import
             // PermissionRoleUserSeeder::class, // REMOVED: Using new AllModulesPermissionsSeeder

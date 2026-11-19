@@ -250,11 +250,16 @@ if (!$logoSrc) {
             $freeDisp = $freePcs > 0 ? $freePcs : '-';
         }
         // GST per item — try to read directly; fall back to calculating from total
-        $gstPct = $item['gst_percent'] ?? $item['gst'] ?? 0;
-        $gstAmt = $item['gst_amount'] ?? 0;
+        $gstPct = (float)($item['gst_percent'] ?? $item['gst'] ?? 0);
+        $gstAmt = (float)($item['gst_amount'] ?? 0);
         if ($gstAmt == 0 && $gstPct > 0) {
-            $sub = $item['total'] - ($item['discount_amount'] ?? 0);
-            $gstAmt = $sub * $gstPct / 100;
+            $taxableBase = ($totalPcs * (float)($item['price'] ?? 0)) - (float)($item['discount_amount'] ?? 0);
+            $gstAmt = $taxableBase * $gstPct / 100;
+        } elseif ($gstPct == 0 && $gstAmt > 0) {
+            $taxableBase = ($totalPcs * (float)($item['price'] ?? 0)) - (float)($item['discount_amount'] ?? 0);
+            if ($taxableBase > 0) {
+                $gstPct = round(($gstAmt / $taxableBase) * 100, 2);
+            }
         }
       @endphp
         <td class="c">{{ $index + 1 }}</td>
@@ -273,7 +278,7 @@ if (!$logoSrc) {
         <td class="r">{{ number_format($item['price'], 2) }}</td>
         <td class="r">{{ $item['discount_amount'] > 0 ? number_format($item['discount_amount'], 2) : '—' }}</td>
         @if($hasGst)
-        <td class="c">{{ $gstPct > 0 ? number_format($gstPct, 1).'%' : '—' }}</td>
+        <td class="c">{{ $gstPct > 0 ? (fmod($gstPct, 1) == 0 ? number_format($gstPct, 0).'%' : number_format($gstPct, 1).'%') : '—' }}</td>
         <td class="r">{{ $gstAmt > 0 ? number_format($gstAmt, 2) : '—' }}</td>
         @endif
         <td class="r"><strong>{{ number_format($item['total'], 2) }}</strong></td>
@@ -287,11 +292,11 @@ if (!$logoSrc) {
         </td>
         <td class="c">{{ $grandFree > 0 ? $grandFree : '—' }}</td>
         @if($hasGst)
-        <td colspan="5"></td>
+        <td colspan="4"></td>
         @else
-        <td colspan="3"></td>
+        <td colspan="2"></td>
         @endif
-        <td class="r" style="font-size:11px;">{{ number_format($sale->items->sum('line_total'), 2) }}</td>
+        <td class="r" style="font-size:11px;">{{ number_format($sale->items->sum('total') ?: collect($saleItems)->sum('total'), 2) }}</td>
       </tr>
     </tbody>
   </table>

@@ -60,6 +60,12 @@ class SaleController extends Controller
     public function addsale(Request $request)
     {
         $branchId = $this->getBranchId();
+
+        if (! $branchId) {
+            $redirectRoute = $request->mode == 'so' ? 'sale.order.index' : 'sale.receipt.index';
+            return redirect()->route($redirectRoute)->with('error', 'Please select a specific branch from the top switcher before creating a sale transaction. Operations cannot be performed under "All Branches".');
+        }
+
         $Customer = Customer::when($branchId, fn ($q) => $q->where('branch_id', $branchId))->get();
         $Warehouse = Warehouse::when($branchId, fn ($q) => $q->where('branch_id', $branchId))->get();
         $sales = Sale::with(['customer_relation', 'items.product'])
@@ -245,8 +251,13 @@ class SaleController extends Controller
 
     public function convertFromBooking($id)
     {
+        $branchId = $this->getBranchId();
+        if (! $branchId) {
+            return redirect()->back()->with('error', 'Please select a specific branch from the top switcher before converting a booking.');
+        }
+
         $booking = ProductBooking::findOrFail($id);
-        $customers = Customer::all();
+        $customers = Customer::when($branchId, fn ($q) => $q->where('branch_id', $branchId))->get();
         $products = explode(',', $booking->product);
         $codes = explode(',', $booking->product_code);
         $brands = explode(',', $booking->brand);
@@ -287,7 +298,8 @@ class SaleController extends Controller
     public function saleretun($id)
     {
         $sale = Sale::with(['items.product.unit', 'items.product.brand', 'customer_relation'])->findOrFail($id);
-        $customers = Customer::all();
+        $branchId = $this->getBranchId() ?? $sale->branch_id;
+        $customers = Customer::when($branchId, fn ($q) => $q->where('branch_id', $branchId))->get();
         $items = $this->_getSaleItems($sale);
 
         // Get Cash/Bank accounts for payment voucher
@@ -950,10 +962,10 @@ class SaleController extends Controller
 
     public function saleedit($id)
     {
-        $branchId = $this->getBranchId();
-
         // 1. Fetch Sale with relations
         $sale = Sale::with(['items.product.warehouseStocks', 'customer_relation', 'employee', 'branch', 'payments.account'])->findOrFail($id);
+
+        $branchId = $this->getBranchId() ?? $sale->branch_id;
 
         // 2. Data for Dropdowns
         $customer = Customer::when($branchId, fn ($q) => $q->where('branch_id', $branchId))->get();
@@ -1167,6 +1179,20 @@ class SaleController extends Controller
 
     private function processSale(Request $request, Sale $sale)
     {
+        // 0. Ensure a specific branch is selected
+        $branchId = $this->getBranchId() ?? ($sale->exists ? $sale->branch_id : null) ?? $request->input('branch_id');
+
+        if (! $branchId) {
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please select a specific branch before creating or saving a sale invoice. Operations under "All Branches" are not permitted.',
+                ], 422);
+            }
+
+            return redirect()->back()->with('error', 'Please select a specific branch before creating or saving a sale invoice. Operations under "All Branches" are not permitted.')->withInput();
+        }
+
         // 1. Validation
         $request->validate([
             'customer' => 'required|exists:customers,id',
@@ -1188,7 +1214,7 @@ class SaleController extends Controller
         }
 
         // Concurrency Safe Transaction
-        return DB::transaction(function () use ($request, $sale, $status) {
+        return DB::transaction(function () use ($request, $sale, $status, $branchId) {
 
             // 2. Prepare Header Data
             $isNew = ! $sale->exists;
@@ -1206,7 +1232,7 @@ class SaleController extends Controller
             $sale->total_amount_Words = $request->total_amount_Words;
             $sale->sale_status = $status;
             $sale->enable_hs_code = $request->enable_hs_code ? 1 : 0;
-            $sale->branch_id   = $this->getBranchId();
+            $sale->branch_id   = (int) $branchId;
             $sale->mode        = $request->mode ?? 'sin';
             if ($isNew) {
                 $sale->created_by = auth()->id() ?? 1;
@@ -1849,8 +1875,8 @@ class SaleController extends Controller
                 'discount_percent' => (float) $item->discount_percent,
                 'discount_amount' => (float) $item->discount_amount,
                 'total' => (float) $item->total,
-                'gst' => (float) $item->gst,
-                'gst_percent' => (float) $item->gst,
+                'gst' => (float) ($item->gst_percent ?? $item->gst ?? 0),
+                'gst_percent' => (float) ($item->gst_percent ?? $item->gst ?? 0),
                 'gst_amount' => (float) $item->gst_amount,
                 'uom_factor' => (int) ($item->uom_factor ?: (($item->total_pieces > 0 && (float)$item->qty > 0) ? round($item->total_pieces / (float)$item->qty) : 1)),
                 'color' => json_decode($item->color, true) ?? [],

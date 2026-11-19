@@ -192,6 +192,137 @@
             font-size: 0.8rem;
             color: var(--secondary);
         }
+
+        /* Quick Customer Search Card */
+        .customer-search-card {
+            background: #ffffff;
+            border-radius: var(--radius-lg);
+            padding: 16px 22px;
+            box-shadow: var(--shadow-subtle);
+            border: 1px solid #e2e8f0;
+        }
+
+        .search-icon-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: #eef2ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .search-icon-circle:hover {
+            background: #e0e7ff;
+            transform: scale(1.05);
+        }
+
+        /* Select2 Premium Custom Styling */
+        .customer-search-card .select2-container--default .select2-selection--single {
+            border: 1.5px solid #cbd5e1 !important;
+            border-radius: 10px !important;
+            height: 44px !important;
+            background-color: #f8fafc !important;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .customer-search-card .select2-container--default .select2-selection--single:hover {
+            border-color: #94a3b8 !important;
+            background-color: #ffffff !important;
+        }
+
+        .customer-search-card .select2-container--default.select2-container--focus .select2-selection--single,
+        .customer-search-card .select2-container--default.select2-container--open .select2-selection--single {
+            border-color: var(--primary) !important;
+            background-color: #ffffff !important;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
+            outline: none !important;
+        }
+
+        .customer-search-card .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #1e293b !important;
+            font-size: 0.92rem !important;
+            font-weight: 600;
+            padding-left: 14px !important;
+            padding-right: 32px !important;
+            line-height: 42px !important;
+        }
+
+        .customer-search-card .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 42px !important;
+            right: 12px !important;
+        }
+
+        .customer-search-card .select2-container--default .select2-selection--single .select2-selection__clear {
+            font-size: 1.25rem;
+            margin-right: 14px;
+            color: #94a3b8;
+            cursor: pointer;
+        }
+
+        .customer-search-card .select2-container--default .select2-selection--single .select2-selection__clear:hover {
+            color: #ef4444;
+        }
+
+        /* Select2 Dropdown Styling */
+        .select2-dropdown {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 10px !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.06) !important;
+            overflow: hidden;
+            z-index: 9999 !important;
+        }
+
+        .select2-dropdown .select2-search--dropdown {
+            padding: 8px 10px !important;
+        }
+
+        .select2-dropdown .select2-search__field {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 8px !important;
+            padding: 8px 12px !important;
+            font-size: 0.9rem !important;
+            outline: none !important;
+        }
+
+        .select2-dropdown .select2-search__field:focus {
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15) !important;
+        }
+
+        .select2-results__option--highlighted[aria-selected] {
+            background-color: var(--primary) !important;
+            color: #ffffff !important;
+        }
+
+        .select2-results__option--highlighted[aria-selected] .select2-customer-title,
+        .select2-results__option--highlighted[aria-selected] .select2-customer-meta,
+        .select2-results__option--highlighted[aria-selected] i {
+            color: #ffffff !important;
+        }
+
+        .select2-results__option--highlighted[aria-selected] .badge {
+            background-color: rgba(255, 255, 255, 0.25) !important;
+            color: #ffffff !important;
+            border-color: rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Row Highlight Flash Animation */
+        @keyframes highlightFlash {
+            0% { background-color: #fef08a !important; }
+            50% { background-color: #fef9c3 !important; }
+            100% { background-color: transparent; }
+        }
+
+        .row-highlight td {
+            animation: highlightFlash 2.5s ease-out;
+        }
     </style>
 
     <div class="customer-listing-area">
@@ -224,6 +355,57 @@
                 </div>
             @endif
 
+            <!-- Quick Customer Search Bar -->
+            <div class="customer-search-card mb-4">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-3 flex-grow-1" style="min-width: 320px; max-width: 720px;">
+                        <div class="search-icon-circle" title="Click to search customers">
+                            <i class="fa fa-search text-primary"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <label for="customerSearchSelect" class="form-label fw-bold text-dark small mb-0">
+                                    <i class="fa fa-bolt text-warning me-1"></i> Quick Customer Search
+                                </label>
+                                <span class="text-muted" style="font-size: 0.72rem;">Search by Name, Urdu, ID, Mobile, or Zone</span>
+                            </div>
+                            <select id="customerSearchSelect" class="form-control" style="width: 100%;">
+                                <option value=""></option>
+                                @foreach ($customers as $c)
+                                    <option value="{{ $c->id }}"
+                                        data-name="{{ $c->customer_name }}"
+                                        data-name-ur="{{ $c->customer_name_ur ?? '' }}"
+                                        data-code="{{ $c->customer_id }}"
+                                        data-mobile="{{ $c->mobile ?? '' }}"
+                                        data-contact="{{ $c->contact_person ?? '' }}"
+                                        data-zone="{{ $c->zone ?? '' }}"
+                                        data-cnic="{{ $c->cnic ?? '' }}"
+                                        data-ntn="{{ $c->ntn_no ?? '' }}"
+                                        data-status="{{ strtolower($c->status ?? 'active') }}">
+                                        {{ $c->customer_name }} [{{ $c->customer_id }}]{{ $c->mobile ? ' • ' . $c->mobile : '' }}{{ $c->zone ? ' • ' . $c->zone : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Filtered State Actions -->
+                    <div class="d-flex align-items-center gap-2 flex-wrap ms-auto">
+                        <div id="quickCustomerActions" style="display: none;" class="d-flex gap-2 align-items-center">
+                            <a id="btnQuickLedger" href="#" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" style="border-radius: 8px;">
+                                <i class="fa fa-book-open me-1"></i> General Ledger
+                            </a>
+                            <a id="btnQuickEdit" href="#" class="btn btn-sm btn-outline-info fw-bold shadow-sm" style="border-radius: 8px;">
+                                <i class="fa fa-edit me-1"></i> Edit Customer
+                            </a>
+                        </div>
+                        <button type="button" id="btnResetCustomerSearch" class="btn btn-sm btn-outline-secondary fw-bold" style="border-radius: 8px; display: none;">
+                            <i class="fa fa-times me-1"></i> Show All Customers
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Main Table Wrapper -->
             <div class="table-container">
                 <table class="table-premium">
@@ -240,7 +422,7 @@
                     </thead>
                     <tbody>
                         @foreach ($customers as $customer)
-                            <tr>
+                            <tr class="customer-row" id="customer-row-{{ $customer->id }}" data-customer-id="{{ $customer->id }}">
                                 <!-- Identity -->
                                 <td>
                                     <div class="identity-group">
@@ -357,13 +539,27 @@
                                 </td>
                             </tr>
                         @endforeach
+                        <tr id="noCustomerFoundRow" style="display: none;">
+                            <td colspan="7" class="text-center py-5">
+                                <div class="py-4">
+                                    <div class="mb-3 text-secondary opacity-50">
+                                        <i class="fa fa-search fa-3x"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">No matching customer found</h6>
+                                    <p class="text-muted small mb-3">Try searching with a different name, customer ID, or phone number.</p>
+                                    <button type="button" class="btn btn-sm btn-primary fw-bold px-3" style="border-radius: 8px;" onclick="$('#customerSearchSelect').val('').trigger('change');">
+                                        <i class="fa fa-rotate-left me-1"></i> Show All Customers
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
 
             <!-- Footer Meta -->
             <div class="d-flex justify-content-between align-items-center">
-                <div class="text-muted small fw-bold">
+                <div class="text-muted small fw-bold" id="customerShowingCount">
                     Showing {{ $customers->count() }} registered customers
                 </div>
                 <div class="d-flex gap-2">
@@ -672,5 +868,173 @@
             });
         }
     </script>
+@endsection
+
+@section('js')
+<script>
+    (function() {
+        var initialized = false;
+
+        function initCustomerSelect2() {
+            if (initialized) return;
+            if (typeof $ === 'undefined' || !$.fn || !$.fn.select2) {
+                return;
+            }
+
+            var $select = $('#customerSearchSelect');
+            if (!$select.length) return;
+
+            initialized = true;
+
+            $select.select2({
+                placeholder: '🔍 Quick search customer by Name, ID, Mobile, or Zone...',
+                allowClear: true,
+                width: '100%',
+                matcher: function(params, data) {
+                    if ($.trim(params.term) === '') {
+                        return data;
+                    }
+                    if (!data.id) {
+                        return null;
+                    }
+                    var term = params.term.toLowerCase().trim();
+                    var $el = $(data.element);
+                    var searchHaystack = [
+                        $el.data('name') || '',
+                        $el.data('name-ur') || '',
+                        $el.data('code') || '',
+                        $el.data('mobile') || '',
+                        $el.data('contact') || '',
+                        $el.data('zone') || '',
+                        $el.data('cnic') || '',
+                        $el.data('ntn') || '',
+                        data.text || ''
+                    ].join(' ').toLowerCase();
+
+                    return searchHaystack.indexOf(term) > -1 ? data : null;
+                },
+                templateResult: function(customer) {
+                    if (!customer.id) {
+                        return customer.text;
+                    }
+                    var $el = $(customer.element);
+                    var name = $el.data('name') || customer.text;
+                    var code = $el.data('code') || '';
+                    var mobile = $el.data('mobile') || '';
+                    var contact = $el.data('contact') || '';
+                    var zone = $el.data('zone') || '';
+                    var status = $el.data('status') || '';
+
+                    var statusBadge = status === 'active'
+                        ? '<span class="badge" style="background:#dcfce7; color:#166534; font-size:0.65rem; padding: 3px 7px; border-radius: 4px;">ACTIVE</span>'
+                        : (status ? '<span class="badge" style="background:#fee2e2; color:#991b1b; font-size:0.65rem; padding: 3px 7px; border-radius: 4px;">INACTIVE</span>' : '');
+
+                    var codeHtml = code ? '<span class="badge bg-light text-primary border" style="font-size:0.72rem; font-weight:700;">' + $('<div>').text(code).html() + '</span>' : '';
+                    var mobileHtml = mobile ? '<span><i class="fa fa-phone-alt me-1 text-secondary" style="font-size:0.7rem;"></i>' + $('<div>').text(mobile).html() + '</span>' : '';
+                    var contactHtml = contact ? '<span><i class="fa fa-user me-1 text-secondary" style="font-size:0.7rem;"></i>' + $('<div>').text(contact).html() + '</span>' : '';
+                    var zoneHtml = zone ? '<span><i class="fa fa-map-marker-alt me-1 text-secondary" style="font-size:0.7rem;"></i>' + $('<div>').text(zone).html() + '</span>' : '';
+
+                    var html =
+                        '<div class="d-flex justify-content-between align-items-center py-1">' +
+                            '<div>' +
+                                '<div class="fw-bold text-dark select2-customer-title" style="font-size:0.92rem;">' + $('<div>').text(name).html() + '</div>' +
+                                '<div class="d-flex align-items-center flex-wrap gap-2 mt-1 text-muted select2-customer-meta" style="font-size:0.75rem;">' +
+                                    codeHtml + mobileHtml + contactHtml + zoneHtml +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="ms-2">' + statusBadge + '</div>' +
+                        '</div>';
+
+                    return $(html);
+                },
+                templateSelection: function(customer) {
+                    if (!customer.id) {
+                        return customer.text;
+                    }
+                    var $el = $(customer.element);
+                    var name = $el.data('name') || customer.text;
+                    var code = $el.data('code');
+                    return name + (code ? ' (' + code + ')' : '');
+                }
+            });
+
+            // Filter table on customer select
+            $select.on('change', function() {
+                var selectedId = $(this).val();
+
+                if (!selectedId) {
+                    $('.customer-row').show();
+                    $('#noCustomerFoundRow').hide();
+                    $('#btnResetCustomerSearch').hide();
+                    $('#quickCustomerActions').hide();
+                    $('#customerShowingCount').html('Showing {{ $customers->count() }} registered customers');
+                } else {
+                    $('.customer-row').hide();
+                    var $targetRow = $('#customer-row-' + selectedId);
+
+                    if ($targetRow.length) {
+                        $targetRow.show();
+                        $('#noCustomerFoundRow').hide();
+
+                        $('html, body').stop().animate({
+                            scrollTop: $targetRow.offset().top - 140
+                        }, 300);
+
+                        $targetRow.removeClass('row-highlight');
+                        void $targetRow[0].offsetWidth;
+                        $targetRow.addClass('row-highlight');
+
+                        var editUrl = "{{ url('parties') }}/" + selectedId + "/edit?type=Customer";
+                        var ledgerUrl = "{{ route('customers.ledger') }}?customer_id=" + selectedId;
+                        $('#btnQuickLedger').attr('href', ledgerUrl);
+                        $('#btnQuickEdit').attr('href', editUrl);
+                        $('#quickCustomerActions').fadeIn(200);
+                        $('#btnResetCustomerSearch').show();
+
+                        var custName = $targetRow.find('.identity-group .name').text().trim();
+                        $('#customerShowingCount').html('Showing <b>1</b> of {{ $customers->count() }} registered customers (Filtered: <span class="text-primary fw-bold">' + custName + '</span>)');
+                    } else {
+                        $('#noCustomerFoundRow').show();
+                        $('#btnResetCustomerSearch').show();
+                        $('#quickCustomerActions').hide();
+                        $('#customerShowingCount').html('Showing <b>0</b> registered customers');
+                    }
+                }
+            });
+
+            // Reset button click
+            $('#btnResetCustomerSearch').on('click', function() {
+                $select.val('').trigger('change');
+            });
+
+            // Search icon click opens dropdown
+            $('.search-icon-circle').on('click', function() {
+                $select.select2('open');
+            });
+
+            // Keyboard shortcut '/' to focus search
+            $(document).on('keydown', function(e) {
+                if (e.key === '/' && !$(e.target).is('input, textarea, select')) {
+                    e.preventDefault();
+                    $select.select2('open');
+                }
+            });
+
+            // Auto-filter if customer_id is provided in URL
+            var urlParams = new URLSearchParams(window.location.search);
+            var paramCustId = urlParams.get('customer_id');
+            if (paramCustId) {
+                $select.val(paramCustId).trigger('change');
+            }
+        }
+
+        // Initialize on DOM ready
+        if (typeof $ !== 'undefined') {
+            $(document).ready(initCustomerSelect2);
+        }
+        // Fallback on window load
+        window.addEventListener('load', initCustomerSelect2);
+    })();
+</script>
 @endsection
 

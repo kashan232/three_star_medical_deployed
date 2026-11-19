@@ -46,6 +46,10 @@ class DeliveryNoteController extends Controller
     public function create()
     {
         $branchId  = $this->getBranchId();
+        if (! $branchId) {
+            return redirect()->route('delivery.note.index')->with('error', 'Please select a specific branch from the top switcher before creating a Delivery Note. Operations cannot be performed under "All Branches".');
+        }
+
         $branch    = \App\Models\Branch::find($branchId);
         $branchName = $branch ? $branch->name : 'Head Office';
         $nextDcNo  = 'Auto (e.g. 1-01, 1-02, 2-01)'; 
@@ -108,7 +112,10 @@ class DeliveryNoteController extends Controller
                 'qty.*.required'          => 'Delivery quantity is required for all items.',
             ]);
 
-            $branchId   = $this->getBranchId() ?? (int)($request->branch_id ?? 1);
+            $branchId   = $this->getBranchId() ?? (int)($request->branch_id ?? 0);
+            if (! $branchId) {
+                return redirect()->back()->with('error', 'Please select a specific branch before creating a Delivery Note. Operations under "All Branches" are not permitted.')->withInput();
+            }
             $isSample   = ($deliveryType === 'donation');
             $isStandard = ($deliveryType === 'standard');
             $sale       = $isStandard ? Sale::with('items')->findOrFail($request->sale_id) : null;

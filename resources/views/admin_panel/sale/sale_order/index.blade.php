@@ -295,13 +295,29 @@
                 </div>
                 <div>
                     @can('sales.create')
-                        <a class="btn btn-primary btn-lg px-4 shadow-lg fw-bold rounded-pill"
-                            href="{{ route('sale.add', ['mode' => 'so']) }}">
-                            <i class="fas fa-plus-circle me-2"></i> NEW SALE ORDER
-                        </a>
+                        @if (auth()->user()->isSuperAdmin() && empty($activeBranchId))
+                            <button type="button" class="btn btn-primary btn-lg px-4 shadow-lg fw-bold rounded-pill btn-requires-branch">
+                                <i class="fas fa-plus-circle me-2"></i> NEW SALE ORDER
+                            </button>
+                        @else
+                            <a class="btn btn-primary btn-lg px-4 shadow-lg fw-bold rounded-pill"
+                                href="{{ route('sale.add', ['mode' => 'so']) }}">
+                                <i class="fas fa-plus-circle me-2"></i> NEW SALE ORDER
+                            </a>
+                        @endif
                     @endcan
                 </div>
             </div>
+
+            @if (auth()->user()->isSuperAdmin() && empty($activeBranchId))
+                <div class="alert alert-warning border-0 shadow-sm d-flex align-items-center mb-4 p-3" style="border-radius: 12px; background: #fff8e6; border-left: 5px solid #f59e0b !important;">
+                    <i class="fas fa-exclamation-triangle fa-2x text-warning mr-3"></i>
+                    <div>
+                        <h6 class="mb-1 font-weight-bold text-dark"><i class="fas fa-globe mr-1"></i> All Branches View Active</h6>
+                        <span class="text-muted small">Aap is waqt tamaam branches ka consolidated data dekh rahe hain. Naya Sale Order create karne ke liye pehle upar branch switcher se specific branch select karein.</span>
+                    </div>
+                </div>
+            @endif
 
             <!-- KPI Row -->
             <div class="row mb-4">
@@ -512,6 +528,17 @@
                             }).then(() => window.location.reload());
                         });
                     }
+                });
+            });
+
+            $(document).on('click', '.btn-requires-branch', function(e) {
+                e.preventDefault();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Branch Selection Required',
+                    text: 'Pehle upar branch switcher se specific branch select karein! "All Branches" mode mein sale order create nahi ho sakti.',
+                    confirmButtonColor: '#4f46e5',
+                    confirmButtonText: 'Theek Hai'
                 });
             });
 

@@ -645,14 +645,16 @@
                                         @php
                                              $obClass = $ob > 0.01 ? 'bal-dr' : ($ob < -0.01 ? 'bal-cr' : 'bal-zero');
                                              $obLabel = $ob > 0.01 ? 'Dr' : ($ob < -0.01 ? 'Cr' : '—');
+                                             $obDr = $ob > 0.01 ? 'Rs ' . number_format(abs($ob), 2) : '—';
+                                             $obCr = $ob < -0.01 ? 'Rs ' . number_format(abs($ob), 2) : '—';
                                         @endphp
                                         <tr class="row-opening">
                                             <td>—</td>
                                             <td>—</td>
                                             <td><span class="tx-type tx-journal">B/F</span></td>
                                             <td>Opening Balance Brought Forward</td>
-                                            <td class="tr amt-nil">—</td>
-                                            <td class="tr amt-nil">—</td>
+                                            <td class="tr {{ $ob > 0.01 ? 'amt-dr' : 'amt-nil' }}">{{ $obDr }}</td>
+                                            <td class="tr {{ $ob < -0.01 ? 'amt-cr' : 'amt-nil' }}">{{ $obCr }}</td>
                                             <td class="tr {{ $obClass }}">
                                                 Rs {{ number_format(abs($ob), 2) }}
                                                 <small style="font-size:.7em;opacity:.7;">{{ $obLabel }}</small>

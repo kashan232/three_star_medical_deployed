@@ -23,10 +23,13 @@ class SaleReturnController extends Controller
 
     public function createBlank()
     {
-        $branchId = $this->getBranchId() ?? 1;
-        $customers = \App\Models\Customer::when($branchId, fn ($q) => $q->where('branch_id', $branchId))->orderBy('customer_name')->get();
+        $branchId = $this->getBranchId();
+        if (! $branchId) {
+            return redirect()->route('sale.return.index')->with('error', 'Please select a specific branch from the top switcher before creating a Sale Return. Operations cannot be performed under "All Branches".');
+        }
+        $customers = \App\Models\Customer::where('branch_id', $branchId)->orderBy('customer_name')->get();
         $accounts = app(\App\Services\BalanceService::class)->getPaymentAccounts();
-        $warehouses = \App\Models\Warehouse::when($branchId, fn ($q) => $q->where('branch_id', $branchId))->get();
+        $warehouses = \App\Models\Warehouse::where('branch_id', $branchId)->get();
         return view('admin_panel.sale.sale_return.create', ['sale' => null, 'customers' => $customers, 'accounts' => $accounts, 'saleItems' => [], 'warehouses' => $warehouses]);
     }
 
@@ -322,11 +325,15 @@ class SaleReturnController extends Controller
             }
         }
 
+        $sale = $validated['sale_id'] ? Sale::find($validated['sale_id']) : null;
+        $branchId = $this->getBranchId() ?? ($sale ? $sale->branch_id : null) ?? (int) ($request->branch_id ?? 0);
+        if (! $branchId) {
+            return redirect()->back()->with('error', 'Please select a specific branch before processing a sale return. Operations under "All Branches" are not permitted.')->withInput();
+        }
+
         DB::beginTransaction();
 
         try {
-            $branchId = $this->getBranchId();
-            
             // Generate Return Invoice Number
             $lastReturn = SaleReturn::orderBy('id', 'desc')->first();
             $nextInvoice = $lastReturn
@@ -342,11 +349,9 @@ class SaleReturnController extends Controller
                 'return_date' => $validated['return_date'],
                 'remarks' => $validated['remarks'] ?? null,
                 'status' => 'posted',
-                'branch_id' => $branchId ?? 1,
+                'branch_id' => (int) $branchId,
                 'created_by' => auth()->id() ?? 1,
             ]);
-
-            $sale = $validated['sale_id'] ? Sale::find($validated['sale_id']) : null;
             $now = Carbon::now();
             $movements = [];
             $subtotal = 0;

@@ -616,19 +616,25 @@
                                             <tbody>
                                                 @php
                                                     $currentBranchId = auth()->user()->getBranchId();
-                                                    $currentBranchName = $currentBranchId
-                                                        ? \App\Models\Branch::find($currentBranchId)?->name
-                                                        : 'All Branches (Super Admin)';
+                                                    $currentBranch = $currentBranchId ? \App\Models\Branch::find($currentBranchId) : null;
+                                                    $currentBranchName = $currentBranch?->name ?? 'NO BRANCH SELECTED';
                                                 @endphp
                                                 <tr>
                                                     <td class="compact-lbl compact-td" style="width: 15%;">BRANCH :</td>
                                                     <td colspan="3" class="compact-td">
-                                                        <input type="text"
-                                                            class="compact-input shadow-sm text-secondary bg-light"
-                                                            style="max-width:300px; font-weight:600;"
-                                                            value="{{ strtoupper($currentBranchName) }}" readonly>
-                                                        <input type="hidden" name="branch_id" id="branch_id"
-                                                            value="{{ $currentBranchId }}">
+                                                        @if ($currentBranchId)
+                                                            <input type="text"
+                                                                class="compact-input shadow-sm text-secondary bg-light"
+                                                                style="max-width:300px; font-weight:600;"
+                                                                value="{{ strtoupper($currentBranchName) }}" readonly>
+                                                            <input type="hidden" name="branch_id" id="branch_id"
+                                                                value="{{ $currentBranchId }}">
+                                                        @else
+                                                            <div class="alert alert-danger mb-0 py-1 px-2 d-inline-flex align-items-center" style="font-size: 0.8rem; border-radius: 6px;">
+                                                                <i class="fas fa-exclamation-circle mr-1"></i>
+                                                                <strong>Branch not selected!</strong> Please select a branch from top switcher before saving.
+                                                            </div>
+                                                        @endif
                                                     </td>
                                                 </tr>
                                                 <tr>

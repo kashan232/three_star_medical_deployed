@@ -230,7 +230,10 @@ class PurchaseController extends Controller
 
     public function add_purchase(Request $request)
     {
-        $branchId = $this->getBranchId() ?? (\App\Models\Warehouse::first()->branch_id ?? 1);
+        $branchId = $this->getBranchId();
+        if (! $branchId) {
+            return redirect()->route('purchases.index')->with('error', 'Please select a specific branch from the top switcher before creating a purchase. Operations cannot be performed under "All Branches".');
+        }
         $branch = \App\Models\Branch::find($branchId);
         $branchName = $branch ? $branch->name : 'Head Office';
 

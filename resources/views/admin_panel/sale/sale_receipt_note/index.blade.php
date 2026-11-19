@@ -318,13 +318,29 @@
                 </div>
                 <div>
                     @can('sales.create')
-                        <a class="btn btn-light btn-lg px-5 shadow-lg fw-800 rounded-pill text-emerald" style="color: #065f46"
-                            href="{{ route('sale.add', ['mode' => 'sin']) }}">
-                            <i class="fas fa-file-signature me-2"></i> CREATE NEW INVOICE NOTE
-                        </a>
+                        @if (auth()->user()->isSuperAdmin() && empty($activeBranchId))
+                            <button type="button" class="btn btn-light btn-lg px-5 shadow-lg fw-800 rounded-pill text-emerald btn-requires-branch" style="color: #065f46">
+                                <i class="fas fa-file-signature me-2"></i> CREATE NEW INVOICE NOTE
+                            </button>
+                        @else
+                            <a class="btn btn-light btn-lg px-5 shadow-lg fw-800 rounded-pill text-emerald" style="color: #065f46"
+                                href="{{ route('sale.add', ['mode' => 'sin']) }}">
+                                <i class="fas fa-file-signature me-2"></i> CREATE NEW INVOICE NOTE
+                            </a>
+                        @endif
                     @endcan
                 </div>
             </div>
+
+            @if (auth()->user()->isSuperAdmin() && empty($activeBranchId))
+                <div class="alert alert-warning border-0 shadow-sm d-flex align-items-center mb-4 p-3" style="border-radius: 12px; background: #fff8e6; border-left: 5px solid #f59e0b !important;">
+                    <i class="fas fa-exclamation-triangle fa-2x text-warning mr-3"></i>
+                    <div>
+                        <h6 class="mb-1 font-weight-bold text-dark"><i class="fas fa-globe mr-1"></i> All Branches View Active</h6>
+                        <span class="text-muted small">Aap is waqt tamaam branches ka consolidated data dekh rahe hain. Nayi Sale Invoice create karne ke liye pehle upar branch switcher se specific branch (maslan Lahore ya Multan) select karein.</span>
+                    </div>
+                </div>
+            @endif
 
             <!-- Dashboard Stats -->
             <div class="row mb-5">
@@ -531,6 +547,17 @@
                 "dom": "<'row mb-3'<'col-sm-12 col-md-6'l><'col-sm-12 col-md-6'f>>" +
                     "<'row'<'col-sm-12'tr>>" +
                     "<'row mt-3'<'col-sm-12 col-md-5'i><'col-sm-12 col-md-7'p>>",
+            });
+
+            $(document).on('click', '.btn-requires-branch', function(e) {
+                e.preventDefault();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Branch Selection Required',
+                    text: 'Pehle upar branch switcher se specific branch select karein! "All Branches" mode mein sale invoice create nahi ho sakti.',
+                    confirmButtonColor: '#059669',
+                    confirmButtonText: 'Theek Hai'
+                });
             });
 
             $(document).on('click', '.btn-unpost-srn', function() {

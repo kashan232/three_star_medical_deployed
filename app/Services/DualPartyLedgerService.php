@@ -153,6 +153,16 @@ class DualPartyLedgerService
                 ->orderBy('id', 'desc')
                 ->first();
             $vendOpening = $lastVendEntry ? (float)$lastVendEntry->closing_balance : (float)($twinVendor->opening_balance ?? 0);
+        if ($vendOpening == 0 && (float)($twinVendor->opening_balance ?? 0) != 0) {
+            $hasReal = VendorLedger::where('vendor_id', $twinVendor->id)
+                ->whereNull('deleted_at')
+                ->where(fn($q) => $q->where('debit', '>', 0)->orWhere('credit', '>', 0))
+                ->whereDate('created_at', '<', $startDate)
+                ->exists();
+            if (!$hasReal) {
+                $vendOpening = (float)($twinVendor->opening_balance ?? 0);
+            }
+        }
         }
 
         // Net opening: Customer Receivable (+) minus Vendor Payable (-)
@@ -376,6 +386,16 @@ class DualPartyLedgerService
             ->orderBy('id', 'desc')
             ->first();
         $openingBalance = $lastVendEntry ? (float)$lastVendEntry->closing_balance : (float)($vendor->opening_balance ?? 0);
+        if ($openingBalance == 0 && (float)($vendor->opening_balance ?? 0) != 0) {
+            $hasReal = VendorLedger::where('vendor_id', $vendorId)
+                ->whereNull('deleted_at')
+                ->where(fn($q) => $q->where('debit', '>', 0)->orWhere('credit', '>', 0))
+                ->whereDate('created_at', '<', $startDate)
+                ->exists();
+            if (!$hasReal) {
+                $openingBalance = (float)($vendor->opening_balance ?? 0);
+            }
+        }
 
         $vendLedgers = VendorLedger::where('vendor_id', $vendorId)
             ->whereNull('deleted_at')

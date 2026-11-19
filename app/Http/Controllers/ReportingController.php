@@ -2095,7 +2095,10 @@ class ReportingController extends Controller
         if (isset($d->headers)) return $d; // return error response if any
         
         $data = [['Date', 'Invoice', 'Description', 'Type', 'Debit', 'Credit', 'Balance']];
-        $data[] = ['','','Opening Balance','','','',$d['opening_balance']];
+        $ob = (float)($d['opening_balance'] ?? 0);
+        $obDr = $ob < -0.01 ? abs($ob) : '';
+        $obCr = $ob > 0.01 ? abs($ob) : '';
+        $data[] = ['', '', 'Opening Balance', '', $obDr, $obCr, $ob];
         foreach ($d['transactions'] as $r) {
             $data[] = [$r['date'], $r['invoice'], $r['description'], $r['type'], $r['debit'], $r['credit'], $r['balance']];
         }
@@ -2125,7 +2128,10 @@ class ReportingController extends Controller
         $html .= '<h2>Customer Ledger: ' . $d['customer']['customer_name'] . '</h2>';
         $html .= '<p>Period: ' . $d['report_period'] . '</p>';
         $html .= '<table><tr><th>Date</th><th>Invoice</th><th>Description</th><th>Type</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr>';
-        $html .= '<tr><td colspan="6">Opening Balance</td><td class="num">'.number_format($d['opening_balance'],2).'</td></tr>';
+        $ob = (float)($d['opening_balance'] ?? 0);
+        $obDr = $ob < -0.01 ? number_format(abs($ob), 2) : '—';
+        $obCr = $ob > 0.01 ? number_format(abs($ob), 2) : '—';
+        $html .= '<tr><td colspan="4">Opening Balance</td><td class="num">'.$obDr.'</td><td class="num">'.$obCr.'</td><td class="num">'.number_format($ob, 2).'</td></tr>';
         foreach ($d['transactions'] as $t) {
             $html .= '<tr><td>'.$t['date'].'</td><td>'.$t['invoice'].'</td><td>'.$t['description'].'</td><td>'.$t['type'].'</td><td class="num">'.number_format($t['debit'],2).'</td><td class="num">'.number_format($t['credit'],2).'</td><td class="num">'.number_format($t['balance'],2).'</td></tr>';
         }
@@ -2852,6 +2858,20 @@ class ReportingController extends Controller
             ? (float)$lastVendEntry->closing_balance
             : (float)($vendor->opening_balance ?? 0);
 
+        if ($openingBalance == 0 && (float)($vendor->opening_balance ?? 0) != 0) {
+            $hasRealTxBeforeStart = DB::table('vendor_ledgers')
+                ->where('vendor_id', $vendorId)
+                ->whereNull('deleted_at')
+                ->where(function($q) {
+                    $q->where('debit', '>', 0)->orWhere('credit', '>', 0);
+                })
+                ->whereDate('created_at', '<', $start)
+                ->exists();
+            if (!$hasRealTxBeforeStart) {
+                $openingBalance = (float)($vendor->opening_balance ?? 0);
+            }
+        }
+
         $customerOpeningBalance = 0;
         if ($twinCustomer) {
             $lastCustEntry = DB::table('customer_ledgers')
@@ -2922,6 +2942,13 @@ class ReportingController extends Controller
         $vendEntries = DB::table('vendor_ledgers')
             ->where('vendor_id', $vendorId)
             ->whereNull('deleted_at')
+            ->where(function($q) {
+                $q->where('debit', '>', 0)
+                  ->orWhere('credit', '>', 0)
+                  ->orWhere(function($sub) {
+                      $sub->whereNotNull('description')->where('description', '!=', '');
+                  });
+            })
             ->whereDate('created_at', '>=', $start)
             ->whereDate('created_at', '<=', $end)
             ->orderBy('created_at')->orderBy('id')
@@ -3045,7 +3072,10 @@ class ReportingController extends Controller
         if (isset($d->headers)) return $d; // return error response if any
         
         $data = [['Date', 'Invoice', 'Description', 'Type', 'Debit', 'Credit', 'Balance']];
-        $data[] = ['','','Opening Balance','','','',$d['opening_balance']];
+        $ob = (float)($d['opening_balance'] ?? 0);
+        $obDr = $ob < -0.01 ? abs($ob) : '';
+        $obCr = $ob > 0.01 ? abs($ob) : '';
+        $data[] = ['', '', 'Opening Balance', '', $obDr, $obCr, $ob];
         foreach ($d['transactions'] as $r) {
             $data[] = [$r['date'], $r['invoice'], $r['description'], $r['type'], $r['debit'], $r['credit'], $r['balance']];
         }
@@ -3075,7 +3105,10 @@ class ReportingController extends Controller
         $html .= '<h2>Vendor Ledger: ' . $d['vendor']['name'] . '</h2>';
         $html .= '<p>Period: ' . $d['report_period'] . '</p>';
         $html .= '<table><tr><th>Date</th><th>Invoice</th><th>Description</th><th>Type</th><th class="num">Debit</th><th class="num">Credit</th><th class="num">Balance</th></tr>';
-        $html .= '<tr><td colspan="6">Opening Balance</td><td class="num">'.number_format($d['opening_balance'],2).'</td></tr>';
+        $ob = (float)($d['opening_balance'] ?? 0);
+        $obDr = $ob < -0.01 ? number_format(abs($ob), 2) : '—';
+        $obCr = $ob > 0.01 ? number_format(abs($ob), 2) : '—';
+        $html .= '<tr><td colspan="4">Opening Balance</td><td class="num">'.$obDr.'</td><td class="num">'.$obCr.'</td><td class="num">'.number_format($ob, 2).'</td></tr>';
         foreach ($d['transactions'] as $t) {
             $html .= '<tr><td>'.$t['date'].'</td><td>'.$t['invoice'].'</td><td>'.$t['description'].'</td><td>'.$t['type'].'</td><td class="num">'.number_format($t['debit'],2).'</td><td class="num">'.number_format($t['credit'],2).'</td><td class="num">'.number_format($t['balance'],2).'</td></tr>';
         }
@@ -3188,6 +3221,19 @@ class ReportingController extends Controller
         foreach ($vendors as $v) {
             $lastEntry = $allLastEntries->get($v->id);
             $openingBalance = $lastEntry ? (float)$lastEntry->closing_balance : (float)($v->opening_balance ?? 0);
+            if ($openingBalance == 0 && (float)($v->opening_balance ?? 0) != 0) {
+                $hasRealTx = DB::table('vendor_ledgers')
+                    ->where('vendor_id', $v->id)
+                    ->whereNull('deleted_at')
+                    ->where(function($q) {
+                        $q->where('debit', '>', 0)->orWhere('credit', '>', 0);
+                    })
+                    ->whereDate('created_at', '<', $start)
+                    ->exists();
+                if (!$hasRealTx) {
+                    $openingBalance = (float)($v->opening_balance ?? 0);
+                }
+            }
             
             $customerOpeningBalance = 0;
             $twinCust = $twinCustomers[$v->id] ?? null;

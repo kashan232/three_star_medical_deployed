@@ -174,6 +174,137 @@
             gap: 8px;
             justify-content: flex-end;
         }
+
+        /* Quick Vendor Search Card */
+        .vendor-search-card {
+            background: #ffffff;
+            border-radius: var(--radius-lg);
+            padding: 16px 22px;
+            box-shadow: var(--shadow-subtle);
+            border: 1px solid #e2e8f0;
+        }
+
+        .search-icon-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 12px;
+            background: #eef2ff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.15rem;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .search-icon-circle:hover {
+            background: #e0e7ff;
+            transform: scale(1.05);
+        }
+
+        /* Select2 Premium Custom Styling */
+        .vendor-search-card .select2-container--default .select2-selection--single {
+            border: 1.5px solid #cbd5e1 !important;
+            border-radius: 10px !important;
+            height: 44px !important;
+            background-color: #f8fafc !important;
+            display: flex;
+            align-items: center;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .vendor-search-card .select2-container--default .select2-selection--single:hover {
+            border-color: #94a3b8 !important;
+            background-color: #ffffff !important;
+        }
+
+        .vendor-search-card .select2-container--default.select2-container--focus .select2-selection--single,
+        .vendor-search-card .select2-container--default.select2-container--open .select2-selection--single {
+            border-color: var(--primary) !important;
+            background-color: #ffffff !important;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15) !important;
+            outline: none !important;
+        }
+
+        .vendor-search-card .select2-container--default .select2-selection--single .select2-selection__rendered {
+            color: #1e293b !important;
+            font-size: 0.92rem !important;
+            font-weight: 600;
+            padding-left: 14px !important;
+            padding-right: 32px !important;
+            line-height: 42px !important;
+        }
+
+        .vendor-search-card .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 42px !important;
+            right: 12px !important;
+        }
+
+        .vendor-search-card .select2-container--default .select2-selection--single .select2-selection__clear {
+            font-size: 1.25rem;
+            margin-right: 14px;
+            color: #94a3b8;
+            cursor: pointer;
+        }
+
+        .vendor-search-card .select2-container--default .select2-selection--single .select2-selection__clear:hover {
+            color: #ef4444;
+        }
+
+        /* Select2 Dropdown Styling */
+        .select2-dropdown {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 10px !important;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.12), 0 8px 10px -6px rgba(0, 0, 0, 0.06) !important;
+            overflow: hidden;
+            z-index: 9999 !important;
+        }
+
+        .select2-dropdown .select2-search--dropdown {
+            padding: 8px 10px !important;
+        }
+
+        .select2-dropdown .select2-search__field {
+            border: 1px solid #cbd5e1 !important;
+            border-radius: 8px !important;
+            padding: 8px 12px !important;
+            font-size: 0.9rem !important;
+            outline: none !important;
+        }
+
+        .select2-dropdown .select2-search__field:focus {
+            border-color: var(--primary) !important;
+            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.15) !important;
+        }
+
+        .select2-results__option--highlighted[aria-selected] {
+            background-color: var(--primary) !important;
+            color: #ffffff !important;
+        }
+
+        .select2-results__option--highlighted[aria-selected] .select2-vendor-title,
+        .select2-results__option--highlighted[aria-selected] .select2-vendor-meta,
+        .select2-results__option--highlighted[aria-selected] i {
+            color: #ffffff !important;
+        }
+
+        .select2-results__option--highlighted[aria-selected] .badge {
+            background-color: rgba(255, 255, 255, 0.25) !important;
+            color: #ffffff !important;
+            border-color: rgba(255, 255, 255, 0.4) !important;
+        }
+
+        /* Row Highlight Flash Animation */
+        @keyframes highlightFlash {
+            0% { background-color: #fef08a !important; }
+            50% { background-color: #fef9c3 !important; }
+            100% { background-color: transparent; }
+        }
+
+        .row-highlight td {
+            animation: highlightFlash 2.5s ease-out;
+        }
     </style>
 
     <div class="vendor-listing-area">
@@ -206,6 +337,57 @@
                 </div>
             @endif
 
+            <!-- Quick Vendor Search Bar -->
+            <div class="vendor-search-card mb-4">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-3 flex-grow-1" style="min-width: 320px; max-width: 720px;">
+                        <div class="search-icon-circle" title="Click to search vendors">
+                            <i class="fa fa-search text-primary"></i>
+                        </div>
+                        <div class="flex-grow-1">
+                            <div class="d-flex align-items-center justify-content-between mb-1">
+                                <label for="vendorSearchSelect" class="form-label fw-bold text-dark small mb-0">
+                                    <i class="fa fa-bolt text-warning me-1"></i> Quick Vendor Search
+                                </label>
+                                <span class="text-muted" style="font-size: 0.72rem;">Search by Name, Business, Code, Phone, or City</span>
+                            </div>
+                            <select id="vendorSearchSelect" class="form-control" style="width: 100%;">
+                                <option value=""></option>
+                                @foreach ($vendors as $v)
+                                    <option value="{{ $v->id }}"
+                                        data-name="{{ $v->name }}"
+                                        data-business="{{ $v->business_name ?? '' }}"
+                                        data-code="{{ $v->vendor_code ?? '' }}"
+                                        data-phone="{{ $v->phone ?? '' }}"
+                                        data-contact="{{ $v->contact_person ?? '' }}"
+                                        data-city="{{ $v->city ?? '' }}"
+                                        data-cnic="{{ $v->cnic ?? '' }}"
+                                        data-ntn="{{ $v->ntn_no ?? '' }}"
+                                        data-status="{{ $v->is_active ? 'active' : 'inactive' }}">
+                                        {{ $v->name }}{{ $v->vendor_code ? ' [CODE: ' . $v->vendor_code . ']' : '' }}{{ $v->phone ? ' • ' . $v->phone : '' }}{{ $v->city ? ' • ' . $v->city : '' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Filtered State Actions -->
+                    <div class="d-flex align-items-center gap-2 flex-wrap ms-auto">
+                        <div id="quickVendorActions" style="display: none;" class="d-flex gap-2 align-items-center">
+                            <a id="btnQuickLedger" href="#" class="btn btn-sm btn-outline-primary fw-bold shadow-sm" style="border-radius: 8px;">
+                                <i class="fa fa-list-alt me-1"></i> Vendor Ledger
+                            </a>
+                            <a id="btnQuickEdit" href="#" class="btn btn-sm btn-outline-info fw-bold shadow-sm" style="border-radius: 8px;">
+                                <i class="fa fa-edit me-1"></i> Edit Vendor
+                            </a>
+                        </div>
+                        <button type="button" id="btnResetVendorSearch" class="btn btn-sm btn-outline-secondary fw-bold" style="border-radius: 8px; display: none;">
+                            <i class="fa fa-times me-1"></i> Show All Vendors
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <!-- Main Table Wrapper -->
             <div class="table-container">
                 <table class="table-premium">
@@ -222,7 +404,7 @@
                     </thead>
                     <tbody>
                         @foreach ($vendors as $v)
-                            <tr>
+                            <tr class="vendor-row" id="vendor-row-{{ $v->id }}" data-vendor-id="{{ $v->id }}">
                                 <!-- Identity -->
                                 <td>
                                     <div class="identity-group">
@@ -334,13 +516,27 @@
                                 </td>
                             </tr>
                         @endforeach
+                        <tr id="noVendorFoundRow" style="display: none;">
+                            <td colspan="7" class="text-center py-5">
+                                <div class="py-4">
+                                    <div class="mb-3 text-secondary opacity-50">
+                                        <i class="fa fa-search fa-3x"></i>
+                                    </div>
+                                    <h6 class="fw-bold text-dark mb-1">No matching vendor found</h6>
+                                    <p class="text-muted small mb-3">Try searching with a different name, code, phone number, or city.</p>
+                                    <button type="button" class="btn btn-sm btn-primary fw-bold px-3" style="border-radius: 8px;" onclick="$('#vendorSearchSelect').val('').trigger('change');">
+                                        <i class="fa fa-rotate-left me-1"></i> Show All Vendors
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
 
             <!-- Footer Meta -->
             <div class="d-flex justify-content-between align-items-center">
-                <div class="text-muted small fw-bold">
+                <div class="text-muted small fw-bold" id="vendorShowingCount">
                     System synchronizing {{ $vendors->count() }} active procurement accounts
                 </div>
             </div>

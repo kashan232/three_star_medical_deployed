@@ -982,16 +982,18 @@
                 let html = '';
 
                 // Opening row
-                const obClass = ob >= 0 ? 'bal-cr' : (ob < 0 ? 'bal-dr' : 'bal-zero');
-                const obLabel = ob >= 0 ? 'Cr' : 'Dr';
+                const obClass = ob > 0.01 ? 'bal-cr' : (ob < -0.01 ? 'bal-dr' : 'bal-zero');
+                const obLabel = ob > 0.01 ? 'Cr' : (ob < -0.01 ? 'Dr' : '—');
+                const obDr = ob < -0.01 ? `Rs ${fmt(Math.abs(ob))}` : '—';
+                const obCr = ob > 0.01 ? `Rs ${fmt(Math.abs(ob))}` : '—';
                 html += `
             <tr class="row-opening">
                 <td>—</td>
                 <td>—</td>
                 <td><span class="tx-type tx-journal">B/F</span></td>
                 <td>Opening Balance Brought Forward</td>
-                <td class="tr amt-nil">—</td>
-                <td class="tr amt-nil">—</td>
+                <td class="tr ${ob < -0.01 ? 'amt-dr' : 'amt-nil'}">${obDr}</td>
+                <td class="tr ${ob > 0.01 ? 'amt-cr' : 'amt-nil'}">${obCr}</td>
                 <td class="tr ${obClass}">
                     Rs ${fmt(Math.abs(ob))}
                     <small style="font-size:.7em;opacity:.7">${obLabel}</small>

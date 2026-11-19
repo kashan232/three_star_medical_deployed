@@ -394,12 +394,28 @@
                     <i class="fas fa-calendar-check"></i> All Bookings
                 </a>
                 @can('sales.create')
-                    <a href="{{ route('sale.add') }}" class="btn-hdr btn-hdr-solid">
-                        <i class="fas fa-plus"></i> Add Sale
-                    </a>
+                    @if (auth()->user()->isSuperAdmin() && empty($activeBranchId))
+                        <button type="button" class="btn-hdr btn-hdr-solid btn-requires-branch border-0" style="cursor: pointer;">
+                            <i class="fas fa-plus"></i> Add Sale
+                        </button>
+                    @else
+                        <a href="{{ route('sale.add') }}" class="btn-hdr btn-hdr-solid">
+                            <i class="fas fa-plus"></i> Add Sale
+                        </a>
+                    @endif
                 @endcan
             </div>
         </div>
+
+        @if (auth()->user()->isSuperAdmin() && empty($activeBranchId))
+            <div class="alert alert-warning border-0 shadow-sm d-flex align-items-center mb-4 p-3" style="border-radius: 12px; background: #fff8e6; border-left: 5px solid #f59e0b !important;">
+                <i class="fas fa-exclamation-triangle fa-2x text-warning mr-3"></i>
+                <div>
+                    <h6 class="mb-1 font-weight-bold text-dark"><i class="fas fa-globe mr-1"></i> All Branches View Active</h6>
+                    <span class="text-muted small">Aap is waqt tamaam branches ka consolidated data dekh rahe hain. Nayi Sale create karne ke liye pehle upar branch switcher se specific branch select karein.</span>
+                </div>
+            </div>
+        @endif
 
         {{-- ── Session Alerts ── --}}
         @if (session('success'))
@@ -734,6 +750,17 @@
                         next: '›'
                     }
                 }
+            });
+
+            $(document).on('click', '.btn-requires-branch', function(e) {
+                e.preventDefault();
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Branch Selection Required',
+                    text: 'Pehle upar branch switcher se specific branch select karein! "All Branches" mode mein sale create nahi ho sakti.',
+                    confirmButtonColor: '#059669',
+                    confirmButtonText: 'Theek Hai'
+                });
             });
 
             $(document).on('click', '.btn-unpost-srn', function() {
