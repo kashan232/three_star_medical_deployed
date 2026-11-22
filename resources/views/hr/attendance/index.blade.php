@@ -434,13 +434,14 @@
 
                                 $status = $attendance->status ?? 'absent';
 
-                                // If employee has approved leave or holiday or weekly off and NO attendance record, we visually treat it as leave to avoid red 'absent'
-                                if (($approvedLeave || $empHoliday || $isWeeklyOff) && !$attendance) {
+                                // Check Holiday First! If today is a Holiday for this employee, status is holiday/leave
+                                if ($empHoliday) {
                                     $status = 'leave';
-                                }
-
-                                // Override status if late but still showing present
-                                if ($attendance && $attendance->status == 'present' && $attendance->is_late) {
+                                } elseif ($approvedLeave && !$attendance) {
+                                    $status = 'leave';
+                                } elseif ($isWeeklyOff && !$attendance) {
+                                    $status = 'leave';
+                                } elseif ($attendance && $attendance->status == 'present' && $attendance->is_late) {
                                     $status = 'late';
                                 }
 
@@ -473,20 +474,20 @@
                                     <div class="hr-item-info ms-3">
                                         <h4 class="hr-item-name">{{ $emp->full_name }}</h4>
 
-                                        {{-- Display Leave Info if exists --}}
-                                        @if ($approvedLeave)
-                                            <div class="mb-2">
-                                                <span class="badge bg-info text-dark" style="font-size: 0.75rem;">
-                                                    <i class="fa fa-umbrella-beach me-1"></i>
-                                                    {{ ucfirst($approvedLeave->leave_type) }} Leave
-                                                </span>
-                                            </div>
-                                        @elseif($empHoliday)
+                                        {{-- Display Holiday / Leave Info if exists --}}
+                                        @if ($empHoliday)
                                             <div class="mb-2">
                                                 <span class="badge"
                                                     style="background-color: #f59e0b; color: white; font-size: 0.75rem;">
                                                     <i class="fa fa-calendar-star me-1"></i>
                                                     Holiday: {{ $empHoliday->name }}
+                                                </span>
+                                            </div>
+                                        @elseif ($approvedLeave)
+                                            <div class="mb-2">
+                                                <span class="badge bg-info text-dark" style="font-size: 0.75rem;">
+                                                    <i class="fa fa-umbrella-beach me-1"></i>
+                                                    {{ ucfirst($approvedLeave->leave_type) }} Leave
                                                 </span>
                                             </div>
                                         @elseif($isWeeklyOff)
@@ -521,17 +522,17 @@
                                                 class="form-select form-select-sm d-inline-block w-auto mt-1 status-select {{ $statusClass }}"
                                                 onchange="showSaveBar(this)" style="font-size: 0.8rem;">
                                                 <option value="present"
-                                                    {{ ($attendance && $attendance->status == 'present' && !$attendance->is_late) || (!$attendance && $status == 'present') ? 'selected' : '' }}>
+                                                    {{ !$empHoliday && ((($attendance && $attendance->status == 'present' && !$attendance->is_late) || (!$attendance && $status == 'present'))) ? 'selected' : '' }}>
                                                     Present</option>
                                                 <option value="absent"
-                                                    {{ ($attendance && $attendance->status == 'absent') || (!$attendance && $status == 'absent') ? 'selected' : '' }}>
+                                                    {{ !$empHoliday && ((($attendance && $attendance->status == 'absent') || (!$attendance && $status == 'absent'))) ? 'selected' : '' }}>
                                                     Absent</option>
                                                 <option value="late"
-                                                    {{ ($attendance && ($attendance->status == 'late' || ($attendance->status == 'present' && $attendance->is_late))) || (!$attendance && $status == 'late') ? 'selected' : '' }}>
+                                                    {{ !$empHoliday && ((($attendance && ($attendance->status == 'late' || ($attendance->status == 'present' && $attendance->is_late))) || (!$attendance && $status == 'late'))) ? 'selected' : '' }}>
                                                     Late</option>
                                                 <option value="leave"
-                                                    {{ ($attendance && $attendance->status == 'leave') || (!$attendance && $status == 'leave') ? 'selected' : '' }}>
-                                                    Leave</option>
+                                                    {{ $empHoliday || (($attendance && $attendance->status == 'leave') || (!$attendance && $status == 'leave')) ? 'selected' : '' }}>
+                                                    {{ $empHoliday ? 'Holiday' : 'Leave' }}</option>
                                             </select>
                                             <i class="fa fa-clock me-1"></i> {{ $shiftTime }}
                                         </div>
@@ -1098,7 +1099,7 @@
                                 <label class="form-label fw-bold small text-secondary">Select Employee</label>
                                 <select name="employee_id" class="form-select">
                                     <option value="all">-- All Active Employees --</option>
-                                    @foreach($employees as $emp)
+                                    @foreach(($allActiveEmployees ?? $employees) as $emp)
                                         <option value="{{ $emp->id }}">{{ $emp->full_name }} ({{ $emp->employee_id_code ?? $emp->id }})</option>
                                     @endforeach
                                 </select>
@@ -1170,7 +1171,7 @@
                                     <label class="form-label fw-bold small text-secondary">Select Employee</label>
                                     <select name="report_employee_id" id="report_employee_id" class="form-select" required>
                                         <option value="">-- Choose Employee --</option>
-                                        @foreach($employees as $emp)
+                                        @foreach(($allActiveEmployees ?? $employees) as $emp)
                                             <option value="{{ $emp->id }}">{{ $emp->full_name }} ({{ $emp->employee_id_code ?? $emp->id }}) - {{ $emp->department->name ?? 'N/A' }}</option>
                                         @endforeach
                                     </select>

@@ -15,6 +15,7 @@ class Employee extends Model
 
     protected $fillable = [
         'user_id',
+        'branch_id',
         'department_id',
         'designation_id',
         'shift_id',
@@ -71,6 +72,11 @@ class Employee extends Model
     public function shift()
     {
         return $this->belongsTo(Shift::class);
+    }
+
+    public function branch()
+    {
+        return $this->belongsTo(\App\Models\Branch::class, 'branch_id');
     }
 
     public function user()
@@ -352,5 +358,27 @@ class Employee extends Model
               ->orWhere('last_name', 'like', "%{$search}%")
               ->orWhere('email', 'like', "%{$search}%");
         });
+    }
+
+    /**
+     * Scope: Filter employees by branch context
+     * If branchId is null/empty, all branches are shown.
+     */
+    public function scopeBranchScoped($query, ?int $branchId = null)
+    {
+        if (func_num_args() === 0 || $branchId === null) {
+            $branchId = auth()->check() ? auth()->user()->getBranchId() : null;
+        }
+
+        if ($branchId !== null) {
+            return $query->where(function ($q) use ($branchId) {
+                $q->where('hr_employees.branch_id', $branchId)
+                  ->orWhereHas('user', function ($uq) use ($branchId) {
+                      $uq->where('branch_id', $branchId);
+                  });
+            });
+        }
+
+        return $query;
     }
 }

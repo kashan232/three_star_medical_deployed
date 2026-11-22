@@ -9,7 +9,13 @@ use App\Models\Hr\Attendance;
 use App\Models\Hr\Employee;
 use App\Models\Hr\Loan;
 use App\Models\Hr\Payroll;
+use App\Models\Account;
+use App\Models\AccountHead;
+use App\Models\Branch;
+use App\Models\Sale;
+use App\Models\VoucherMaster;
 use App\Services\PayrollCalculationService;
+use App\Services\VoucherService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -37,8 +43,10 @@ class PayrollController extends Controller
 
         $availableMonths = Payroll::select('month')->distinct()->orderBy('month', 'desc')->pluck('month');
         $selectedMonth = $request->input('month', '');
+        $branchId = auth()->user()?->getBranchId();
 
-        $query = Payroll::with(['employee.designation', 'employee.department']);
+        $query = Payroll::with(['employee.designation', 'employee.department'])
+            ->when($branchId, fn ($q) => $q->whereHas('employee', fn ($eq) => $eq->branchScoped($branchId)));
 
         // Apply filters
         if ($request->filled('type')) {
@@ -58,11 +66,12 @@ class PayrollController extends Controller
         }
 
         $payrolls = $query->latest()->paginate(50);
-        $employees = Employee::all();
+        $employees = Employee::branchScoped($branchId)->get();
+        [$cashAccounts, $bankAccounts] = $this->getPaymentAccounts($branchId);
         
         $activeTab = $request->type ?? 'all';
 
-        return view('hr.payroll.index', compact('payrolls', 'employees', 'availableMonths', 'selectedMonth'))->with('activeTab', $activeTab);
+        return view('hr.payroll.index', compact('payrolls', 'employees', 'availableMonths', 'selectedMonth', 'cashAccounts', 'bankAccounts'))->with('activeTab', $activeTab);
     }
 
     /**
@@ -76,9 +85,11 @@ class PayrollController extends Controller
 
         $availableMonths = Payroll::monthly()->select('month')->distinct()->orderBy('month', 'desc')->pluck('month');
         $selectedMonth = $request->input('month', '');
+        $branchId = auth()->user()?->getBranchId();
 
         $query = Payroll::with(['employee.designation', 'employee.department'])
-            ->monthly();
+            ->monthly()
+            ->when($branchId, fn ($q) => $q->whereHas('employee', fn ($eq) => $eq->branchScoped($branchId)));
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -92,10 +103,13 @@ class PayrollController extends Controller
 
         // Show employees eligible for monthly payroll using scope
         $employees = Employee::forMonthlyPayroll()
+            ->branchScoped($branchId)
             ->with('activeSalaryStructure', 'designation', 'department')
             ->get();
 
-        return view('hr.payroll.index', compact('payrolls', 'employees', 'availableMonths', 'selectedMonth'))->with('activeTab', 'monthly');
+        [$cashAccounts, $bankAccounts] = $this->getPaymentAccounts($branchId);
+
+        return view('hr.payroll.index', compact('payrolls', 'employees', 'availableMonths', 'selectedMonth', 'cashAccounts', 'bankAccounts'))->with('activeTab', 'monthly');
     }
 
     /**
@@ -109,9 +123,11 @@ class PayrollController extends Controller
 
         $availableMonths = Payroll::daily()->select('month')->distinct()->orderBy('month', 'desc')->pluck('month');
         $selectedMonth = $request->input('month', '');
+        $branchId = auth()->user()?->getBranchId();
 
         $query = Payroll::with(['employee.designation', 'employee.department'])
-            ->daily();
+            ->daily()
+            ->when($branchId, fn ($q) => $q->whereHas('employee', fn ($eq) => $eq->branchScoped($branchId)));
 
         if ($request->filled('status')) {
             $query->where('status', $request->status);
@@ -125,10 +141,45 @@ class PayrollController extends Controller
 
         // Show employees eligible for daily payroll using scope
         $employees = Employee::forDailyPayroll()
+            ->branchScoped($branchId)
             ->with('activeSalaryStructure', 'designation', 'department')
             ->get();
 
-        return view('hr.payroll.index', compact('payrolls', 'employees', 'availableMonths', 'selectedMonth'))->with('activeTab', 'daily');
+        [$cashAccounts, $bankAccounts] = $this->getPaymentAccounts($branchId);
+
+        return view('hr.payroll.index', compact('payrolls', 'employees', 'availableMonths', 'selectedMonth', 'cashAccounts', 'bankAccounts'))->with('activeTab', 'daily');
+    }
+
+    /**
+     * Helper to fetch active cash and bank accounts
+     */
+    protected function getPaymentAccounts(?int $branchId = null): array
+    {
+        $cashAccounts = Account::where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->where(function($q) {
+                $q->whereHas('head', fn($h) => $h->where('name', 'like', '%cash%'))
+                  ->orWhere('title', 'like', '%cash%')
+                  ->orWhere('account_code', 'like', '1-02-040%');
+            })
+            ->when($branchId, fn($q) => $q->where(function($b) use ($branchId) {
+                $b->where('branch_id', $branchId)->orWhereNull('branch_id');
+            }))
+            ->get();
+
+        $bankAccounts = Account::where('status', 1)
+            ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
+            ->where(function($q) {
+                $q->whereHas('head', fn($h) => $h->where('name', 'like', '%bank%'))
+                  ->orWhere('title', 'like', '%bank%')
+                  ->orWhere('account_code', 'like', '1-02-052%');
+            })
+            ->when($branchId, fn($q) => $q->where(function($b) use ($branchId) {
+                $b->where('branch_id', $branchId)->orWhereNull('branch_id');
+            }))
+            ->get();
+
+        return [$cashAccounts, $bankAccounts];
     }
 
     /**
@@ -141,7 +192,9 @@ class PayrollController extends Controller
                 return response()->json(['error' => 'Unauthorized action.'], 403);
             }
 
-            $payroll = Payroll::with(['employee.designation', 'employee.activeSalaryStructure', 'details', 'reviewer', 'sale.customer_relation'])->findOrFail($id);
+            $payroll = $id instanceof Payroll 
+                ? $id->loadMissing(['employee.designation', 'employee.activeSalaryStructure', 'details', 'reviewer', 'sale.customer_relation']) 
+                : Payroll::with(['employee.designation', 'employee.activeSalaryStructure', 'details', 'reviewer', 'sale.customer_relation'])->findOrFail($id);
 
             $employee = $payroll->employee;
             if (!$employee) {
@@ -651,7 +704,10 @@ class PayrollController extends Controller
         try {
             DB::beginTransaction();
 
-            $employee = Employee::with('salaryStructure')->findOrFail($request->employee_id);
+            $branchId = auth()->user()?->getBranchId();
+            $employee = Employee::with('salaryStructure')
+                ->when($branchId, fn ($q) => $q->branchScoped($branchId))
+                ->findOrFail($request->employee_id);
 
             // Determine effective period and validation criteria
             $effectivePeriod = ($request->payroll_type === 'monthly') 
@@ -681,7 +737,18 @@ class PayrollController extends Controller
                     ->whereDate('date', $request->date)
                     ->first();
 
-                if (! $attendance || ! $attendance->clock_out) {
+                $approvedLeave = \App\Models\Hr\Leave::getApprovedLeave($employee->id, $request->date);
+                $isApprovedLeave = ($attendance && $attendance->status === 'leave') || ($approvedLeave !== null);
+
+                if (! $attendance && $isApprovedLeave) {
+                    $attendance = Attendance::create([
+                        'employee_id' => $employee->id,
+                        'date' => $request->date,
+                        'status' => 'leave',
+                    ]);
+                }
+
+                if (! $attendance || (! $attendance->clock_out && ! $isApprovedLeave)) {
                     DB::rollBack();
                     return response()->json([
                         'error' => "🕒 <b>Attendance Missing:</b> No completed attendance record (with clock-out) was found for <b>{$employee->full_name}</b> on {$request->date}.",
@@ -760,7 +827,9 @@ class PayrollController extends Controller
         }
 
         try {
+            $branchId = auth()->user()?->getBranchId();
             $employees = Employee::forMonthlyPayroll()
+                ->when($branchId, fn ($q) => $q->branchScoped($branchId))
                 ->with(['activeSalaryStructure', 'designation', 'department'])
                 ->get();
 
@@ -833,8 +902,11 @@ class PayrollController extends Controller
         try {
             DB::beginTransaction();
 
-            // Get active employees eligible for monthly payroll using scope
+            $branchId = auth()->user()?->getBranchId();
+
+            // Get active employees eligible for monthly payroll using scope scoped by branch
             $employees = Employee::forMonthlyPayroll()
+                ->when($branchId, fn ($q) => $q->branchScoped($branchId))
                 ->with(['activeSalaryStructure', 'designation', 'department'])
                 ->get();
 
@@ -997,8 +1069,11 @@ class PayrollController extends Controller
         try {
             DB::beginTransaction();
 
-            // Fetch active employees eligible for daily payroll using scope
+            $branchId = auth()->user()?->getBranchId();
+
+            // Fetch active employees eligible for daily payroll using scope scoped by branch
             $employees = Employee::forDailyPayroll()
+                ->when($branchId, fn ($q) => $q->branchScoped($branchId))
                 ->with(['activeSalaryStructure', 'designation', 'department'])
                 ->get();
 
@@ -1034,7 +1109,18 @@ class PayrollController extends Controller
                     ->whereDate('date', $request->date)
                     ->first();
 
-                if (! $attendance || ! $attendance->clock_out) {
+                $approvedLeave = \App\Models\Hr\Leave::getApprovedLeave($employee->id, $request->date);
+                $isApprovedLeave = ($attendance && $attendance->status === 'leave') || ($approvedLeave !== null);
+
+                if (! $attendance && $isApprovedLeave) {
+                    $attendance = Attendance::create([
+                        'employee_id' => $employee->id,
+                        'date' => $request->date,
+                        'status' => 'leave',
+                    ]);
+                }
+
+                if (! $attendance || (! $attendance->clock_out && ! $isApprovedLeave)) {
                     $errors[] = $employee->full_name.': No completed attendance found.';
 
                     continue;
@@ -1130,7 +1216,7 @@ class PayrollController extends Controller
             return response()->json(['error' => 'Unauthorized action.'], 403);
         }
 
-        $payroll = Payroll::findOrFail($id);
+        $payroll = $id instanceof Payroll ? $id : Payroll::findOrFail($id);
 
         if (! $payroll->canEdit()) {
             return response()->json([
@@ -1199,7 +1285,7 @@ class PayrollController extends Controller
             return response()->json(['error' => 'Unauthorized action.'], 403);
         }
 
-        $payroll = Payroll::findOrFail($id);
+        $payroll = $id instanceof Payroll ? $id : Payroll::findOrFail($id);
 
         if (! $payroll->canMarkReviewed()) {
             return response()->json([
@@ -1222,22 +1308,31 @@ class PayrollController extends Controller
     /**
      * Process payroll payment (Apply adjustments AND mark as paid)
      */
+    /**
+     * Process payroll payment (Apply adjustments AND mark as paid via Cash or Bank)
+     */
     public function processPayment(Request $request, $id)
     {
         if (! auth()->user()->can('hr.payroll.edit')) {
             return response()->json(['error' => 'Unauthorized action.'], 403);
         }
 
-        $payroll = Payroll::findOrFail($id);
+        $payroll = $id instanceof Payroll ? $id : Payroll::findOrFail($id);
 
         if (! $payroll->canMarkPaid()) {
             return response()->json(['error' => 'Payroll cannot be marked as paid.'], 403);
         }
 
         $validator = Validator::make($request->all(), [
+            'payment_method'    => 'required|in:cash,bank',
+            'cash_account_id'   => 'required_if:payment_method,cash|nullable|exists:accounts,id',
+            'bank_account_id'   => 'required_if:payment_method,bank|nullable|exists:accounts,id',
+            'payment_date'      => 'nullable|date',
+            'cheque_no'         => 'nullable|string|max:100',
+            'cheque_date'       => 'nullable|date',
             'manual_allowances' => 'nullable|numeric|min:0',
             'manual_deductions' => 'nullable|numeric|min:0',
-            'notes'             => 'nullable|string',
+            'notes'             => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
@@ -1253,8 +1348,14 @@ class PayrollController extends Controller
             // ── Auto Loan Deduction (salary_deduction type only) ──
             $loanDeductionAmount = 0;
             $activeLoan = null;
-            if ($payroll->payroll_type === 'monthly') {
-                $activeLoan = \App\Models\Hr\Loan::where('employee_id', $payroll->employee_id)
+            $existingLoanPayment = \App\Models\Hr\LoanPayment::where('payroll_id', $payroll->id)->first();
+            $loanAlreadyInDeductions = $payroll->details()->where('type', 'loan_deduction')->exists() || ($existingLoanPayment !== null);
+
+            if ($existingLoanPayment) {
+                $activeLoan = $existingLoanPayment->loan;
+                $loanDeductionAmount = floatval($existingLoanPayment->amount);
+            } elseif ($payroll->payroll_type === 'monthly') {
+                $activeLoan = Loan::where('employee_id', $payroll->employee_id)
                     ->where('loan_type', 'salary_deduction')
                     ->active()
                     ->first();
@@ -1264,12 +1365,15 @@ class PayrollController extends Controller
                 }
             }
 
-            // Recalculate totals with loan deduction
+            // If loan was already deducted during generation, do not double-add it
+            $extraLoanDeduction = $loanAlreadyInDeductions ? 0 : $loanDeductionAmount;
+
+            // Recalculate totals with adjustments
             $totalDeductions = $payroll->deductions
                 + $payroll->attendance_deductions
                 + $manualDeductions
                 + $payroll->carried_forward_deduction
-                + $loanDeductionAmount;
+                + $extraLoanDeduction;
 
             $grossSalary = $payroll->basic_salary
                 + $payroll->allowances
@@ -1278,24 +1382,100 @@ class PayrollController extends Controller
 
             $netSalary = max(0, $grossSalary - $totalDeductions);
 
+            // Determine payment method and paying account
+            $paymentMethod = $request->payment_method;
+            $payingAccountId = ($paymentMethod === 'cash') ? $request->cash_account_id : $request->bank_account_id;
+            $payingAccount = Account::findOrFail($payingAccountId);
+
+            // ── Create Cash / Bank Payment Voucher via Unified VoucherService ──
+            $branchId = $payroll->employee->branch_id ?? auth()->user()?->getBranchId() ?? 1;
+            $branch = Branch::find($branchId);
+            $locationName = $branch ? $branch->name : 'HEAD OFFICE';
+
+            $period = (strlen($payroll->month) === 7 && str_contains($payroll->month, '-')) 
+                ? Carbon::parse($payroll->month . '-01')->format('M Y') 
+                : $payroll->month;
+
+            $narration = "Salary Payment - {$payroll->employee->full_name} ({$period})";
+            if ($request->filled('notes')) {
+                $narration .= " - " . $request->notes;
+            }
+
+            $expenseHead = AccountHead::where('name', 'like', '%Expense%')->first();
+            $salaryExpenseAccount = Account::where('status', 1)
+                ->where(function($q) {
+                    $q->where('title', 'like', '%SALARY%')
+                      ->orWhere('title', 'like', '%WAGES%');
+                })
+                ->first();
+
+            if (! $salaryExpenseAccount) {
+                $salaryExpenseAccount = Account::create([
+                    'head_id'         => $expenseHead?->id ?? 7,
+                    'title'           => 'SALARIES & WAGES EXPENSE',
+                    'account_code'    => 'HEAD-006-SALARY',
+                    'opening_balance' => 0.00,
+                    'current_balance' => 0.00,
+                    'type'            => 'Debit',
+                    'status'          => 1,
+                    'is_active'       => 1,
+                    'branch_id'       => $branchId,
+                ]);
+            }
+
+            $voucherType = ($paymentMethod === 'bank') ? 'bpv' : 'cpv';
+            $paymentDate = $request->payment_date ? Carbon::parse($request->payment_date)->toDateString() : now()->toDateString();
+
+            $headerData = [
+                'voucher_type' => $voucherType,
+                'date'         => $paymentDate,
+                'location'     => $locationName,
+                'cheque_no'    => ($paymentMethod === 'bank') ? $request->cheque_no : null,
+                'cheque_date'  => ($paymentMethod === 'bank') ? $request->cheque_date : null,
+                'remarks'      => $narration,
+                'branch_id'    => $branchId,
+                'status'       => 'posted',
+            ];
+
+            $lines = [
+                [
+                    'account_id' => $salaryExpenseAccount->id,
+                    'debit'      => $netSalary,
+                    'credit'     => 0,
+                    'narration'  => $narration,
+                ],
+                [
+                    'account_id' => $payingAccount->id,
+                    'debit'      => 0,
+                    'credit'     => $netSalary,
+                    'narration'  => $narration,
+                ],
+            ];
+
+            $voucherService = app(VoucherService::class);
+            $voucher = $voucherService->createVoucher($headerData, $lines, auth()->id());
+
             // Mark as paid
             $payroll->update([
                 'status'            => 'paid',
                 'manual_allowances' => $manualAllowances,
-                'manual_deductions' => $manualDeductions + $loanDeductionAmount,
+                'manual_deductions' => $manualDeductions + $extraLoanDeduction,
                 'gross_salary'      => $grossSalary,
                 'net_salary'        => $netSalary,
                 'paid_amount'       => $netSalary,
-                'payment_date'      => now(),
+                'payment_method'    => $paymentMethod,
+                'salary_account_id' => $payingAccount->id,
+                'voucher_id'        => $voucher->id,
+                'payment_date'      => $paymentDate,
                 'payment_notes'     => $request->notes,
             ]);
 
             // ── Record Loan Payment & Update Loan ──
-            if ($activeLoan && $loanDeductionAmount > 0) {
+            if ($activeLoan && $loanDeductionAmount > 0 && ! \App\Models\Hr\LoanPayment::where('payroll_id', $payroll->id)->where('loan_id', $activeLoan->id)->exists()) {
                 \App\Models\Hr\LoanPayment::create([
                     'loan_id'      => $activeLoan->id,
                     'amount'       => $loanDeductionAmount,
-                    'payment_date' => now(),
+                    'payment_date' => $paymentDate,
                     'type'         => 'salary_deduction',
                     'source'       => 'payroll_auto',
                     'payroll_id'   => $payroll->id,
@@ -1316,7 +1496,7 @@ class PayrollController extends Controller
             foreach ($commissionDetails as $cd) {
                 if (preg_match('/(?:Sale\s*#|Invoice\s*#|#)([A-Za-z0-9\-]+)/i', $cd->name . ' ' . $cd->description, $matches)) {
                     $invNo = trim($matches[1]);
-                    \App\Models\Sale::where('invoice_no', $invNo)
+                    Sale::where('invoice_no', $invNo)
                         ->increment('commission_paid', floatval($cd->amount));
                 }
             }
@@ -1330,7 +1510,7 @@ class PayrollController extends Controller
                     ->update([
                         'status'        => 'paid',
                         'paid_amount'   => DB::raw('net_salary'),
-                        'payment_date'  => now(),
+                        'payment_date'  => $paymentDate,
                         'payment_notes' => "Consolidated & paid via {$payroll->month} Payroll (#{$payroll->id})",
                     ]);
             }
@@ -1341,8 +1521,10 @@ class PayrollController extends Controller
                 ? " (includes Rs. " . number_format($loanDeductionAmount, 2) . " loan deduction)"
                 : "";
 
+            $modeLabel = ($paymentMethod === 'bank') ? "Bank ({$payingAccount->title})" : "Cash in Hand ({$payingAccount->title})";
+
             return response()->json([
-                'success' => "💸 <b>Payment Recorded!</b> Rs. " . number_format($netSalary, 2) . " processed for <b>" . $payroll->employee->full_name . "</b>{$loanNote}.",
+                'success' => "💸 <b>Payment Recorded!</b> Rs. " . number_format($netSalary, 2) . " paid via <b>{$modeLabel}</b> for <b>" . $payroll->employee->full_name . "</b>. Voucher <b>{$voucher->voucher_no}</b> posted.{$loanNote}",
                 'reload'  => true,
             ]);
         } catch (\Exception $e) {
@@ -1351,9 +1533,82 @@ class PayrollController extends Controller
         }
     }
 
+    /**
+     * Revert paid payroll back to generated (unpaid) state, reversing voucher and deductions
+     */
+    public function revertPayment($id)
+    {
+        if (! auth()->user()->can('hr.payroll.edit')) {
+            return response()->json(['error' => 'Unauthorized action.'], 403);
+        }
+
+        $payroll = $id instanceof Payroll ? $id : Payroll::findOrFail($id);
+
+        if ($payroll->status !== 'paid') {
+            return response()->json(['error' => 'Payroll is not marked as paid.'], 400);
+        }
+
+        try {
+            DB::beginTransaction();
+
+            // 1. Delete and reverse Voucher if created
+            if ($payroll->voucher_id) {
+                $voucher = VoucherMaster::find($payroll->voucher_id);
+                if ($voucher) {
+                    $voucherService = app(VoucherService::class);
+                    $voucherService->deleteVoucher($voucher);
+                }
+            }
+
+            // 2. Reverse Loan Payments associated with this payroll
+            $loanPayments = \App\Models\Hr\LoanPayment::where('payroll_id', $payroll->id)->get();
+            foreach ($loanPayments as $lp) {
+                $loan = $lp->loan;
+                if ($loan) {
+                    $loan->decrement('paid_amount', $lp->amount);
+                    $loan->decrement('installments_paid');
+                    if ($loan->status === 'paid' && $loan->paid_amount < $loan->amount) {
+                        $loan->update(['status' => 'active']);
+                    }
+                }
+                $lp->delete();
+            }
+
+            // 3. Reverse Sales Commission tracking
+            $commissionDetails = $payroll->details()->where('type', 'commission')->get();
+            foreach ($commissionDetails as $cd) {
+                if (preg_match('/(?:Sale\s*#|Invoice\s*#|#)([A-Za-z0-9\-]+)/i', $cd->name . ' ' . $cd->description, $matches)) {
+                    $invNo = trim($matches[1]);
+                    Sale::where('invoice_no', $invNo)
+                        ->decrement('commission_paid', floatval($cd->amount));
+                }
+            }
+
+            // 4. Reset Payroll status to generated
+            $payroll->update([
+                'status'            => 'generated',
+                'paid_amount'       => 0,
+                'payment_date'      => null,
+                'payment_method'    => null,
+                'voucher_id'        => null,
+                'salary_account_id' => null,
+                'payment_notes'     => null,
+            ]);
+
+            DB::commit();
+
+            return response()->json([
+                'success' => "Payment reverted successfully for <b>{$payroll->employee->full_name}</b>. Status is now unpaid/generated.",
+                'reload'  => true,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Failed to revert payment: ' . $e->getMessage()], 500);
+        }
+    }
 
     /**
-     * Delete payroll
+     * Delete payroll (allows deleting even if paid by safely reversing voucher & deductions)
      */
     public function destroy($id)
     {
@@ -1361,21 +1616,60 @@ class PayrollController extends Controller
             return response()->json(['error' => 'Unauthorized action.'], 403);
         }
 
-        $payroll = Payroll::findOrFail($id);
+        $payroll = $id instanceof Payroll ? $id : Payroll::findOrFail($id);
 
-        // Only allow deletion if not paid
-        if ($payroll->status === 'paid') {
+        try {
+            DB::beginTransaction();
+
+            // If paid, cleanly reverse voucher, loan payments, and commission first
+            if ($payroll->status === 'paid') {
+                if ($payroll->voucher_id) {
+                    $voucher = VoucherMaster::find($payroll->voucher_id);
+                    if ($voucher) {
+                        $voucherService = app(VoucherService::class);
+                        $voucherService->deleteVoucher($voucher);
+                    }
+                }
+
+                $loanPayments = \App\Models\Hr\LoanPayment::where('payroll_id', $payroll->id)->get();
+                foreach ($loanPayments as $lp) {
+                    $loan = $lp->loan;
+                    if ($loan) {
+                        $loan->decrement('paid_amount', $lp->amount);
+                        $loan->decrement('installments_paid');
+                        if ($loan->status === 'paid' && $loan->paid_amount < $loan->amount) {
+                            $loan->update(['status' => 'active']);
+                        }
+                    }
+                    $lp->delete();
+                }
+
+                $commissionDetails = $payroll->details()->where('type', 'commission')->get();
+                foreach ($commissionDetails as $cd) {
+                    if (preg_match('/(?:Sale\s*#|Invoice\s*#|#)([A-Za-z0-9\-]+)/i', $cd->name . ' ' . $cd->description, $matches)) {
+                        $invNo = trim($matches[1]);
+                        Sale::where('invoice_no', $invNo)
+                            ->decrement('commission_paid', floatval($cd->amount));
+                    }
+                }
+            }
+
+            // Delete breakdown details
+            $payroll->details()->delete();
+
+            // Delete payroll record
+            $payroll->delete();
+
+            DB::commit();
+
             return response()->json([
-                'error' => 'Cannot delete paid payroll.',
-            ], 403);
+                'success' => 'Payroll deleted successfully.',
+                'reload'  => true,
+            ]);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            return response()->json(['error' => 'Failed to delete payroll: ' . $e->getMessage()], 500);
         }
-
-        $payroll->delete();
-
-        return response()->json([
-            'success' => 'Payroll deleted successfully.',
-            'reload' => true,
-        ]);
     }
 
     /**
@@ -1385,7 +1679,8 @@ class PayrollController extends Controller
     public function autoGenerateDaily(Employee $employee, Attendance $attendance)
     {
         // Check if employee uses daily wages
-        if (! $employee->salaryStructure || ! $employee->salaryStructure->use_daily_wages) {
+        $structure = $employee->activeSalaryStructure ?? $employee->salaryStructure;
+        if (! $structure || ! $structure->use_daily_wages) {
             return;
         }
 

@@ -26,8 +26,12 @@ class HolidayController extends Controller
             abort(403, 'Unauthorized action.');
         }
         $year = request('year', date('Y'));
+        $branchId = auth()->user()?->getBranchId();
         $holidays = Holiday::with('employees')->whereYear('date', $year)->orderBy('date')->paginate(12)->withQueryString();
-        $employees = \App\Models\Hr\Employee::with(['department', 'designation'])->active()->get(['id', 'first_name', 'last_name', 'email', 'department_id', 'designation_id']);
+        $employees = \App\Models\Hr\Employee::with(['department', 'designation'])
+            ->active()
+            ->when($branchId, fn ($q) => $q->branchScoped($branchId))
+            ->get(['id', 'first_name', 'last_name', 'email', 'department_id', 'designation_id']);
         $departments = Department::orderBy('name')->get();
         $designations = Designation::orderBy('name')->get();
 

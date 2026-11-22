@@ -1032,7 +1032,10 @@ class ReportingController extends Controller
 
     public function purchase_report()
     {
-        return view('admin_panel.reporting.purchase_report');
+        $vendors = \App\Models\Vendor::orderBy('name')->get();
+        $branches = \App\Models\Branch::orderBy('name')->get();
+        $isSuperAdmin = auth()->user()?->isSuperAdmin() ?? false;
+        return view('admin_panel.reporting.purchase_report', compact('vendors', 'branches', 'isSuperAdmin'));
     }
 
     // ─── Helper: build purchase report data ───────
@@ -1068,7 +1071,15 @@ class ReportingController extends Controller
             $query->whereBetween('purchases.purchase_date', [$startDate, $endDate]);
         }
         if ($vendorId && $vendorId !== 'all') {
-            $query->where('purchases.vendor_id', $vendorId);
+            $vendorProductIds = $this->getVendorProductIds($vendorId);
+            $query->where(function($q) use ($vendorId, $vendorProductIds) {
+                $q->where('purchases.vendor_id', $vendorId);
+                if (!empty($vendorProductIds) && $vendorProductIds !== [0]) {
+                    $q->orWhereIn('purchases.id', function($sub) use ($vendorProductIds) {
+                        $sub->select('purchase_id')->from('purchase_items')->whereIn('product_id', $vendorProductIds);
+                    });
+                }
+            });
         }
         if ($status && $status !== 'all') {
             $query->where('purchases.status_purchase', $status);
@@ -1110,6 +1121,17 @@ class ReportingController extends Controller
         if ($subId && $subId !== 'all')      $itemsQuery->where('products.sub_category_id', $subId);
         if ($brandId && $brandId !== 'all')  $itemsQuery->where('products.brand_id', $brandId);
         if ($productId && $productId !== 'all') $itemsQuery->where('products.id', $productId);
+        if ($vendorId && $vendorId !== 'all') {
+            $vendorProductIds = $this->getVendorProductIds($vendorId);
+            if (!empty($vendorProductIds) && $vendorProductIds !== [0]) {
+                $itemsQuery->where(function($iq) use ($vendorId, $vendorProductIds) {
+                    $iq->whereIn('purchase_items.product_id', $vendorProductIds)
+                       ->orWhereIn('purchase_items.purchase_id', function($sub) use ($vendorId) {
+                           $sub->select('id')->from('purchases')->where('vendor_id', $vendorId);
+                       });
+                });
+            }
+        }
 
         $itemsMap = $itemsQuery->get()->groupBy('purchase_id');
 
@@ -1123,13 +1145,26 @@ class ReportingController extends Controller
         $rows = [];
         $grandSubtotal = 0; $grandNet = 0; $grandPaid = 0; $grandDue = 0; $grandReturned = 0;
 
+        $isFiltered = ($vendorId && $vendorId !== 'all') ||
+                      ($catId && $catId !== 'all') ||
+                      ($subId && $subId !== 'all') ||
+                      ($brandId && $brandId !== 'all') ||
+                      ($productId && $productId !== 'all');
+
         foreach ($purchases as $p) {
             $items = $itemsMap->get($p->id, collect());
+            if ($items->isEmpty() && $isFiltered) {
+                continue;
+            }
             $returnRow = $returnsMap->get($p->id);
             $totalReturned = $returnRow ? (float) $returnRow->total_returned : 0;
 
-            $grandSubtotal += (float) $p->subtotal;
-            $grandNet += (float) $p->net_amount;
+            $itemsLineTotal = $items->sum('line_total');
+            $rowSubtotal = $isFiltered ? $itemsLineTotal : (float) $p->subtotal;
+            $rowNet = $isFiltered ? $itemsLineTotal : (float) $p->net_amount;
+
+            $grandSubtotal += $rowSubtotal;
+            $grandNet += $rowNet;
             $grandPaid += (float) $p->paid_amount;
             $grandDue += (float) $p->due_amount;
             $grandReturned += $totalReturned;
@@ -1143,10 +1178,10 @@ class ReportingController extends Controller
                 'vendor_name' => $p->vendor_name,
                 'vendor_phone' => $p->vendor_phone ?? '-',
                 'warehouse_name' => $p->warehouse_name ?? '-',
-                'subtotal' => (float) $p->subtotal,
+                'subtotal' => $rowSubtotal,
                 'discount' => (float) $p->discount,
                 'extra_cost' => (float) $p->extra_cost,
-                'net_amount' => (float) $p->net_amount,
+                'net_amount' => $rowNet,
                 'paid_amount' => (float) $p->paid_amount,
                 'due_amount' => (float) $p->due_amount,
                 'note' => $p->note ?? '',
@@ -1293,7 +1328,88 @@ class ReportingController extends Controller
     public function sale_report()
     {
         $vendors = \App\Models\Vendor::orderBy('name')->get();
-        return view('admin_panel.reporting.sale_report', compact('vendors'));
+        $branches = \App\Models\Branch::orderBy('name')->get();
+        $isSuperAdmin = auth()->user()?->isSuperAdmin() ?? false;
+        return view('admin_panel.reporting.sale_report', compact('vendors', 'branches', 'isSuperAdmin'));
+    }
+
+    /**
+     * Resolves a vendor ID to associated product IDs.
+     * Sources:
+     * 1. Direct purchase items from purchases table
+     * 2. Inward gatepasses
+     * 3. Batches sourced from purchases
+     * 4. Matching product brand by vendor name (e.g. Abbott, DFI, Crescent, Roche, etc.)
+     * 5. Direct products.vendor_id if present
+     */
+    private function getVendorProductIds($vendorId): array
+    {
+        if (!$vendorId || $vendorId === 'all') {
+            return [];
+        }
+
+        $vendor = DB::table('vendors')->where('id', $vendorId)->first();
+        if (!$vendor) {
+            return [0];
+        }
+
+        // 1. Products purchased from this vendor
+        $purchProductIds = DB::table('purchase_items')
+            ->join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
+            ->where('purchases.vendor_id', $vendorId)
+            ->pluck('purchase_items.product_id')
+            ->toArray();
+
+        // 2. Inward gatepass products
+        $gatepassProductIds = [];
+        if (\Illuminate\Support\Facades\Schema::hasTable('inward_gatepasses') && \Illuminate\Support\Facades\Schema::hasTable('inward_gatepass_items')) {
+            $gatepassProductIds = DB::table('inward_gatepass_items')
+                ->join('inward_gatepasses', 'inward_gatepass_items.inward_gatepass_id', '=', 'inward_gatepasses.id')
+                ->where('inward_gatepasses.vendor_id', $vendorId)
+                ->pluck('inward_gatepass_items.product_id')
+                ->toArray();
+        }
+
+        // 3. Batches linked to purchases from this vendor
+        $batchProductIds = [];
+        if (\Illuminate\Support\Facades\Schema::hasTable('product_batches')) {
+            $batchProductIds = DB::table('product_batches')
+                ->join('purchase_items', 'product_batches.purchase_item_id', '=', 'purchase_items.id')
+                ->join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
+                ->where('purchases.vendor_id', $vendorId)
+                ->pluck('product_batches.product_id')
+                ->toArray();
+        }
+
+        // 4. Direct products.vendor_id if column exists
+        $directProductIds = [];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'vendor_id')) {
+            $directProductIds = DB::table('products')->where('vendor_id', $vendorId)->pluck('id')->toArray();
+        }
+
+        // 5. Brand matching: match vendor name against brand names (whole-word boundary)
+        $brandProductIds = [];
+        $vName = strtoupper(trim($vendor->name));
+        $ignoredBrands = ['OTHER', 'GMBH', 'GERMANY', 'CHINA', 'UNSPECIFIED BRAND (DUMMY)'];
+        $matchedBrandIds = DB::table('brands')->get()->filter(function($b) use ($vName, $ignoredBrands) {
+            $bName = strtoupper(trim($b->name));
+            if (strlen($bName) < 2 || in_array($bName, $ignoredBrands)) return false;
+            return (bool)preg_match('/\b' . preg_quote($bName, '/') . '\b/i', $vName);
+        })->pluck('id')->toArray();
+
+        if (!empty($matchedBrandIds)) {
+            $brandProductIds = DB::table('products')->whereIn('brand_id', $matchedBrandIds)->pluck('id')->toArray();
+        }
+
+        $allProductIds = array_values(array_unique(array_filter(array_merge(
+            $purchProductIds,
+            $gatepassProductIds,
+            $batchProductIds,
+            $directProductIds,
+            $brandProductIds
+        ))));
+
+        return !empty($allProductIds) ? $allProductIds : [0];
     }
 
     public function fetchsaleReport(Request $request)
@@ -1308,22 +1424,15 @@ class ReportingController extends Controller
         $brandId     = $request->brand_id;
         $productId   = $request->product_id;
         $vendorId    = $request->vendor_id;
-        $branchId    = $this->getBranchId();
 
-        $vendorProductIds = [];
-        if ($vendorId && $vendorId !== 'all') {
-            $vendorProductIds = DB::table('purchase_items')
-                ->join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
-                ->where('purchases.vendor_id', $vendorId)
-                ->pluck('purchase_items.product_id')
-                ->unique()
-                ->toArray();
-
-            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'vendor_id')) {
-                $directIds = DB::table('products')->where('vendor_id', $vendorId)->pluck('id')->toArray();
-                $vendorProductIds = array_unique(array_merge($vendorProductIds, $directIds));
-            }
+        $reqBranchId = $request->input('branch_id');
+        if ($reqBranchId !== null && $reqBranchId !== '') {
+            $branchId = ($reqBranchId === 'all') ? null : (int)$reqBranchId;
+        } else {
+            $branchId = $this->getBranchId();
         }
+
+        $vendorProductIds = ($vendorId && $vendorId !== 'all') ? $this->getVendorProductIds($vendorId) : [];
 
         // sales table actual columns: total_bill_amount, total_extradiscount, total_net, cash, change
         $query = DB::table('sales')
@@ -1348,15 +1457,21 @@ class ReportingController extends Controller
             );
 
         // Sub-query logic for product-based filters in Sales
-        if (($catId && $catId !== 'all') || ($subId && $subId !== 'all') || ($brandId && $brandId !== 'all') || ($productId && $productId !== 'all') || ($vendorId && $vendorId !== 'all')) {
-            $query->whereIn('sales.id', function($sub) use ($catId, $subId, $brandId, $productId, $vendorId, $vendorProductIds) {
+        if (($catId && $catId !== 'all') || ($subId && $subId !== 'all') || ($brandId && $brandId !== 'all') || ($productId && $productId !== 'all')) {
+            $query->whereIn('sales.id', function($sub) use ($catId, $subId, $brandId, $productId) {
                 $sub->select('sale_id')->from('sale_items')
                     ->join('products', 'products.id', '=', 'sale_items.product_id')
                     ->when($catId && $catId !== 'all', fn($q) => $q->where('products.category_id', $catId))
                     ->when($subId && $subId !== 'all', fn($q) => $q->where('products.sub_category_id', $subId))
                     ->when($brandId && $brandId !== 'all', fn($q) => $q->where('products.brand_id', $brandId))
-                    ->when($productId && $productId !== 'all', fn($q) => $q->where('products.id', $productId))
-                    ->when($vendorId && $vendorId !== 'all', fn($q) => $q->whereIn('products.id', !empty($vendorProductIds) ? $vendorProductIds : [0]));
+                    ->when($productId && $productId !== 'all', fn($q) => $q->where('products.id', $productId));
+            });
+        }
+
+        // Vendor filter (matches sales containing products supplied by / associated with vendor)
+        if ($vendorId && $vendorId !== 'all') {
+            $query->whereIn('sales.id', function($sub) use ($vendorProductIds) {
+                $sub->select('sale_id')->from('sale_items')->whereIn('product_id', $vendorProductIds);
             });
         }
 
@@ -1433,7 +1548,7 @@ class ReportingController extends Controller
             $itemsQuery->where('products.id', $productId);
         }
         if ($vendorId && $vendorId !== 'all') {
-            $itemsQuery->whereIn('products.id', !empty($vendorProductIds) ? $vendorProductIds : [0]);
+            $itemsQuery->whereIn('products.id', $vendorProductIds);
         }
 
         $itemsMap = $itemsQuery->get()->groupBy('sale_id');
@@ -1456,8 +1571,17 @@ class ReportingController extends Controller
         $grandPaid = 0;
         $grandReturned = 0;
 
+        $isFiltered = ($vendorId && $vendorId !== 'all') ||
+                      ($catId && $catId !== 'all') ||
+                      ($subId && $subId !== 'all') ||
+                      ($brandId && $brandId !== 'all') ||
+                      ($productId && $productId !== 'all');
+
         foreach ($sales as $s) {
             $items = $itemsMap->get($s->id, collect());
+            if ($items->isEmpty() && $isFiltered) {
+                continue;
+            }
             $returnRow = $returnsMap->get($s->id);
             $totalReturned = $returnRow ? (float) $returnRow->total_returned : 0;
 
@@ -1467,8 +1591,16 @@ class ReportingController extends Controller
             $netPaid = max(0, $cashReceived - $changeGiven);
             $netDue = max(0, (float) $s->total_net - $netPaid);
 
-            $grandSubtotal += (float) ($s->total_bill_amount ?? 0);
-            $grandNet += (float) $s->total_net;
+            $itemsNet = $items->sum('total');
+            $itemsSubtotal = $items->sum(function($it) {
+                return (float)$it->price * (float)$it->qty;
+            });
+
+            $invoiceSubtotal = $isFiltered ? $itemsSubtotal : (float) ($s->total_bill_amount ?? 0);
+            $invoiceNet = $isFiltered ? $itemsNet : (float) $s->total_net;
+
+            $grandSubtotal += $invoiceSubtotal;
+            $grandNet += $invoiceNet;
             $grandPaid += $netPaid;
             $grandReturned += $totalReturned;
 
@@ -1573,19 +1705,15 @@ class ReportingController extends Controller
         $brandId     = $request->brand_id;
         $productId   = $request->product_id;
         $vendorId    = $request->vendor_id;
-        $branchId    = $this->getBranchId();
 
-        $vendorProductIds = [];
-        if ($vendorId && $vendorId !== 'all') {
-            $vendorProductIds = DB::table('purchase_items')
-                ->join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
-                ->where('purchases.vendor_id', $vendorId)
-                ->pluck('purchase_items.product_id')->unique()->toArray();
-            if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'vendor_id')) {
-                $directIds = DB::table('products')->where('vendor_id', $vendorId)->pluck('id')->toArray();
-                $vendorProductIds = array_unique(array_merge($vendorProductIds, $directIds));
-            }
+        $reqBranchId = $request->input('branch_id');
+        if ($reqBranchId !== null && $reqBranchId !== '') {
+            $branchId = ($reqBranchId === 'all') ? null : (int)$reqBranchId;
+        } else {
+            $branchId = $this->getBranchId();
         }
+
+        $vendorProductIds = ($vendorId && $vendorId !== 'all') ? $this->getVendorProductIds($vendorId) : [];
 
         $query = DB::table('sales')
             ->leftJoin('customers', 'sales.customer_id', '=', 'customers.id')
@@ -1596,17 +1724,20 @@ class ReportingController extends Controller
                      'sales.created_at','customers.customer_name');
 
         if (($catId && $catId !== 'all') || ($subId && $subId !== 'all') ||
-            ($brandId && $brandId !== 'all') || ($productId && $productId !== 'all') ||
-            ($vendorId && $vendorId !== 'all')) {
-            $query->whereIn('sales.id', function($sub) use ($catId, $subId, $brandId, $productId, $vendorId, $vendorProductIds) {
+            ($brandId && $brandId !== 'all') || ($productId && $productId !== 'all')) {
+            $query->whereIn('sales.id', function($sub) use ($catId, $subId, $brandId, $productId) {
                 $sub->select('sale_id')->from('sale_items')
                     ->join('products', 'products.id', '=', 'sale_items.product_id')
                     ->when($catId    && $catId    !== 'all', fn($q) => $q->where('products.category_id',     $catId))
                     ->when($subId    && $subId    !== 'all', fn($q) => $q->where('products.sub_category_id', $subId))
                     ->when($brandId  && $brandId  !== 'all', fn($q) => $q->where('products.brand_id',        $brandId))
-                    ->when($productId && $productId !== 'all', fn($q) => $q->where('products.id',            $productId))
-                    ->when($vendorId && $vendorId !== 'all',
-                        fn($q) => $q->whereIn('products.id', !empty($vendorProductIds) ? $vendorProductIds : [0]));
+                    ->when($productId && $productId !== 'all', fn($q) => $q->where('products.id',            $productId));
+            });
+        }
+
+        if ($vendorId && $vendorId !== 'all') {
+            $query->whereIn('sales.id', function($sub) use ($vendorProductIds) {
+                $sub->select('sale_id')->from('sale_items')->whereIn('product_id', $vendorProductIds);
             });
         }
 
@@ -1623,7 +1754,7 @@ class ReportingController extends Controller
         $sales   = $query->orderBy('sales.created_at', 'desc')->get();
         $saleIds = $sales->pluck('id')->toArray();
 
-        $itemsMap = DB::table('sale_items')
+        $itemsMapQuery = DB::table('sale_items')
             ->join('products', 'sale_items.product_id', '=', 'products.id')
             ->leftJoin('brands', 'products.brand_id', '=', 'brands.id')
             ->leftJoin('units', 'products.unit_id', '=', 'units.id')
@@ -1636,8 +1767,25 @@ class ReportingController extends Controller
                      'brands.name as brand_name','product_uoms.name as uom_name',
                      'units.name as master_uom','products.hs_code',
                      'sale_items.qty','sale_items.free_qty','sale_items.price','sale_items.total',
-                     'sale_items.gst_amount','sale_items.inc_tax','sale_items.adv_tax','sale_items.discount_amount')
-            ->get()->groupBy('sale_id');
+                     'sale_items.gst_amount','sale_items.inc_tax','sale_items.adv_tax','sale_items.discount_amount');
+
+        if ($catId && $catId !== 'all') {
+            $itemsMapQuery->where('products.category_id', $catId);
+        }
+        if ($subId && $subId !== 'all') {
+            $itemsMapQuery->where('products.sub_category_id', $subId);
+        }
+        if ($brandId && $brandId !== 'all') {
+            $itemsMapQuery->where('products.brand_id', $brandId);
+        }
+        if ($productId && $productId !== 'all') {
+            $itemsMapQuery->where('products.id', $productId);
+        }
+        if ($vendorId && $vendorId !== 'all') {
+            $itemsMapQuery->whereIn('products.id', $vendorProductIds);
+        }
+
+        $itemsMap = $itemsMapQuery->get()->groupBy('sale_id');
 
         $rows = []; $grandQty = 0; $grandFree = 0; $grandNet = 0;
 
@@ -3912,20 +4060,7 @@ class ReportingController extends Controller
             $vendorId   = $request->vendor_id;
             $branchId   = $this->getBranchId();
 
-            $vendorProductIds = [];
-            if ($vendorId && $vendorId !== 'all') {
-                $vendorProductIds = DB::table('purchase_items')
-                    ->join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
-                    ->where('purchases.vendor_id', $vendorId)
-                    ->pluck('purchase_items.product_id')
-                    ->unique()
-                    ->toArray();
-
-                if (\Illuminate\Support\Facades\Schema::hasColumn('products', 'vendor_id')) {
-                    $directIds = DB::table('products')->where('vendor_id', $vendorId)->pluck('id')->toArray();
-                    $vendorProductIds = array_unique(array_merge($vendorProductIds, $directIds));
-                }
-            }
+            $vendorProductIds = ($vendorId && $vendorId !== 'all') ? $this->getVendorProductIds($vendorId) : [];
 
             $query = DeliveryNote::with([
                 'customer',

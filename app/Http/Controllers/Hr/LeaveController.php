@@ -16,8 +16,15 @@ class LeaveController extends Controller
         if (! auth()->user()->can('hr.leaves.view')) {
             abort(403, 'Unauthorized action.');
         }
-        $leaves    = Leave::with('employee')->latest()->paginate(12);
-        $employees = Employee::where('status', 'active')->get();
+
+        $branchId  = auth()->user()?->getBranchId();
+        $leaves    = Leave::with('employee')
+            ->when($branchId, fn ($q) => $q->whereHas('employee', fn ($eq) => $eq->branchScoped($branchId)))
+            ->latest()
+            ->paginate(12);
+        $employees = Employee::where('status', 'active')
+            ->when($branchId, fn ($q) => $q->branchScoped($branchId))
+            ->get();
 
         return view('hr.leaves.index', compact('leaves', 'employees'));
     }

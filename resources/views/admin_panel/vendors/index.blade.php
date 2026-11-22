@@ -771,3 +771,174 @@
     </script>
 @endsection
 
+@section('js')
+<script>
+    (function() {
+        var initialized = false;
+
+        function initVendorSelect2() {
+            if (initialized) return;
+            if (typeof $ === 'undefined' || !$.fn || !$.fn.select2) {
+                return;
+            }
+
+            var $select = $('#vendorSearchSelect');
+            if (!$select.length) return;
+
+            initialized = true;
+
+            $select.select2({
+                placeholder: '🔍 Quick search vendor by Name, Business, Code, Phone, or City...',
+                allowClear: true,
+                width: '100%',
+                matcher: function(params, data) {
+                    if ($.trim(params.term) === '') {
+                        return data;
+                    }
+                    if (!data.id) {
+                        return null;
+                    }
+                    var term = params.term.toLowerCase().trim();
+                    var $el = $(data.element);
+                    var searchHaystack = [
+                        $el.data('name') || '',
+                        $el.data('business') || '',
+                        $el.data('code') || '',
+                        $el.data('phone') || '',
+                        $el.data('contact') || '',
+                        $el.data('city') || '',
+                        $el.data('cnic') || '',
+                        $el.data('ntn') || '',
+                        data.text || ''
+                    ].join(' ').toLowerCase();
+
+                    return searchHaystack.indexOf(term) > -1 ? data : null;
+                },
+                templateResult: function(vendor) {
+                    if (!vendor.id) {
+                        return vendor.text;
+                    }
+                    var $el = $(vendor.element);
+                    var name = $el.data('name') || vendor.text;
+                    var business = $el.data('business') || '';
+                    var code = $el.data('code') || '';
+                    var phone = $el.data('phone') || '';
+                    var contact = $el.data('contact') || '';
+                    var city = $el.data('city') || '';
+                    var status = $el.data('status') || '';
+
+                    var statusBadge = status === 'active'
+                        ? '<span class="badge" style="background:#dcfce7; color:#166534; font-size:0.65rem; padding: 3px 7px; border-radius: 4px;">ACTIVE</span>'
+                        : (status ? '<span class="badge" style="background:#fee2e2; color:#991b1b; font-size:0.65rem; padding: 3px 7px; border-radius: 4px;">INACTIVE</span>' : '');
+
+                    var codeHtml = code ? '<span class="badge bg-light text-primary border" style="font-size:0.72rem; font-weight:700;">CODE: ' + $('<div>').text(code).html() + '</span>' : '';
+                    var phoneHtml = phone ? '<span><i class="fa fa-phone-alt me-1 text-secondary" style="font-size:0.7rem;"></i>' + $('<div>').text(phone).html() + '</span>' : '';
+                    var contactHtml = contact ? '<span><i class="fa fa-user-tie me-1 text-secondary" style="font-size:0.7rem;"></i>' + $('<div>').text(contact).html() + '</span>' : '';
+                    var cityHtml = city ? '<span><i class="fa fa-map-marker-alt me-1 text-secondary" style="font-size:0.7rem;"></i>' + $('<div>').text(city).html() + '</span>' : '';
+                    var businessHtml = business ? '<small class="text-muted d-block" style="font-size:0.75rem;">' + $('<div>').text(business).html() + '</small>' : '';
+
+                    var html =
+                        '<div class="d-flex justify-content-between align-items-center py-1">' +
+                            '<div>' +
+                                '<div class="fw-bold text-dark select2-vendor-title" style="font-size:0.92rem;">' + $('<div>').text(name).html() + '</div>' +
+                                businessHtml +
+                                '<div class="d-flex align-items-center flex-wrap gap-2 mt-1 text-muted select2-vendor-meta" style="font-size:0.75rem;">' +
+                                    codeHtml + phoneHtml + contactHtml + cityHtml +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="ms-2">' + statusBadge + '</div>' +
+                        '</div>';
+
+                    return $(html);
+                },
+                templateSelection: function(vendor) {
+                    if (!vendor.id) {
+                        return vendor.text;
+                    }
+                    var $el = $(vendor.element);
+                    var name = $el.data('name') || vendor.text;
+                    var code = $el.data('code');
+                    return name + (code ? ' (Code: ' + code + ')' : '');
+                }
+            });
+
+            // Filter table on vendor select
+            $select.on('change', function() {
+                var selectedId = $(this).val();
+
+                if (!selectedId) {
+                    $('.vendor-row').show();
+                    $('#noVendorFoundRow').hide();
+                    $('#btnResetVendorSearch').hide();
+                    $('#quickVendorActions').hide();
+                    $('#vendorShowingCount').html('System synchronizing {{ $vendors->count() }} active procurement accounts');
+                } else {
+                    $('.vendor-row').hide();
+                    var $targetRow = $('#vendor-row-' + selectedId);
+
+                    if ($targetRow.length) {
+                        $targetRow.show();
+                        $('#noVendorFoundRow').hide();
+
+                        $('html, body').stop().animate({
+                            scrollTop: $targetRow.offset().top - 140
+                        }, 300);
+
+                        $targetRow.removeClass('row-highlight');
+                        void $targetRow[0].offsetWidth;
+                        $targetRow.addClass('row-highlight');
+
+                        var editUrl = "{{ url('parties') }}/" + selectedId + "/edit?type=Vendor";
+                        var ledgerUrl = "{{ url('vendor-list') }}/" + selectedId + "/ledger";
+                        $('#btnQuickLedger').attr('href', ledgerUrl);
+                        $('#btnQuickEdit').attr('href', editUrl);
+                        $('#quickVendorActions').fadeIn(200);
+                        $('#btnResetVendorSearch').show();
+
+                        var vendorName = $targetRow.find('.identity-group .name').text().trim();
+                        $('#vendorShowingCount').html('Showing <b>1</b> of {{ $vendors->count() }} procurement accounts (Filtered: <span class="text-primary fw-bold">' + vendorName + '</span>)');
+                    } else {
+                        $('#noVendorFoundRow').show();
+                        $('#btnResetVendorSearch').show();
+                        $('#quickVendorActions').hide();
+                        $('#vendorShowingCount').html('Showing <b>0</b> procurement accounts');
+                    }
+                }
+            });
+
+            // Reset button click
+            $('#btnResetVendorSearch').on('click', function() {
+                $select.val('').trigger('change');
+            });
+
+            // Search icon click opens dropdown
+            $('.search-icon-circle').on('click', function() {
+                $select.select2('open');
+            });
+
+            // Keyboard shortcut '/' to focus search
+            $(document).on('keydown', function(e) {
+                if (e.key === '/' && !$(e.target).is('input, textarea, select')) {
+                    e.preventDefault();
+                    $select.select2('open');
+                }
+            });
+
+            // Auto-filter if vendor_id is provided in URL
+            var urlParams = new URLSearchParams(window.location.search);
+            var paramVendorId = urlParams.get('vendor_id');
+            if (paramVendorId) {
+                $select.val(paramVendorId).trigger('change');
+            }
+        }
+
+        // Initialize on DOM ready
+        if (typeof $ !== 'undefined') {
+            $(document).ready(initVendorSelect2);
+        }
+        // Fallback on window load
+        window.addEventListener('load', initVendorSelect2);
+    })();
+</script>
+@endsection
+

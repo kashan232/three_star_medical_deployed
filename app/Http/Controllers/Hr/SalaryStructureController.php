@@ -22,13 +22,23 @@ class SalaryStructureController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
+        $branchId = auth()->user()?->getBranchId();
+
         // Fetch salary structures with assigned employee counts
         // Show only Templates (no parent, no specific employee)
         $structures = SalaryStructure::whereNull('parent_structure_id')
             ->whereNull('employee_id')
-            ->withCount(['assignedEmployees as assigned_count'])
-            ->with(['children' => function ($query) {
-                $query->select('id', 'parent_structure_id')->withCount('assignedEmployees as assigned_count');
+            ->withCount(['assignedEmployees as assigned_count' => function ($query) use ($branchId) {
+                $query->when($branchId, function ($q) use ($branchId) {
+                    $q->whereHas('employee', fn ($eq) => $eq->branchScoped($branchId));
+                });
+            }])
+            ->with(['children' => function ($query) use ($branchId) {
+                $query->select('id', 'parent_structure_id')->withCount(['assignedEmployees as assigned_count' => function ($q) use ($branchId) {
+                    $q->when($branchId, function ($sq) use ($branchId) {
+                        $sq->whereHas('employee', fn ($eq) => $eq->branchScoped($branchId));
+                    });
+                }]);
             }])
             ->orderBy('created_at', 'desc')->paginate(12);
 

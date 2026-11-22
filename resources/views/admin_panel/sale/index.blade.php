@@ -412,7 +412,7 @@
                 <i class="fas fa-exclamation-triangle fa-2x text-warning mr-3"></i>
                 <div>
                     <h6 class="mb-1 font-weight-bold text-dark"><i class="fas fa-globe mr-1"></i> All Branches View Active</h6>
-                    <span class="text-muted small">Aap is waqt tamaam branches ka consolidated data dekh rahe hain. Nayi Sale create karne ke liye pehle upar branch switcher se specific branch select karein.</span>
+                    <span class="text-muted small">You are currently viewing consolidated data across all branches. To create a new Sale, please select a specific branch from the top branch switcher.</span>
                 </div>
             </div>
         @endif
@@ -652,7 +652,7 @@
 
                                 <td style="font-size:.82rem;font-weight:600;white-space:nowrap;">
                                     <i class="far fa-calendar-alt me-1 text-muted"></i>
-                                    {{ $sale->created_at->format('d M Y') }}
+                                    {{ $sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->format('d M Y') : $sale->created_at->format('d M Y') }}
                                 </td>
 
                                 <td>
@@ -757,9 +757,9 @@
                 Swal.fire({
                     icon: 'warning',
                     title: 'Branch Selection Required',
-                    text: 'Pehle upar branch switcher se specific branch select karein! "All Branches" mode mein sale create nahi ho sakti.',
+                    text: 'Please select a specific branch from the top branch switcher first! Sales cannot be created under "All Branches" mode.',
                     confirmButtonColor: '#059669',
-                    confirmButtonText: 'Theek Hai'
+                    confirmButtonText: 'Understood'
                 });
             });
 

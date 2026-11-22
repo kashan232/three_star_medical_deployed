@@ -161,7 +161,7 @@ if (!$logoSrc) {
 
     <div class="info-row">
         <span>Inv #: {{ $sale->invoice_no ?? $sale->id }}</span>
-        <span>{{ $sale->created_at->format('d/m/Y h:i A') }}</span>
+        <span>Time: {{ $sale->created_at->format('h:i A') }}</span>
     </div>
     <div class="info-row">
         <span>Date: {{ $sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->format('d/m/Y') : $sale->created_at->format('d/m/Y') }}</span>

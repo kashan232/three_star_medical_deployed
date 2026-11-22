@@ -21,14 +21,15 @@
 
                 <!-- Stats Row -->
                 @php
-                    $activeCount = $employees->where('status', 'active')->count();
-                    $nonActiveCount = $employees->where('status', 'non-active')->count();
-                    $terminatedCount = $employees->where('status', 'terminated')->count();
+                    $totalCount = $stats['total'] ?? $employees->total();
+                    $activeCount = $stats['active'] ?? $employees->where('status', 'active')->count();
+                    $nonActiveCount = $stats['non_active'] ?? $employees->where('status', 'non-active')->count();
+                    $terminatedCount = $stats['terminated'] ?? $employees->where('status', 'terminated')->count();
                 @endphp
                 <div class="stats-row">
                     <div class="stat-card primary">
                         <div class="stat-icon"><i class="fa fa-users"></i></div>
-                        <div class="stat-value">{{ $employees->count() }}</div>
+                        <div class="stat-value">{{ $totalCount }}</div>
                         <div class="stat-label">Total Employees</div>
                     </div>
                     <div class="stat-card success">
@@ -56,6 +57,17 @@
                                 <i class="fa fa-search"></i>
                                 <input type="search" id="empSearch" placeholder="Search employees...">
                             </div>
+                            @if (auth()->user()->isSuperAdmin())
+                                <!-- Branch Filter -->
+                                <select id="branchFilter" class="form-select form-select-sm" style="width: 170px;">
+                                    <option value="" {{ empty($branchId) ? 'selected' : '' }}>All Branches</option>
+                                    @foreach ($branches as $br)
+                                        <option value="{{ $br->id }}" {{ (!empty($branchId) && $branchId == $br->id) ? 'selected' : '' }}>
+                                            {{ $br->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            @endif
                             <!-- Department Filter -->
                             <select id="deptFilter" class="form-select form-select-sm" style="width: 150px;">
                                 <option value="all">All Departments</option>
@@ -151,9 +163,12 @@
                                             <i class="fa fa-calendar-day me-1"></i>Off: {{ $emp->weekly_off }}
                                         </span>
                                     @endif
-                                    @if ($emp->user && $emp->user->branch)
+                                    @php
+                                        $empBranch = $emp->branch ?? $emp->user?->branch;
+                                    @endphp
+                                    @if ($empBranch)
                                         <span class="hr-tag primary mb-1" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">
-                                            <i class="fa fa-code-branch me-1"></i>{{ $emp->user->branch->name }}
+                                            <i class="fa fa-code-branch me-1"></i>{{ $empBranch->name }}
                                         </span>
                                     @endif
                                     @if (!empty($emp->face_encoding) && is_array($emp->face_encoding) && count($emp->face_encoding) > 0)
@@ -170,7 +185,7 @@
                                 <input type="hidden" class="last_name" value="{{ $emp->last_name }}">
                                 <input type="hidden" class="email" value="{{ $emp->email }}">
                                 <input type="hidden" class="phone" value="{{ $emp->phone }}">
-                                <input type="hidden" class="branch_id" value="{{ $emp->user->branch_id ?? '' }}">
+                                <input type="hidden" class="branch_id" value="{{ $emp->branch_id ?? $emp->user->branch_id ?? '' }}">
                                 <input type="hidden" class="address" value="{{ $emp->address }}">
                                 <input type="hidden" class="department_id" value="{{ $emp->department_id }}">
                                 <input type="hidden" class="designation_id" value="{{ $emp->designation_id }}">
@@ -571,8 +586,8 @@
                 $('#weekly_off_container .weekly-day-option').removeClass('selected');
                 $('#weekly_off').val('');
 
-                // Clear Branch selection
-                $('#branch_id').val('');
+                // Pre-select current active branch (or clear if all branches)
+                $('#branch_id').val('{{ $branchId ?? "" }}');
 
                 // Clear Leaves
                 $('#casual_leaves_allocated').val('0');
@@ -753,6 +768,16 @@
             // Event Listeners
             $('#empSearch').on('input', filterEmployees);
             $('#deptFilter, #desigFilter, #statusFilter').on('change', filterEmployees);
+
+            // Branch Filter Change (Super Admin)
+            $('#branchFilter').on('change', function() {
+                var selectedBranch = $(this).val();
+                if (typeof switchBranch === 'function') {
+                    switchBranch(selectedBranch);
+                } else {
+                    window.location.href = "{{ route('hr.employees.index') }}" + (selectedBranch ? '?branch_id=' + selectedBranch : '');
+                }
+            });
 
             $('[data-filter]').click(function() {
                 $(this).addClass('active').siblings().removeClass('active');

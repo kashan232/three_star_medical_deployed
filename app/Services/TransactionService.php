@@ -96,9 +96,12 @@ class TransactionService
             ];
 
             // 4. Voucher Header
+            $receiptDate = $sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->format('Y-m-d') : now()->format('Y-m-d');
+            $receiptCreatedAt = $sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->setTime(date('H'), date('i'), date('s')) : now();
+
             $voucherData = [
                 'voucher_type' => VoucherMaster::TYPE_RECEIPT,
-                'date' => now()->format('Y-m-d'),
+                'date' => $receiptDate,
                 'status' => VoucherMaster::STATUS_POSTED, // Auto-post
                 'payment_from' => 'Customer',
                 'party_type' => Customer::class,
@@ -133,6 +136,8 @@ class TransactionService
                     'previous_balance' => $prevBal, // Before payment
                     'closing_balance' => $newBal,   // After payment
                     'opening_balance' => 0,
+                    'created_at' => $receiptCreatedAt,
+                    'updated_at' => $receiptCreatedAt,
                     'source_type' => get_class($voucher),
                     'source_id' => $voucher->id,
                 ]);
@@ -144,7 +149,9 @@ class TransactionService
                     'admin_or_user_id' => auth()->id() ?? 1,
                     'amount' => $totalPaid,
                     'payment_method' => 'Cash/Bank',
-                    'payment_date' => now()->format('Y-m-d'),
+                    'payment_date' => $receiptDate,
+                    'created_at' => $receiptCreatedAt,
+                    'updated_at' => $receiptCreatedAt,
                     'note' => "Receipt #{$voucher->voucher_no} for Invoice #{$sale->invoice_no}",
                 ]);
 

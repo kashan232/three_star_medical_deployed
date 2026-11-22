@@ -420,7 +420,7 @@
                     @csrf
                     <input type="hidden" name="action" id="action" value="post">
                     <input type="hidden" name="draft_id" id="draft_id_input" value="{{ $sale->id }}">
-                    <input type="hidden" name="mode" value="{{ $sale->sale_status == 'booked' ? 'so' : 'srn' }}">
+                    <input type="hidden" name="mode" value="{{ $sale->sale_status == 'booked' ? 'so' : 'sin' }}">
 
                     <!-- Page Header Top -->
                     <div class="d-flex justify-content-between align-items-center mb-4">

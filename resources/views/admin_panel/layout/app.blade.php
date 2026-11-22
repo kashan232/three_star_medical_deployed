@@ -1334,7 +1334,18 @@
                     dateFormat: "Y-m-d",
                     altInput: true,
                     altFormat: "d/m/Y",
-                    allowInput: true
+                    allowInput: true,
+                    parseDate: function(datestr, format) {
+                        if (!datestr) return null;
+                        if (typeof datestr === 'string' && /^\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}$/.test(datestr)) {
+                            const parts = datestr.split(/[\/\-]/);
+                            const day = parseInt(parts[0], 10);
+                            const month = parseInt(parts[1], 10) - 1;
+                            const year = parseInt(parts[2], 10);
+                            return new Date(year, month, day);
+                        }
+                        return flatpickr.parseDate(datestr, format) || new Date(datestr);
+                    }
                 });
             });
         }

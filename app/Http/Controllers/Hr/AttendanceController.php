@@ -29,6 +29,7 @@ class AttendanceController extends Controller
         $selectedStatus = $request->get('status');
 
         $today = Carbon::parse($selectedDate);
+        $branchId = auth()->user()?->getBranchId();
 
         // Build query with filters
         $query = Employee::with(['department', 'designation', 'shift',
@@ -40,7 +41,7 @@ class AttendanceController extends Controller
                     ->whereDate('start_date', '<=', $selectedDate)
                     ->whereDate('end_date', '>=', $selectedDate);
             },
-        ])->where('status', 'active');
+        ])->where('status', 'active')->branchScoped($branchId);
 
         if ($selectedDepartment) {
             $query->where('department_id', $selectedDepartment);
@@ -71,9 +72,10 @@ class AttendanceController extends Controller
         $employees = $query->orderBy('first_name')->paginate(12)->withQueryString();
 
         // Calculate summary
-        // Calculate summary
-        $allAttendances = Attendance::whereDate('date', $selectedDate)->get();
-        $totalActiveEmployees = Employee::where('status', 'active')->count();
+        $allAttendances = Attendance::whereDate('date', $selectedDate)
+            ->when($branchId, fn ($q) => $q->whereHas('employee', fn ($eq) => $eq->branchScoped($branchId)))
+            ->get();
+        $totalActiveEmployees = Employee::where('status', 'active')->branchScoped($branchId)->count();
 
         // 1. Present & Late (from key source: actual attendance records)
         $presentCount = $allAttendances->where('status', 'present')->where('is_late', false)->count();
@@ -89,8 +91,8 @@ class AttendanceController extends Controller
         $leaveCount = Leave::where('status', 'approved')
             ->whereDate('start_date', '<=', $selectedDate)
             ->whereDate('end_date', '>=', $selectedDate)
-            ->whereHas('employee', function ($q) {
-                $q->where('status', 'active');
+            ->whereHas('employee', function ($q) use ($branchId) {
+                $q->where('status', 'active')->branchScoped($branchId);
             })
             ->whereNotIn('employee_id', $presentOrLateIds)
             ->count();
@@ -98,6 +100,7 @@ class AttendanceController extends Controller
         // 3. Weekly Off (New: Check who has their off day today)
         $dayName = strtolower($today->format('l'));
         $offDayCount = Employee::where('status', 'active')
+            ->branchScoped($branchId)
             ->whereNotIn('id', $presentOrLateIds) // Didn't show up
             ->where(function($q) use ($dayName) {
                 // MySQL find_in_set or like check for comma separated days
@@ -124,12 +127,19 @@ class AttendanceController extends Controller
         $isHoliday = Holiday::isHoliday($today);
         $holiday = Holiday::getHoliday($today);
 
+        // Get all active employees for modals/dropdowns scoped to the current branch
+        $allActiveEmployees = Employee::with(['department', 'designation', 'shift'])
+            ->where('status', 'active')
+            ->branchScoped($branchId)
+            ->orderBy('first_name')
+            ->get();
+
         // Get departments and designations for filter dropdowns
         $departments = Department::orderBy('name')->get();
         $designations = Designation::orderBy('name')->get();
 
         return view('hr.attendance.index', compact(
-            'employees', 'today', 'isHoliday', 'holiday',
+            'employees', 'allActiveEmployees', 'today', 'isHoliday', 'holiday',
             'departments', 'designations', 'summary',
             'selectedDate', 'selectedDepartment', 'selectedDesignation', 'selectedStatus'
         ));
@@ -1136,10 +1146,19 @@ class AttendanceController extends Controller
             }
 
             $empId = $request->employee_id;
+            $branchId = auth()->user()?->getBranchId();
+
             if ($empId && $empId !== 'all') {
-                $employees = Employee::with('shift')->where('id', $empId)->where('status', 'active')->get();
+                $employees = Employee::with('shift')
+                    ->where('id', $empId)
+                    ->where('status', 'active')
+                    ->when($branchId, fn ($q) => $q->branchScoped($branchId))
+                    ->get();
             } else {
-                $employees = Employee::with('shift')->where('status', 'active')->get();
+                $employees = Employee::with('shift')
+                    ->where('status', 'active')
+                    ->when($branchId, fn ($q) => $q->branchScoped($branchId))
+                    ->get();
             }
 
             if ($employees->isEmpty()) {
@@ -1296,7 +1315,10 @@ class AttendanceController extends Controller
             return response()->json(['error' => 'Please select an employee.'], 422);
         }
 
-        $employee = Employee::with(['department', 'designation', 'shift'])->find($employeeId);
+        $branchId = auth()->user()?->getBranchId();
+        $employee = Employee::with(['department', 'designation', 'shift'])
+            ->when($branchId, fn ($q) => $q->branchScoped($branchId))
+            ->find($employeeId);
         if (! $employee) {
             return response()->json(['error' => 'Employee not found.'], 404);
         }
@@ -1349,7 +1371,30 @@ class AttendanceController extends Controller
                 $hours    = $att->total_hours ?? 0;
                 $lateMins = $att->late_minutes ?? 0;
                 $remarks  = $att->check_in_location ?? '';
+            }
 
+            // HOLIDAY CHECK FIRST: If date is declared as a holiday for this employee, it takes full priority
+            if ($isHoliday) {
+                $dayStatus = 'holiday';
+                $badgeClass = 'bg-secondary';
+                $holidayName = $holidayInfo ? $holidayInfo->name : 'Holiday';
+                if ($att && ($clockIn !== '-' || $clockOut !== '-')) {
+                    $remarks = $holidayName . ' (Punched: ' . $clockIn . ' - ' . $clockOut . ')';
+                } else {
+                    $remarks = $holidayName;
+                }
+                $summary['holiday']++;
+            } elseif ($approvedLeave) {
+                $dayStatus = 'leave';
+                $badgeClass = 'bg-info text-dark';
+                $remarks = $approvedLeave->leave_type . ' Leave';
+                $summary['leave']++;
+            } elseif ($isWeeklyOff && (!$att || $att->status === 'absent')) {
+                $dayStatus = 'off_day';
+                $badgeClass = 'bg-dark';
+                $remarks = 'Weekly Off';
+                $summary['off_day']++;
+            } elseif ($att) {
                 if ($att->status == 'late' || ($att->status == 'present' && $att->is_late)) {
                     $dayStatus = 'late';
                     $badgeClass = 'bg-warning text-dark';
@@ -1369,30 +1414,18 @@ class AttendanceController extends Controller
                     $summary['absent']++;
                 }
             } else {
-                if ($isHoliday) {
-                    $dayStatus = 'holiday';
-                    $badgeClass = 'bg-secondary';
-                    $remarks = $holidayInfo ? $holidayInfo->name : 'Holiday';
-                    $summary['holiday']++;
-                } elseif ($approvedLeave) {
-                    $dayStatus = 'leave';
-                    $badgeClass = 'bg-info text-dark';
-                    $remarks = $approvedLeave->leave_type . ' Leave';
-                    $summary['leave']++;
-                } elseif ($isWeeklyOff) {
+                if ($isWeeklyOff) {
                     $dayStatus = 'off_day';
                     $badgeClass = 'bg-dark';
                     $remarks = 'Weekly Off';
                     $summary['off_day']++;
+                } elseif ($current->isPast() && !$current->isToday()) {
+                    $dayStatus = 'absent';
+                    $badgeClass = 'bg-danger';
+                    $summary['absent']++;
                 } else {
-                    if ($current->isPast() && !$current->isToday()) {
-                        $dayStatus = 'absent';
-                        $badgeClass = 'bg-danger';
-                        $summary['absent']++;
-                    } else {
-                        $dayStatus = 'upcoming';
-                        $badgeClass = 'bg-light text-muted border';
-                    }
+                    $dayStatus = 'upcoming';
+                    $badgeClass = 'bg-light text-muted border';
                 }
             }
 

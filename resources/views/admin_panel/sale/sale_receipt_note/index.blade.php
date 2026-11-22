@@ -337,7 +337,7 @@
                     <i class="fas fa-exclamation-triangle fa-2x text-warning mr-3"></i>
                     <div>
                         <h6 class="mb-1 font-weight-bold text-dark"><i class="fas fa-globe mr-1"></i> All Branches View Active</h6>
-                        <span class="text-muted small">Aap is waqt tamaam branches ka consolidated data dekh rahe hain. Nayi Sale Invoice create karne ke liye pehle upar branch switcher se specific branch (maslan Lahore ya Multan) select karein.</span>
+                        <span class="text-muted small">You are currently viewing consolidated data across all branches. To create a new Sale Invoice, please select a specific branch (e.g. Lahore or Multan) from the top branch switcher.</span>
                     </div>
                 </div>
             @endif
@@ -554,9 +554,9 @@
                 Swal.fire({
                     icon: 'warning',
                     title: 'Branch Selection Required',
-                    text: 'Pehle upar branch switcher se specific branch select karein! "All Branches" mode mein sale invoice create nahi ho sakti.',
+                    text: 'Please select a specific branch from the top branch switcher first! Sale invoices cannot be created under "All Branches" mode.',
                     confirmButtonColor: '#059669',
-                    confirmButtonText: 'Theek Hai'
+                    confirmButtonText: 'Understood'
                 });
             });
 

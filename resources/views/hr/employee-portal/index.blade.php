@@ -845,12 +845,6 @@
                         <i class="fas fa-user-circle" style="color:var(--purple-light);"></i>
                         <span>My Profile</span>
                     </button>
-                    @if(auth()->check() && (auth()->user()->role === 'super_admin' || auth()->user()->role === 'admin' || (method_exists(auth()->user(), 'roles') && auth()->user()->roles()->count() > 0)))
-                    <a href="{{ url('/home') }}" class="profile-dropdown-item">
-                        <i class="fas fa-desktop" style="color:var(--blue);"></i>
-                        <span>ERP Dashboard</span>
-                    </a>
-                    @endif
                     <button type="button" class="profile-dropdown-item item-logout" onclick="closeProfileDropdown(); confirmLogout();">
                         <i class="fas fa-arrow-right-from-bracket" style="color:#ef4444;"></i>
                         <span>Log Out</span>
@@ -1202,13 +1196,6 @@
             </div>
 
             <div style="display:flex;flex-direction:column;gap:12px;">
-                @if(auth()->check() && (auth()->user()->role === 'super_admin' || auth()->user()->role === 'admin' || (method_exists(auth()->user(), 'roles') && auth()->user()->roles()->count() > 0)))
-                <a href="{{ url('/home') }}" class="btn-erp-switch">
-                    <i class="fas fa-desktop"></i>
-                    <span>Switch to ERP Admin Panel</span>
-                </a>
-                @endif
-
                 <button type="button" class="btn-logout-full" onclick="confirmLogout()">
                     <i class="fas fa-arrow-right-from-bracket"></i>
                     <span>Log Out from Account</span>

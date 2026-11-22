@@ -1095,7 +1095,8 @@ class SaleController extends Controller
 
             // Revert Stock for Direct Sale (SIN) - only if no delivery notes exist (DC manages its own stock)
             $hasDcOnSale = \App\Models\DeliveryNote::where('sale_id', $sale->id)->where('status', '!=', 'cancelled')->exists();
-            if ($sale->mode === 'sin' && !$hasDcOnSale) {
+            $isDirectSale = in_array(strtolower($sale->mode ?? 'sin'), ['sin', 'srn']);
+            if ($isDirectSale && !$hasDcOnSale) {
                 $this->handleStockImpact($sale, 'in');
 
                 // Revert batch stock
@@ -1115,7 +1116,7 @@ class SaleController extends Controller
             }
 
             // 3. Update Status
-            $sale->update(['sale_status' => 'un-post']);
+            $sale->update(['sale_status' => 'un-post', 'mode' => 'sin']);
 
             DB::commit();
             
@@ -1207,33 +1208,48 @@ class SaleController extends Controller
         //     throw \Illuminate\Validation\ValidationException::withMessages(['product_id' => 'Duplicate products are not allowed in a single sale. Please merge quantities.']);
         // }
 
-        if ($request->mode == 'so') {
+        $incomingMode = strtolower($request->mode ?? 'sin');
+        $normalizedMode = ($incomingMode === 'so') ? 'so' : 'sin';
+        $request->merge(['mode' => $normalizedMode]);
+
+        if ($normalizedMode == 'so') {
             $status = 'draft';
         } else {
             $status = $request->action === 'post' ? 'post' : 'un-post';
         }
 
         // Concurrency Safe Transaction
-        return DB::transaction(function () use ($request, $sale, $status, $branchId) {
+        return DB::transaction(function () use ($request, $sale, $status, $branchId, $normalizedMode) {
 
             // 2. Prepare Header Data
             $isNew = ! $sale->exists;
+            $wasPosted = ($sale->sale_status === 'post');
+            $wasDirectSale = in_array(strtolower($sale->mode ?? 'sin'), ['sin', 'srn']);
+            $parseDateSafe = function ($val) {
+                if (! $val) return null;
+                try {
+                    return \Carbon\Carbon::parse(str_replace('/', '-', $val))->format('Y-m-d');
+                } catch (\Exception $e) {
+                    return null;
+                }
+            };
+
             $sale->customer_id           = $request->customer;
             $sale->employee_id           = $request->sales_officer_id;
             $sale->commission_percentage = $request->filled('commission_percentage') ? floatval($request->commission_percentage) : null;
             $sale->reference             = $request->reference;
-            $sale->sale_date             = $request->purchase_date;
+            $sale->sale_date             = $parseDateSafe($request->purchase_date) ?? now()->format('Y-m-d');
             $sale->vendor_bill_no        = $request->vendor_bill_no;
-            $sale->dc_date               = $request->dc_date;
+            $sale->dc_date               = $parseDateSafe($request->dc_date);
             $sale->order_no              = $request->order_no;
             $sale->sale_order_no         = $request->sale_order_no;
-            $sale->so_date               = $request->so_date;
+            $sale->so_date               = $parseDateSafe($request->so_date);
             
             $sale->total_amount_Words = $request->total_amount_Words;
             $sale->sale_status = $status;
             $sale->enable_hs_code = $request->enable_hs_code ? 1 : 0;
             $sale->branch_id   = (int) $branchId;
-            $sale->mode        = $request->mode ?? 'sin';
+            $sale->mode        = $normalizedMode;
             if ($isNew) {
                 $sale->created_by = auth()->id() ?? 1;
             }
@@ -1252,7 +1268,7 @@ class SaleController extends Controller
 
             // ONLY generate or set invoice number if it doesn't already have one,
             // OR if converting an existing draft Sale Order (SO-*) into a Sale Invoice Note (mode == 'sin')
-            $isConvertingSoToSin = ($request->mode == 'sin' && $sale->invoice_no && str_starts_with($sale->invoice_no, 'SO-'));
+            $isConvertingSoToSin = ($normalizedMode == 'sin' && $sale->invoice_no && str_starts_with($sale->invoice_no, 'SO-'));
 
             if (!$sale->invoice_no || $isConvertingSoToSin) {
                 if ($isConvertingSoToSin && !$sale->sale_order_no) {
@@ -1276,7 +1292,7 @@ class SaleController extends Controller
                     $sale->invoice_no = $manualInvoice;
                 } else {
                     // Auto-generate unique invoice number
-                    $prefix = $request->mode == 'so' ? 'SO-' : ($request->mode == 'sin' ? 'SIN-' : 'SRN-');
+                    $prefix = $normalizedMode == 'so' ? 'SO-' : 'SIN-';
                     $sale->invoice_no = $this->generateUniqueInvoiceNo($prefix);
                 }
             }
@@ -1297,7 +1313,7 @@ class SaleController extends Controller
             if (! $isNew) {
                 // If this is a direct sale (SIN) and was previously posted, restore warehouse & batch stocks before deleting
                 // (Only for direct sales that do NOT have delivery notes, because DC manages its own stock)
-                if ($sale->mode == 'sin' && $sale->sale_status == 'post' && !$hasDcOnSale) {
+                if ($wasDirectSale && $wasPosted && !$hasDcOnSale) {
                     $this->handleStockImpact($sale, 'in');
 
                     // Restore batch stocks
@@ -1498,7 +1514,7 @@ class SaleController extends Controller
                     if ($totalDelivered > 0) {
                         $saleItem->update(['delivered_qty' => $totalDelivered]);
                     }
-                } elseif ($request->mode == 'sin' && $status === 'post') {
+                } elseif (in_array($normalizedMode, ['sin', 'srn']) && $status === 'post') {
                     $deductions = \App\Http\Controllers\ProductBatchController::deductFromBatches(
                         $pid,
                         $totalPieces,
@@ -1613,7 +1629,7 @@ class SaleController extends Controller
                 \Log::info('Proceeding to Auto-Receipt & Ledger logic for Sale #'.$sale->invoice_no);
 
                 // 1. DEDUCT STOCK FROM WAREHOUSE (Only for direct sales with no delivery notes)
-                if ($sale->mode == 'sin' && !$request->filled('dc_id') && !$hasDcOnSale) {
+                if (in_array($sale->mode, ['sin', 'srn']) && !$request->filled('dc_id') && !$hasDcOnSale) {
                     $this->handleStockImpact($sale, 'out');
                 }
 
@@ -1628,7 +1644,7 @@ class SaleController extends Controller
                     // Get account IDs dynamically
                     $arAccountId = $balanceService->getAccountsReceivableId($sale->branch_id);
                     $salesAccountId = $balanceService->getSalesRevenueId($sale->branch_id);
-                    $date = $sale->created_at->format('Y-m-d');
+                    $date = $sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->format('Y-m-d') : $sale->created_at->format('Y-m-d');
                     $custForVoucher = $sale->customer_relation ?? \App\Models\Customer::find($sale->customer_id);
 
                     // --- LEDGER POSTING (THE INVOICE) ---

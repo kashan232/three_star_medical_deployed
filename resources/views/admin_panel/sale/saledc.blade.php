@@ -264,7 +264,7 @@
                 <div class="info-box">
                     <div class="info-box-header">Reference</div>
                     <div><span class="info-label">DC #:</span> <strong>{{ $sale->id }}</strong></div>
-                    <div><span class="info-label">Date:</span> {{ $sale->created_at->format('d/m/Y') }}</div>
+                    <div><span class="info-label">Date:</span> {{ $sale->dc_date ? \Carbon\Carbon::parse($sale->dc_date)->format('d/m/Y') : ($sale->sale_date ? \Carbon\Carbon::parse($sale->sale_date)->format('d/m/Y') : $sale->created_at->format('d/m/Y')) }}</div>
                     <div><span class="info-label">Ref:</span> {{ $sale->reference ?? '-' }}</div>
                 </div>
             </div>

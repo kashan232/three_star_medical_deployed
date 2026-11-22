@@ -49,8 +49,11 @@ class SalaryStructureAssignmentController extends Controller
         }
 
         try {
-            // Restore functionality with safer query
-            $query = Employee::with(['department', 'designation', 'activeSalaryStructure']);
+            $branchId = auth()->user()?->getBranchId();
+
+            // Restore functionality with safer query scoped to active branch
+            $query = Employee::with(['department', 'designation', 'activeSalaryStructure'])
+                ->when($branchId, fn ($q) => $q->branchScoped($branchId));
             
             // Apply filters
             if ($request->filter_type === 'department') {
@@ -203,13 +206,14 @@ class SalaryStructureAssignmentController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        // Include assignments from Child (Custom) structures
-        // We look for direct children (assignments) of this structure. 
-        // We also want children of children? No, assignments are direct copies usually.
-        // Actually, assignedEmployees() returns children.
-        
+        $branchId = auth()->user()?->getBranchId();
+
+        // Include assignments from Child (Custom) structures scoped by branch
         $assignments = $salaryStructure->children()
             ->with(['employee.department', 'employee.designation'])
+            ->when($branchId, function ($q) use ($branchId) {
+                $q->whereHas('employee', fn ($eq) => $eq->branchScoped($branchId));
+            })
             ->orderBy('created_at', 'desc')
             ->paginate(15);
 
@@ -262,14 +266,14 @@ class SalaryStructureAssignmentController extends Controller
         // Get IDs of this structure and all its custom children
         $structureIds = $salaryStructure->children()->pluck('id')->push($salaryStructure->id);
 
+        $branchId = auth()->user()?->getBranchId();
+
         // Fetch employees who have an ACTIVE assignment to any of these structures (Children)
-        // Since activeSalaryStructure returns the Child Structure directly, we check if that structure's parent is THIS structure
-        // OR if the structure itself is in the list.
-        
         $assignments = Employee::whereHas('activeSalaryStructure', function($q) use ($structureIds) {
                 // If the active structure's ID is one of the children (or self)
                 $q->whereIn('id', $structureIds);
             })
+            ->when($branchId, fn ($q) => $q->branchScoped($branchId))
             ->with(['department', 'designation', 'activeSalaryStructure'])
             ->orderBy('first_name')
             ->paginate(15);

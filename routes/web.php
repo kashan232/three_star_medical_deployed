@@ -240,6 +240,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/Purchase/Order', [PurchaseController::class, 'orderIndex'])->middleware('permission:purchases.view')->name('purchase.order.index');
     Route::get('/Purchase/GRN', [PurchaseController::class, 'grnIndex'])->middleware('permission:purchases.view')->name('purchase.grn.index');
     Route::get('/Purchase', [PurchaseController::class, 'index'])->middleware('permission:purchases.view')->name('Purchase.home');
+    Route::get('/purchases', [PurchaseController::class, 'index'])->middleware('permission:purchases.view')->name('purchases.index');
     route::get('/add/Purchase', [PurchaseController::class, 'add_purchase'])->middleware('permission:purchases.create')->name('add_purchase');
     route::post('/Purchase/store', [PurchaseController::class, 'store'])->middleware('permission:purchases.create|purchases.edit')->name('store.Purchase');
 

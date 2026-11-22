@@ -428,6 +428,9 @@
                         <label>Vendor</label>
                         <select id="filterVendor" class="select2-product">
                             <option value="all">All Vendors</option>
+                            @foreach($vendors ?? \App\Models\Vendor::orderBy('name')->get() as $v)
+                                <option value="{{ $v->id }}">{{ $v->name }}</option>
+                            @endforeach
                         </select>
                     </div>
                     <div class="filter-group" style="flex: 1; min-width: 150px;">
@@ -763,6 +766,12 @@
                 $('#filterSubCategory, #filterBrand').on('change', function() {
                     updateFilters();
                 });
+                $('#filterVendor').on('change', function() {
+                    fetchReport();
+                });
+                $('#filterWarehouse, #filterStatus').on('change', function() {
+                    fetchReport();
+                });
 
                 updateFilters(); // Initial sync
             });
@@ -806,15 +815,12 @@
                     .then(res => {
                         document.getElementById('loader').style.display = 'none';
 
-                        if (res.vendors) {
+                        if (res.vendors && document.getElementById('filterVendor').options.length <= 1) {
                             const vSel = document.getElementById('filterVendor');
-                            const vCurrent = vSel.value;
-                            while (vSel.options.length > 1) vSel.remove(1);
                             res.vendors.forEach(v => {
                                 const o = new Option(v.name, v.id);
                                 vSel.add(o);
                             });
-                            vSel.value = vCurrent;
                             $('#filterVendor').trigger('change.select2');
                         }
                         if (res.warehouses) {
@@ -831,6 +837,8 @@
 
                         lastData = res.data || [];
                         if (!lastData.length) {
+                            document.getElementById('tableWrap').style.display = 'none';
+                            document.getElementById('kpiRow').style.display = 'none';
                             document.getElementById('emptyState').style.display = '';
                             document.getElementById('emptyState').querySelector('p').textContent =
                                 'No purchase records found for the selected filters.';

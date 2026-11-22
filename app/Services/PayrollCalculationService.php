@@ -173,7 +173,10 @@ class PayrollCalculationService
             $isLeave              = !is_null($approvedLeave);
             $leaveDeductsSalary   = $isLeave && $approvedLeave->deduct_salary;
 
-            if ($att) {
+            // Holiday takes precedence: paid holiday covered by monthly salary (no absent deduction, does not inflate regular working days)
+            if ($isHoliday) {
+                // Skip — Paid holiday
+            } elseif ($att) {
                 if (in_array(strtolower($att->status), ['present', 'late'])) {
                     $daysPresent++;
                 } elseif (strtolower($att->status) === 'absent') {
@@ -288,11 +291,15 @@ class PayrollCalculationService
 
             // Alternative: Use late rules if defined
             if (empty($latePenalty) && ! empty($policy['late_rules'])) {
+                $calcDailyRate = ($structure->use_daily_wages && $structure->daily_wages > 0)
+                    ? floatval($structure->daily_wages)
+                    : ($structure->base_salary / $daysInMonth);
+
                 foreach ($attendances->where('is_late', true) as $att) {
                     $deduction = $this->calculateLateDeduction(
                         $att->late_minutes ?? 0,
                         $policy['late_rules'],
-                        $structure->base_salary / $daysInMonth // Per-day rate based on actual month days
+                        $calcDailyRate
                     );
                     $lateDeduction += $deduction;
                 }
@@ -320,11 +327,15 @@ class PayrollCalculationService
 
             // Alternative: Use early rules if defined
             if (empty($earlyPenalty) && ! empty($policy['early_rules'])) {
+                $calcDailyRate = ($structure->use_daily_wages && $structure->daily_wages > 0)
+                    ? floatval($structure->daily_wages)
+                    : ($structure->base_salary / $daysInMonth);
+
                 foreach ($attendances->where('is_early_leave', true) as $att) { // Fixed: is_early_leave
                     $deduction = $this->calculateEarlyDeduction(
                         $att->early_leave_minutes ?? 0, // Fixed: early_leave_minutes
                         $policy['early_rules'],
-                        $structure->base_salary / $daysInMonth
+                        $calcDailyRate
                     );
                     $earlyDeduction += $deduction;
                 }
@@ -418,6 +429,287 @@ class PayrollCalculationService
     }
 
     /**
+     * Calculate late check-in deduction
+     */
+    public function calculateLateDeduction(int $lateMinutes, array $rules, float $dailyRate): float
+    {
+        if (empty($rules)) {
+            return 0.0;
+        }
+
+        foreach ($rules as $rule) {
+            $min = isset($rule['min_minutes']) ? floatval($rule['min_minutes']) : 0;
+            $max = (isset($rule['max_minutes']) && $rule['max_minutes'] !== null && $rule['max_minutes'] !== '') ? floatval($rule['max_minutes']) : null;
+
+            if ($lateMinutes >= $min && (is_null($max) || $lateMinutes <= $max)) {
+                $amount = floatval($rule['amount'] ?? 0);
+                $type = $rule['type'] ?? 'fixed';
+
+                if ($type === 'percentage') {
+                    return round(($dailyRate * $amount) / 100, 2);
+                } else {
+                    return $amount;
+                }
+            }
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Calculate early check-out deduction
+     */
+    public function calculateEarlyDeduction(int $earlyMinutes, array $rules, float $dailyRate): float
+    {
+        if (empty($rules)) {
+            return 0.0;
+        }
+
+        foreach ($rules as $rule) {
+            $min = isset($rule['min_minutes']) ? floatval($rule['min_minutes']) : 0;
+            $max = (isset($rule['max_minutes']) && $rule['max_minutes'] !== null && $rule['max_minutes'] !== '') ? floatval($rule['max_minutes']) : null;
+
+            if ($earlyMinutes >= $min && (is_null($max) || $earlyMinutes <= $max)) {
+                $amount = floatval($rule['amount'] ?? 0);
+                $type = $rule['type'] ?? 'fixed';
+
+                if ($type === 'percentage') {
+                    return round(($dailyRate * $amount) / 100, 2);
+                } else {
+                    return $amount;
+                }
+            }
+        }
+
+        return 0.0;
+    }
+
+    /**
+     * Calculate daily payroll for a daily wage employee
+     */
+    public function calculateDailyPayroll(Employee $employee, Attendance $attendance): array
+    {
+        // Get effective salary structure
+        $structure = $this->getEffectiveSalaryStructure($employee);
+
+        if (! $structure || ! $structure->use_daily_wages) {
+            throw new \Exception('Employee is not configured for daily wages.');
+        }
+
+        $dailyRate = floatval($structure->daily_wages ?? 0);
+        $policy = $structure->attendance_deduction_policy ?? [];
+        $carryForward = (bool) ($structure->carry_forward_deductions ?? false);
+        $dateStr = Carbon::parse($attendance->date)->format('Y-m-d');
+
+        // Check if employee has approved leave on this date
+        $approvedLeave = Leave::getApprovedLeave($employee->id, $dateStr);
+        $isLeave = ($attendance->status === 'leave') || ($approvedLeave !== null);
+        $isPaidLeave = false;
+        $isUnpaidLeave = false;
+
+        if ($isLeave) {
+            if ($approvedLeave) {
+                // If leave record says deduct_salary = true, then it is unpaid
+                $isPaidLeave = ! $approvedLeave->deduct_salary;
+                $isUnpaidLeave = (bool) $approvedLeave->deduct_salary;
+            } else {
+                // Default to paid leave if marked as leave in attendance
+                $isPaidLeave = true;
+            }
+        }
+
+        // Determine day earnings
+        $isAbsent = ($attendance->status === 'absent');
+        if ($isAbsent || $isUnpaidLeave) {
+            $dayEarning = 0.0;
+        } else {
+            // Present, Late, or Paid Leave
+            $dayEarning = $dailyRate;
+        }
+
+        $dayDeduction = 0.0;
+        $deductionDetails = [];
+        $allowanceDetails = [];
+
+        if ($isPaidLeave) {
+            $leaveType = $approvedLeave?->leave_type ?? 'Approved Leave';
+            $allowanceDetails[] = [
+                'name' => "Paid Leave ({$leaveType})",
+                'amount' => $dayEarning,
+                'type' => 'allowance',
+                'description' => "Full daily wage granted for approved {$leaveType} on " . Carbon::parse($attendance->date)->format('M d, Y'),
+            ];
+        } elseif (! $isAbsent && ! $isUnpaidLeave) {
+            // Worked day: Apply late check-in deductions
+            $lateMinutes = intval($attendance->late_minutes ?? 0);
+            if ($lateMinutes > 0 || $attendance->is_late) {
+                $lateDeduction = 0.0;
+                if (! empty($policy['late_rules'])) {
+                    $lateDeduction = $this->calculateLateDeduction(
+                        $lateMinutes,
+                        $policy['late_rules'],
+                        $dailyRate
+                    );
+                }
+
+                if ($lateDeduction == 0 && ! empty($policy['late_penalty_per_instance'])) {
+                    $lateDeduction = floatval($policy['late_penalty_per_instance']);
+                }
+
+                if ($lateDeduction > 0) {
+                    $dayDeduction += $lateDeduction;
+                    $deductionDetails[] = [
+                        'name' => "Late Check-in ({$lateMinutes} min)",
+                        'amount' => $lateDeduction,
+                        'type' => 'deduction',
+                        'description' => "Late arrival deduction for " . Carbon::parse($attendance->date)->format('M d, Y'),
+                    ];
+                }
+            }
+
+            // Apply early check-out deductions
+            $earlyMinutes = intval($attendance->early_leave_minutes ?? 0);
+            if ($earlyMinutes > 0 || $attendance->is_early_leave) {
+                $earlyDeduction = 0.0;
+                if (! empty($policy['early_rules'])) {
+                    $earlyDeduction = $this->calculateEarlyDeduction(
+                        $earlyMinutes,
+                        $policy['early_rules'],
+                        $dailyRate
+                    );
+                }
+
+                if ($earlyDeduction == 0 && ! empty($policy['early_penalty_per_instance'])) {
+                    $earlyDeduction = floatval($policy['early_penalty_per_instance']);
+                }
+
+                if ($earlyDeduction > 0) {
+                    $dayDeduction += $earlyDeduction;
+                    $deductionDetails[] = [
+                        'name' => "Early Leave ({$earlyMinutes} min)",
+                        'amount' => $earlyDeduction,
+                        'type' => 'deduction',
+                        'description' => "Early departure deduction for " . Carbon::parse($attendance->date)->format('M d, Y'),
+                    ];
+                }
+            }
+        }
+
+        // Apply Loan Deductions (if employee has an active salary_deduction loan)
+        $month = Carbon::parse($attendance->date)->format('Y-m');
+        $activeLoans = Loan::where('employee_id', $employee->id)
+            ->salaryDeduction()
+            ->active()
+            ->get();
+
+        $loanDeductionTotal = 0.0;
+        foreach ($activeLoans as $loan) {
+            if ($loan->start_month && $month < $loan->start_month) {
+                continue;
+            }
+            if ($loan->isDeductionSkippedForMonth($month)) {
+                continue;
+            }
+
+            // Check if already paid today
+            $alreadyPaidToday = LoanPayment::where('loan_id', $loan->id)
+                ->whereDate('payment_date', $attendance->date)
+                ->exists();
+            if ($alreadyPaidToday) {
+                continue;
+            }
+
+            // Check scheduled deduction or installment
+            $scheduled = $loan->getScheduledDeductionForMonth($month);
+            $installment = 0.0;
+            if ($scheduled && $scheduled->status === 'pending') {
+                $installment = floatval($scheduled->amount);
+            } elseif ($loan->installment_amount > 0) {
+                $installment = floatval($loan->installment_amount);
+            } elseif ($loan->monthly_installment > 0) {
+                $installment = floatval($loan->monthly_installment);
+            }
+
+            $installment = min($installment, $loan->remaining_amount);
+
+            if ($installment > 0) {
+                $loanDeductionTotal += $installment;
+                $deductionDetails[] = [
+                    'name' => "Loan Installment (Loan #{$loan->id})",
+                    'amount' => $installment,
+                    'type' => 'loan_deduction',
+                    'loan_id' => $loan->id,
+                    'description' => "Loan repayment for Loan #{$loan->id} on " . Carbon::parse($attendance->date)->format('M d, Y') . " (Remaining: Rs. " . number_format(max(0, $loan->remaining_amount - $installment), 2) . ")",
+                ];
+            }
+        }
+
+        // Handle carried forward deductions from previous days
+        $carriedForwardDeduction = floatval($employee->pending_deductions ?? 0);
+        $totalDeductions = $dayDeduction + $loanDeductionTotal + $carriedForwardDeduction;
+
+        // Determine net payable and remaining carry-forward
+        $netSalary = 0.0;
+        $newPendingDeductions = 0.0;
+
+        if ($totalDeductions <= $dayEarning) {
+            // Can pay full amount after deductions
+            $netSalary = $dayEarning - $totalDeductions;
+            $newPendingDeductions = 0.0;
+        } else {
+            // Deductions exceed daily earning
+            if ($carryForward) {
+                $netSalary = 0.0;
+                $newPendingDeductions = $totalDeductions - $dayEarning;
+            } else {
+                $netSalary = 0.0;
+                $newPendingDeductions = 0.0;
+                $totalDeductions = $dayEarning;
+            }
+        }
+
+        $netSalary = max(0.0, $netSalary);
+
+        return [
+            'payroll_type' => 'daily',
+            'month' => $dateStr, // Store full date Y-m-d for daily
+            'basic_salary' => $dayEarning,
+            'gross_salary' => $dayEarning,
+            'allowances' => 0.0,
+            'deductions' => $loanDeductionTotal,
+            'attendance_deductions' => $dayDeduction,
+            'manual_deductions' => 0.0,
+            'manual_allowances' => 0.0,
+            'carried_forward_deduction' => $carriedForwardDeduction,
+            'bonuses' => 0.0,
+            'commission' => 0.0,
+            'net_salary' => $netSalary,
+            'auto_generated' => true,
+            'status' => 'generated',
+            'carried_forward_to_next' => $newPendingDeductions,
+            'new_pending_deductions' => $newPendingDeductions,
+            'deduction_details' => $deductionDetails,
+            'allowance_details' => $allowanceDetails,
+            'attendance_breakdown' => [
+                'has_data' => true,
+                'date' => $attendance->date,
+                'status' => $isLeave ? 'leave' : ($attendance->status ?? 'present'),
+                'check_in' => $attendance->clock_in,
+                'check_out' => $attendance->clock_out,
+                'is_late' => $attendance->is_late ?? false,
+                'is_early_out' => $attendance->is_early_leave ?? false,
+                'late_minutes' => $attendance->late_minutes ?? 0,
+                'early_checkout_minutes' => $attendance->early_leave_minutes ?? 0,
+                'total_deduction' => $dayDeduction,
+                'is_leave' => $isLeave,
+                'leave_type' => $approvedLeave?->leave_type,
+                'is_paid_leave' => $isPaidLeave,
+                'loan_deduction' => $loanDeductionTotal,
+            ],
+        ];
+    }
+
+    /**
      * Calculate monthly payroll for a salaried employee
      */
     public function calculateMonthlyPayroll(Employee $employee, string $month): array
@@ -429,7 +721,7 @@ class PayrollCalculationService
             throw new \Exception('Employee has no salary structure assigned.');
         }
 
-        $baseSalary = $structure->base_salary ?? 0;
+        $baseSalary = floatval($structure->base_salary ?? 0);
 
         // Calculate allowances (supports fixed and percentage types)
         $allowanceData = $this->calculateAllowances($structure);
@@ -445,6 +737,23 @@ class PayrollCalculationService
         $attendanceDeductionData = $this->calculateMonthlyAttendanceDeductions($employee, $month, $structure);
         $attendanceDeductions = $attendanceDeductionData['total'];
         $attendanceBreakdown = $attendanceDeductionData['breakdown'];
+
+        // Support daily wage employees in monthly payroll calculation
+        if ($structure->use_daily_wages && $structure->daily_wages > 0) {
+            $daysPresent = $attendanceBreakdown['days_present'] ?? 0;
+            $daysPaidLeave = $attendanceBreakdown['days_paid_leave'] ?? 0;
+            $earnedDays = $daysPresent + $daysPaidLeave;
+            $dailyEarned = $earnedDays * floatval($structure->daily_wages);
+
+            if ($baseSalary > 0) {
+                $baseSalary = $baseSalary + $dailyEarned;
+            } else {
+                $baseSalary = $dailyEarned;
+                // If base salary was 0, they were purely paid per day worked, so don't deduct absences from 0
+                $absenceDeduction = $attendanceBreakdown['absence_deduction'] ?? 0;
+                $attendanceDeductions = max(0, $attendanceDeductions - $absenceDeduction);
+            }
+        }
 
         // Calculate loan deductions (supports monthly skip & auto salary_deduction mode)
         $loanDeductionData = $this->calculateLoanDeductions($employee, $month);

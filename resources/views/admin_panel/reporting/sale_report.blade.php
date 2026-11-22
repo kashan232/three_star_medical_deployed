@@ -409,6 +409,17 @@
                             @endforeach
                         </select>
                     </div>
+                    @if(auth()->user() && auth()->user()->isSuperAdmin())
+                    <div class="filter-group" style="flex: 1; min-width: 130px; max-width: 170px;">
+                        <label>Branch</label>
+                        <select id="filterBranch" class="select2-product">
+                            <option value="all">All Branches</option>
+                            @foreach($branches ?? \App\Models\Branch::orderBy('name')->get() as $b)
+                                <option value="{{ $b->id }}">{{ $b->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    @endif
                     <div class="filter-group" style="flex: 1; min-width: 110px; max-width: 150px;">
                         <label>Start Date</label>
                         <input type="date" id="start_date">
@@ -471,7 +482,7 @@
             <div class="co-header">
                 <div class="co-name">THREE STARS MEDICAL SUPPLIES</div>
                 <div class="co-addr">
-                    <strong>{{ $activeBranch->name ?? 'Head Office' }} :</strong> {{ $activeBranch->address ?? 'Lahore, Pakistan.' }}<br>
+                    <strong id="hdrBranchName">{{ $activeBranch->name ?? 'Head Office' }} :</strong> {{ $activeBranch->address ?? 'Lahore, Pakistan.' }}<br>
                     <strong>Phone :</strong> {{ $activeBranch->number ?? '+92 42 37353433' }}
                 </div>
             </div>
@@ -741,6 +752,17 @@
                 
                 $('#filterCategory').on('change', updateFilters);
                 $('#filterSubCategory, #filterBrand').on('change', updateFilters);
+                $('#filterVendor').on('change', function() {
+                    fetchReport();
+                });
+                $('#filterCustomer, #filterWarehouse, #filterStatus').on('change', function() {
+                    fetchReport();
+                });
+                if ($('#filterBranch').length) {
+                    $('#filterBranch').on('change', function() {
+                        fetchReport();
+                    });
+                }
                 updateFilters(); // Initial sync
             });
 
@@ -755,6 +777,18 @@
                 const brand = document.getElementById('filterBrand').value;
                 const product = document.getElementById('filterProduct').value;
                 const vendor = document.getElementById('filterVendor') ? document.getElementById('filterVendor').value : 'all';
+                const branch = document.getElementById('filterBranch') ? document.getElementById('filterBranch').value : 'all';
+
+                // Update company header branch label
+                const branchEl = document.getElementById('filterBranch');
+                const hdrEl = document.getElementById('hdrBranchName');
+                if (branchEl && hdrEl) {
+                    if (branchEl.value !== 'all') {
+                        hdrEl.textContent = (branchEl.options[branchEl.selectedIndex]?.text || '') + ' :';
+                    } else {
+                        hdrEl.textContent = 'All Branches :';
+                    }
+                }
 
                 document.getElementById('loader').style.display = '';
                 document.getElementById('tableWrap').style.display = 'none';
@@ -770,7 +804,8 @@
                     sub_category_id: sub,
                     brand_id: brand,
                     product_id: product,
-                    vendor_id: vendor
+                    vendor_id: vendor,
+                    branch_id: branch
                 });
 
                 fetch(`{{ route('report.sale.fetch') }}?${params}`, {
@@ -783,24 +818,39 @@
                     .then(res => {
                         document.getElementById('loader').style.display = 'none';
 
-                        // Populate dropdowns once
-                        if (res.customers && document.getElementById('filterCustomer').options.length === 1) {
+                        // Populate customers
+                        if (res.customers) {
+                            const custEl = document.getElementById('filterCustomer');
+                            const prevVal = $(custEl).val();
+                            while (custEl.options.length > 1) custEl.remove(1);
                             res.customers.forEach(c => {
                                 const o = new Option(c.customer_name, c.id);
-                                document.getElementById('filterCustomer').add(o);
+                                custEl.add(o);
                             });
+                            if (prevVal && $(custEl).find(`option[value="${prevVal}"]`).length) {
+                                $(custEl).val(prevVal);
+                            }
                             $('#filterCustomer').trigger('change.select2');
                         }
-                        if (res.warehouses && document.getElementById('filterWarehouse').options.length === 1) {
+                        // Populate warehouses
+                        if (res.warehouses) {
+                            const whEl = document.getElementById('filterWarehouse');
+                            const prevWh = $(whEl).val();
+                            while (whEl.options.length > 1) whEl.remove(1);
                             res.warehouses.forEach(w => {
                                 const o = new Option(w.warehouse_name, w.id);
-                                document.getElementById('filterWarehouse').add(o);
+                                whEl.add(o);
                             });
+                            if (prevWh && $(whEl).find(`option[value="${prevWh}"]`).length) {
+                                $(whEl).val(prevWh);
+                            }
                             $('#filterWarehouse').trigger('change.select2');
                         }
 
                         lastData = res.data || [];
                         if (!lastData.length) {
+                            document.getElementById('tableWrap').style.display = 'none';
+                            document.getElementById('kpiRow').style.display = 'none';
                             document.getElementById('emptyState').style.display = '';
                             document.getElementById('emptyState').querySelector('p').textContent =
                                 'No sale records found for the selected filters.';
@@ -835,6 +885,10 @@
                 $('#filterSubCategory').val('all').trigger('change.select2');
                 $('#filterBrand').val('all').trigger('change.select2');
                 $('#filterProduct').val('all').trigger('change.select2');
+                $('#filterVendor').val('all').trigger('change.select2');
+                if ($('#filterBranch').length) {
+                    $('#filterBranch').val('all').trigger('change.select2');
+                }
                 updateFilters();
 
                 document.getElementById('tableWrap').style.display = 'none';
@@ -858,6 +912,7 @@
                     brand_id:        document.getElementById('filterBrand').value,
                     product_id:      document.getElementById('filterProduct').value,
                     vendor_id:       document.getElementById('filterVendor') ? document.getElementById('filterVendor').value : 'all',
+                    branch_id:       document.getElementById('filterBranch') ? document.getElementById('filterBranch').value : 'all',
                 });
                 // Server returns Content-Disposition: attachment — browser saves with correct name
                 window.location.href = `{{ route('report.sale.export.pdf') }}?${params}`;
@@ -876,6 +931,7 @@
                     brand_id:        document.getElementById('filterBrand').value,
                     product_id:      document.getElementById('filterProduct').value,
                     vendor_id:       document.getElementById('filterVendor') ? document.getElementById('filterVendor').value : 'all',
+                    branch_id:       document.getElementById('filterBranch') ? document.getElementById('filterBranch').value : 'all',
                 });
                 window.location.href = `{{ route('report.sale.export.excel') }}?${params}`;
             });

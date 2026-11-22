@@ -252,6 +252,10 @@ class BiometricSyncService
                     }
                 }
 
+                // Check if date is a declared holiday for this employee
+                $isHoliday = \App\Models\Hr\Holiday::isHoliday($date, $employee->id);
+                $sessionStatus = $isHoliday ? 'leave' : ($isLate ? 'late' : 'present');
+
                 // Check if we already have a record for this date (Re-open session)
                 $existingAttendance = Attendance::where('employee_id', $employee->id)
                     ->where('date', $date)
@@ -261,15 +265,18 @@ class BiometricSyncService
                     // Re-open or Update the existing session
                     if (empty($existingAttendance->check_in_time)) {
                         // This might be an absent or leave record. Overwrite it with the actual punch.
-                        $existingAttendance->status = $isLate ? 'late' : 'present';
+                        $existingAttendance->status = $sessionStatus;
                         $existingAttendance->check_in_time = $timestamp->toDateTimeString();
                         $existingAttendance->check_in_location = 'Biometric Device';
-                        $existingAttendance->is_late = $isLate;
-                        $existingAttendance->late_minutes = $lateMinutes;
+                        $existingAttendance->is_late = $isHoliday ? false : $isLate;
+                        $existingAttendance->late_minutes = $isHoliday ? 0 : $lateMinutes;
                     } else {
                         // Keep the original check_in_time (First In) and clear the check_out_time to re-open
                         $existingAttendance->check_out_time = null;
                         $existingAttendance->check_out_location = null;
+                        if ($isHoliday) {
+                            $existingAttendance->status = 'leave';
+                        }
                     }
                     $existingAttendance->save();
                     
@@ -280,11 +287,11 @@ class BiometricSyncService
                     $attendance = Attendance::create([
                         'employee_id' => $employee->id,
                         'date' => $date,
-                        'status' => $isLate ? 'late' : 'present',
+                        'status' => $sessionStatus,
                         'check_in_time' => $timestamp->toDateTimeString(),
                         'check_in_location' => 'Biometric Device',
-                        'is_late' => $isLate,
-                        'late_minutes' => $lateMinutes,
+                        'is_late' => $isHoliday ? false : $isLate,
+                        'late_minutes' => $isHoliday ? 0 : $lateMinutes,
                     ]);
                     
                     $created++;

@@ -86,6 +86,7 @@ Route::middleware(['auth'])->prefix('hr')->name('hr.')->group(function () {
     Route::put('payroll/{payroll}', [PayrollController::class, 'update'])->name('payroll.update')->middleware('permission:hr.payroll.edit');
     Route::patch('payroll/{payroll}/mark-reviewed', [PayrollController::class, 'markReviewed'])->name('payroll.mark-reviewed')->middleware('permission:hr.payroll.edit');
     Route::patch('payroll/{payroll}/mark-paid', [PayrollController::class, 'processPayment'])->name('payroll.mark-paid')->middleware('permission:hr.payroll.edit');
+    Route::patch('payroll/{payroll}/revert-payment', [PayrollController::class, 'revertPayment'])->name('payroll.revert-payment')->middleware('permission:hr.payroll.edit');
     Route::delete('payroll/{payroll}', [PayrollController::class, 'destroy'])->name('payroll.destroy')->middleware('permission:hr.payroll.delete');
 
     // Leaves

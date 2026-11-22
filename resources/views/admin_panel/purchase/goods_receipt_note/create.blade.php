@@ -1799,18 +1799,6 @@
                 existingIds: allIds,
                 onSelect: function(products) {
                     products.forEach(function(p, idx) {
-                        // Duplicate guard
-                        var $existing = null;
-                        $('#purchaseItems tr').each(function() {
-                            if (parseInt($(this).find('.item-id').val()) === parseInt(p.id)) {
-                                $existing = $(this); return false;
-                            }
-                        });
-                        if ($existing) {
-                            $existing.find('.quantity').val((parseInt($existing.find('.quantity').val()) || 0) + 1).trigger('input');
-                            return;
-                        }
-
                         // First product replaces the triggering row, subsequent products get new rows
                         var $row = (idx === 0) ? $triggerRow : addBlankRow();
                         populateProductRow($row, {
@@ -1882,79 +1870,6 @@
                 }
             });
 
-            $el.closest('tr').on('change', '.item-uom-select', async function() {
-                var $row = $(this).closest('tr');
-                var val = $(this).val();
-
-                if (val === 'new_uom') {
-                    const { value: formValues } = await Swal.fire({
-                        title: 'Create New Packing',
-                        html:
-                            '<div class="mb-3 text-start"><label class="form-label small fw-bold">Packing Name</label>' +
-                            '<input id="swal-uom-name" class="form-control" placeholder="e.g. Box of 24"></div>' +
-                            '<div class="mb-3 text-start"><label class="form-label small fw-bold">Pieces Per Box</label>' +
-                            '<input id="swal-uom-ppb" type="number" class="form-control" placeholder="Quantity"></div>',
-                        focusConfirm: false,
-                        showCancelButton: true,
-                        confirmButtonText: 'Add Packing',
-                        preConfirm: () => {
-                            const name = document.getElementById('swal-uom-name').value;
-                            const ppb = document.getElementById('swal-uom-ppb').value;
-                            if (!name || !ppb || ppb <= 0) {
-                                Swal.showValidationMessage('Please enter valid name and pieces');
-                                return false;
-                            }
-                            return { name: name, ppb: ppb };
-                        }
-                    });
-
-                    if (formValues) {
-                        const newName = formValues.name;
-                        const factorVal = parseFloat(formValues.ppb);
-
-                        // Create a temporary hidden option for this "new" UOM
-                        var $opt = $('<option>', {
-                            value: 'NEW',
-                            text: newName + ' (' + factorVal + ')',
-                            selected: true
-                        }).attr({
-                            'data-factor': factorVal,
-                            'data-is-new': 'true',
-                            'data-name': newName,
-                            'data-price': 0 // new uom, use existing or user will type
-                        });
-
-                        $(this).find('option[value="NEW"]').remove();
-                        $(this).append($opt);
-
-                        // Update fields
-                        $row.find('.item-uom').val(factorVal);
-                        $row.find('.uom-name-hidden').val(newName);
-                        $row.find('.is-new-uom').val('1');
-
-                        recalcRow($row);
-                    } else {
-                        $(this).val($(this).find('option:first').val()).trigger('change');
-                    }
-                } else {
-                    var $opt = $(this).find('option:selected');
-                    var factor = parseFloat($opt.data('factor')) || 1;
-                    var name = $opt.text().split('(')[0].trim();
-                    var price = $opt.data('price');
-
-                    $row.find('.item-uom').val(factor);
-                    $row.find('.uom-name-hidden').val(name);
-                    $row.find('.is-new-uom').val('0');
-
-                    // If UOM has a price defined, update the row price
-                    if (price !== undefined && price > 0) {
-                        $row.find('.price').val(price);
-                    }
-
-                    recalcRow($row);
-                }
-            });
-
             $el.on('select2:unselect', function(e) {
                 var $row = $(this).closest('tr');
                 $row.find('.item-code').val('');
@@ -1981,21 +1896,40 @@
             $btn.html(btnText + ' <span class="psm-btn-arrow">&#9660;</span>');
             $btn.addClass('has-value');
 
+            var baseFactor = parseFloat(data.uom) || 1;
+            var basePrice = parseFloat(data.price) || 0;
+
             // Populate Packing Dropdown
             var $uomSelect = $row.find('.item-uom-select');
-            $uomSelect.html('<option value="" data-price="'+data.price+'" data-factor="'+data.uom+'">-- Base --</option>');
+            $uomSelect.html('<option value="" data-price="'+basePrice+'" data-factor="'+baseFactor+'">-- Base --</option>');
             if (data.packings && data.packings.length > 0) {
                 data.packings.forEach(function(pkg) {
-                    var ppb = pkg.pieces_per_box > 0 ? pkg.pieces_per_box : 1;
-                    var piecePrice = pkg.purchase_price;
-                    $uomSelect.append('<option value="'+pkg.id+'" data-price="'+piecePrice+'" data-factor="'+ppb+'">'+pkg.name+'</option>');
+                    var ppb = parseFloat(pkg.pieces_per_box) > 0 ? parseFloat(pkg.pieces_per_box) : 1;
+                    var piecePrice = (parseFloat(pkg.purchase_price) > 0) ? parseFloat(pkg.purchase_price) : basePrice;
+                    $uomSelect.append('<option value="'+pkg.id+'" data-price="'+piecePrice+'" data-factor="'+ppb+'">'+pkg.name+' ('+ppb+')</option>');
                 });
             }
             $uomSelect.append('<option value="new_uom" style="background:#f0f0f0; font-weight:bold; color:#2563eb;">+ Add New Packing</option>');
 
-            // Set product default price and factor immediately
-            $row.find('.price').val(data.price);
-            $row.find('.item-uom').val(data.uom || 1);
+            // Auto-select matching packing or base
+            var defaultPkg = null;
+            if (data.packings && data.packings.length > 0) {
+                defaultPkg = data.packings.find(function(p) { return parseFloat(p.pieces_per_box) === baseFactor; }) || data.packings[0];
+            }
+
+            if (defaultPkg) {
+                $uomSelect.val(defaultPkg.id);
+                $row.find('.uom-name-hidden').val(defaultPkg.name);
+                var chosenFactor = parseFloat(defaultPkg.pieces_per_box) > 0 ? parseFloat(defaultPkg.pieces_per_box) : baseFactor;
+                var chosenPrice = (parseFloat(defaultPkg.purchase_price) > 0) ? parseFloat(defaultPkg.purchase_price) : basePrice;
+                $row.find('.item-uom').val(chosenFactor);
+                $row.find('.price').val(chosenPrice);
+            } else {
+                $uomSelect.val('');
+                $row.find('.uom-name-hidden').val('Piece');
+                $row.find('.item-uom').val(baseFactor);
+                $row.find('.price').val(basePrice);
+            }
 
             if (data.id && (!isImport || (!data.mfg_date && !data.exp_date && !data.batch_no))) {
                 // Fetch last confirmed purchase price
@@ -2079,22 +2013,80 @@
             }
         });
 
-        // Packing Change -> Update Price & Pkt Size
-        $('#purchaseItems').on('change', '.item-uom-select', function() {
+        // Packing Change -> Update Price, Pkt Size & UOM Name
+        $('#purchaseItems').on('change', '.item-uom-select', async function() {
             var $row = $(this).closest('tr');
-            var $opt = $(this).find(':selected');
-            var selectedPrice = $opt.data('price');
-            var selectedFactor = $opt.data('factor');
-            
-            if (selectedPrice !== undefined) {
-                $row.find('.price').val(selectedPrice);
+            var val = $(this).val();
+
+            if (val === 'new_uom') {
+                const { value: formValues } = await Swal.fire({
+                    title: 'Create New Packing',
+                    html:
+                        '<div class="mb-3 text-start"><label class="form-label small fw-bold">Packing Name</label>' +
+                        '<input id="swal-uom-name" class="form-control" placeholder="e.g. Box of 24"></div>' +
+                        '<div class="mb-3 text-start"><label class="form-label small fw-bold">Pieces Per Box</label>' +
+                        '<input id="swal-uom-ppb" type="number" class="form-control" placeholder="Quantity"></div>',
+                    focusConfirm: false,
+                    showCancelButton: true,
+                    confirmButtonText: 'Add Packing',
+                    preConfirm: () => {
+                        const name = document.getElementById('swal-uom-name').value;
+                        const ppb = document.getElementById('swal-uom-ppb').value;
+                        if (!name || !ppb || ppb <= 0) {
+                            Swal.showValidationMessage('Please enter valid name and pieces');
+                            return false;
+                        }
+                        return { name: name, ppb: ppb };
+                    }
+                });
+
+                if (formValues) {
+                    const newName = formValues.name;
+                    const factorVal = parseFloat(formValues.ppb);
+
+                    var $opt = $('<option>', {
+                        value: 'NEW',
+                        text: newName + ' (' + factorVal + ')',
+                        selected: true
+                    }).attr({
+                        'data-factor': factorVal,
+                        'data-is-new': 'true',
+                        'data-name': newName,
+                        'data-price': 0
+                    });
+
+                    $(this).find('option[value="NEW"]').remove();
+                    $(this).append($opt);
+
+                    $row.find('.item-uom').val(factorVal);
+                    $row.find('.uom-name-hidden').val(newName);
+                    $row.find('.is-new-uom').val('1');
+
+                    recalcRow($row);
+                    recalcSummary();
+                } else {
+                    $(this).val($(this).find('option:first').val()).trigger('change');
+                }
+            } else {
+                var $opt = $(this).find(':selected');
+                var selectedPrice = parseFloat($opt.data('price'));
+                var selectedFactor = parseFloat($opt.data('factor'));
+                var uomName = $opt.text().split('(')[0].trim();
+                
+                if (!isNaN(selectedPrice) && selectedPrice > 0) {
+                    $row.find('.price').val(selectedPrice);
+                }
+                if (!isNaN(selectedFactor) && selectedFactor > 0) {
+                    $row.find('.item-uom').val(selectedFactor);
+                }
+                if (uomName && uomName !== '-- Base --') {
+                    $row.find('.uom-name-hidden').val(uomName);
+                }
+                $row.find('.is-new-uom').val('0');
+
+                recalcRow($row);
+                recalcSummary();
             }
-            if (selectedFactor !== undefined) {
-                $row.find('.item-uom').val(selectedFactor);
-            }
-            
-            recalcRow($row);
-            recalcSummary();
         });
 
         $('#purchaseItems').on('click', '.remove-row', function() {

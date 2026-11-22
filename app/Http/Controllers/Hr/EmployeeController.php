@@ -11,20 +11,39 @@ use Illuminate\Support\Facades\Validator;
 
 class EmployeeController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
         if (! auth()->user()->can('hr.employees.view')) {
             abort(403, 'Unauthorized action.');
         }
-        $employees = Employee::with(['department', 'designation', 'shift', 'user.branch', 'leaves' => function ($q) {
+
+        // Determine active branch context (null means All Branches for super admin)
+        $branchId = auth()->user()?->getBranchId();
+
+        // Also check if super admin passed specific branch filter in request (e.g. ?branch_id=1 or ?branch_id=all)
+        if (auth()->user()->isSuperAdmin() && $request->filled('branch_id')) {
+            $branchId = $request->branch_id === 'all' || $request->branch_id === '' ? null : (int) $request->branch_id;
+        }
+
+        $query = Employee::with(['department', 'designation', 'shift', 'user.branch', 'branch', 'leaves' => function ($q) {
             $q->where('leave_type', 'Casual');
-        }])->latest()->paginate(12);
+        }])->branchScoped($branchId);
+
+        // Accurate stats for current branch context
+        $stats = [
+            'total' => (clone $query)->count(),
+            'active' => (clone $query)->where('status', 'active')->count(),
+            'non_active' => (clone $query)->where('status', 'non-active')->count(),
+            'terminated' => (clone $query)->where('status', 'terminated')->count(),
+        ];
+
+        $employees = $query->latest()->paginate(12)->withQueryString();
         $departments = Department::all();
         $designations = Designation::all();
         $shifts = \App\Models\Hr\Shift::all();
         $branches = \App\Models\Branch::where('is_active', true)->orderBy('name')->get();
 
-        return view('hr.employees.index', compact('employees', 'departments', 'designations', 'shifts', 'branches'));
+        return view('hr.employees.index', compact('employees', 'departments', 'designations', 'shifts', 'branches', 'branchId', 'stats'));
     }
 
     public function store(Request $request)
@@ -62,7 +81,7 @@ class EmployeeController extends Controller
             return response()->json(['errors' => $validator->errors()], 422);
         }
 
-        $data = $request->except(['document_degree', 'document_certificate', 'document_hsc_marksheet', 'document_ssc_marksheet', 'document_cv', 'password', 'branch_id']);
+        $data = $request->except(['document_degree', 'document_certificate', 'document_hsc_marksheet', 'document_ssc_marksheet', 'document_cv', 'password']);
         $data['is_docs_submitted'] = $request->has('is_docs_submitted') ? 1 : 0;
 
         // Handle Custom Shift Logic
@@ -74,13 +93,14 @@ class EmployeeController extends Controller
             $data['custom_end_time'] = null;
         }
 
-        // Determine branch_id for User Account
+        // Determine branch_id for Employee and User Account
         $branchId = null;
         if (auth()->user()->isSuperAdmin()) {
             $branchId = $request->filled('branch_id') ? $request->branch_id : session('super_admin_branch_id');
         } else {
             $branchId = auth()->user()->branch_id;
         }
+        $data['branch_id'] = $branchId ? (int) $branchId : null;
 
         if ($request->filled('edit_id')) {
             if (! auth()->user()->can('hr.employees.edit')) {
@@ -104,6 +124,15 @@ class EmployeeController extends Controller
                     }
                     $user->save();
                 }
+            } else {
+                // If user didn't exist, create user account
+                $user = \App\Models\User::create([
+                    'name' => $request->first_name.' '.$request->last_name,
+                    'email' => $request->email,
+                    'password' => \Illuminate\Support\Facades\Hash::make($request->password ?? 'password123'),
+                    'branch_id' => $data['branch_id'],
+                ]);
+                $data['user_id'] = $user->id;
             }
 
             $employee->update($data);
@@ -115,8 +144,8 @@ class EmployeeController extends Controller
             $user = \App\Models\User::create([
                 'name' => $request->first_name.' '.$request->last_name,
                 'email' => $request->email,
-                'password' => \Illuminate\Support\Facades\Hash::make($request->password),
-                'branch_id' => $branchId,
+                'password' => \Illuminate\Support\Facades\Hash::make($request->password ?? 'password123'),
+                'branch_id' => $data['branch_id'],
             ]);
 
             $data['user_id'] = $user->id;

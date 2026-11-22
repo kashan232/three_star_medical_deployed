@@ -19,11 +19,15 @@ class LoanController extends Controller
 
     public function index()
     {
+        $branchId = auth()->user()?->getBranchId();
+
         $loans = Loan::with('employee.department', 'employee.designation')
+            ->when($branchId, fn ($q) => $q->whereHas('employee', fn ($eq) => $eq->branchScoped($branchId)))
             ->latest()
             ->paginate(12);
 
         $employees = Employee::where('status', 'active')
+            ->when($branchId, fn ($q) => $q->branchScoped($branchId))
             ->with('department', 'designation')
             ->orderBy('first_name')
             ->get();

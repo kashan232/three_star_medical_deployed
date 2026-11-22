@@ -978,6 +978,12 @@
                                                     <div class="d-flex align-items-center gap-2 mt-2 pt-2 border-top">
                                                         <span class="payroll-type-badge {{ $payroll->payroll_type }}" style="font-size: 0.62rem; padding: 2px 6px;">{{ ucfirst($payroll->payroll_type) }}</span>
                                                         <span class="status-badge {{ $payroll->status }}" style="font-size: 0.62rem; padding: 2px 6px;">{{ ucfirst($payroll->status) }}</span>
+                                                        @if ($payroll->status === 'paid' && $payroll->payment_method)
+                                                            <span class="badge bg-light text-secondary border fw-bold" style="font-size: 0.6rem; padding: 2px 6px;">
+                                                                <i class="fa {{ $payroll->payment_method === 'bank' ? 'fa-university text-primary' : 'fa-money-bill-wave text-success' }} me-1"></i>
+                                                                {{ strtoupper($payroll->payment_method) }}
+                                                            </span>
+                                                        @endif
                                                     </div>
                                                 </div>
 
@@ -1013,10 +1019,35 @@
                                                         </button>
                                                     @endif
 
-                                                    @if ($payroll->status !== 'paid' && auth()->user()->can('hr.payroll.delete'))
-                                                        <button class="btn btn-sm btn-outline-danger delete-btn px-2" title="Delete Payroll" data-id="{{ $payroll->id }}" style="font-size: 0.75rem; padding: 4px 8px;">
-                                                            <i class="fa fa-trash"></i>
-                                                        </button>
+                                                    @if ($payroll->status === 'paid')
+                                                        @if (auth()->user()->can('hr.payroll.edit'))
+                                                            <button class="btn btn-sm btn-outline-warning revert-paid-btn px-2 fw-semibold" title="Revert to Unpaid (Cancel Voucher)"
+                                                                data-id="{{ $payroll->id }}"
+                                                                data-name="{{ $payroll->employee->full_name }}"
+                                                                data-month="{{ (strlen($payroll->month) === 7 && str_contains($payroll->month, '-')) ? \Carbon\Carbon::parse($payroll->month.'-01')->format('M Y') : $payroll->month }}"
+                                                                style="font-size: 0.75rem; padding: 4px 8px;">
+                                                                <i class="fa fa-undo me-1"></i>Revert
+                                                            </button>
+                                                        @endif
+                                                        @if (auth()->user()->can('hr.payroll.delete'))
+                                                            <button class="btn btn-sm btn-outline-danger delete-btn px-2" title="Delete Paid Payroll"
+                                                                data-id="{{ $payroll->id }}"
+                                                                data-paid="true"
+                                                                data-name="{{ $payroll->employee->full_name }}"
+                                                                style="font-size: 0.75rem; padding: 4px 8px;">
+                                                                <i class="fa fa-trash"></i>
+                                                            </button>
+                                                        @endif
+                                                    @else
+                                                        @if (auth()->user()->can('hr.payroll.delete'))
+                                                            <button class="btn btn-sm btn-outline-danger delete-btn px-2" title="Delete Payroll"
+                                                                data-id="{{ $payroll->id }}"
+                                                                data-paid="false"
+                                                                data-name="{{ $payroll->employee->full_name }}"
+                                                                style="font-size: 0.75rem; padding: 4px 8px;">
+                                                                <i class="fa fa-trash"></i>
+                                                            </button>
+                                                        @endif
                                                     @endif
                                                 </div>
                                             </div>
@@ -1427,6 +1458,97 @@
                                             </div>
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Payment Mode & Source Account Section -->
+                        <div class="p-4 bg-white border-top">
+                            <div class="d-flex align-items-center gap-2 mb-3">
+                                <div class="rounded-pill p-2 text-white" style="background: linear-gradient(135deg, #10b981, #059669); width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 0.9rem;">
+                                    <i class="fa fa-cash-register"></i>
+                                </div>
+                                <div>
+                                    <h6 class="mb-0 fw-800 text-slate-800" style="font-size: 0.95rem;">Payment Mode & Source Account</h6>
+                                    <span class="text-slate-500 small">Select whether to disburse salary via <b>Cash in Hand</b> or <b>Bank Account</b></span>
+                                </div>
+                            </div>
+
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label erp-label fw-700 text-slate-700 mb-2">Select Payment Method <span class="text-danger">*</span></label>
+                                    <div class="d-flex gap-2">
+                                        <div class="flex-fill">
+                                            <input type="radio" class="btn-check" name="payment_method" id="pay_method_cash" value="cash" checked autocomplete="off">
+                                            <label class="btn btn-outline-success w-100 py-2.5 d-flex align-items-center justify-content-center gap-2 fw-bold shadow-xs" for="pay_method_cash" style="border-radius: 12px; font-size: 0.85rem;">
+                                                <i class="fa fa-money-bill-wave"></i> Cash in Hand
+                                            </label>
+                                        </div>
+                                        <div class="flex-fill">
+                                            <input type="radio" class="btn-check" name="payment_method" id="pay_method_bank" value="bank" autocomplete="off">
+                                            <label class="btn btn-outline-primary w-100 py-2.5 d-flex align-items-center justify-content-center gap-2 fw-bold shadow-xs" for="pay_method_bank" style="border-radius: 12px; font-size: 0.85rem;">
+                                                <i class="fa fa-university"></i> Bank Account
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-6">
+                                    <!-- Cash Account Selector -->
+                                    <div id="erp_cash_account_wrapper">
+                                        <label class="form-label erp-label fw-700 text-slate-700 mb-2">
+                                            <i class="fa fa-wallet text-success me-1"></i> Cash Account <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="cash_account_id" id="erp_cash_account_select" class="form-select shadow-xs" style="border-radius: 10px; font-size: 0.85rem; font-weight: 600;">
+                                            @forelse($cashAccounts ?? [] as $cashAcc)
+                                                <option value="{{ $cashAcc->id }}" data-balance="{{ $cashAcc->calculated_balance ?? $cashAcc->current_balance }}">
+                                                    {{ $cashAcc->title }} — (Available: Rs. {{ number_format($cashAcc->calculated_balance ?? $cashAcc->current_balance, 2) }})
+                                                </option>
+                                            @empty
+                                                <option value="">No Cash Account Found</option>
+                                            @endforelse
+                                        </select>
+                                    </div>
+
+                                    <!-- Bank Account Selector -->
+                                    <div id="erp_bank_account_wrapper" class="d-none">
+                                        <label class="form-label erp-label fw-700 text-slate-700 mb-2">
+                                            <i class="fa fa-building-columns text-primary me-1"></i> Bank Account <span class="text-danger">*</span>
+                                        </label>
+                                        <select name="bank_account_id" id="erp_bank_account_select" class="form-select shadow-xs" style="border-radius: 10px; font-size: 0.85rem; font-weight: 600;">
+                                            @forelse($bankAccounts ?? [] as $bankAcc)
+                                                <option value="{{ $bankAcc->id }}" data-balance="{{ $bankAcc->calculated_balance ?? $bankAcc->current_balance }}">
+                                                    {{ $bankAcc->title }} — (Available: Rs. {{ number_format($bankAcc->calculated_balance ?? $bankAcc->current_balance, 2) }})
+                                                </option>
+                                            @empty
+                                                <option value="">No Bank Account Found</option>
+                                            @endforelse
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Bank Cheque / Ref Details (Row toggles with Bank) -->
+                            <div id="erp_bank_details_row" class="row g-3 mt-1 d-none">
+                                <div class="col-md-6">
+                                    <label class="form-label erp-label fw-700 text-slate-600 mb-1">Cheque # / Online Ref</label>
+                                    <input type="text" name="cheque_no" id="erp_cheque_no" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;" placeholder="e.g. CHQ-829102 / IBFT-91823">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label erp-label fw-700 text-slate-600 mb-1">Cheque / Transfer Date</label>
+                                    <input type="date" name="cheque_date" id="erp_cheque_date" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;" value="{{ date('Y-m-d') }}">
+                                </div>
+                            </div>
+
+                            <!-- Payment Date & Remarks -->
+                            <div class="row g-3 mt-1 pt-2 border-top">
+                                <div class="col-md-4">
+                                    <label class="form-label erp-label fw-700 text-slate-600 mb-1">Payment / Disbursement Date</label>
+                                    <input type="date" name="payment_date" id="erp_payment_date" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;" value="{{ date('Y-m-d') }}">
+                                </div>
+                                <div class="col-md-8">
+                                    <label class="form-label erp-label fw-700 text-slate-600 mb-1">Payment Notes / Remarks</label>
+                                    <input type="text" name="notes" id="erp_payment_notes" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;" placeholder="e.g. Salary paid for November">
                                 </div>
                             </div>
                         </div>
@@ -2156,6 +2278,12 @@
                 $('#erp_manual_deduction_input').val('');
                 $('#erp_earning_type_container').addClass('d-none').hide();
                 $('#erp_commission_metrics_box').addClass('d-none').hide();
+                $('#pay_method_cash').prop('checked', true);
+                $('#erp_cash_account_wrapper').removeClass('d-none').show();
+                $('#erp_bank_account_wrapper').addClass('d-none').hide();
+                $('#erp_bank_details_row').addClass('d-none').hide();
+                $('#erp_cheque_no').val('');
+                $('#erp_payment_notes').val('');
 
                 // Load detailed stats via AJAX
                 $.get('{{ url("/hr/payroll") }}/' + id + '/details', function(data) {
@@ -2388,22 +2516,47 @@
                 $('#erp_net_payable').text(`Rs. ${netPayable.toLocaleString(undefined, {minimumFractionDigits: 2})}`);
             }
 
-            // Form Submission with Confirmation
+            // Toggle Cash vs Bank Account selection in payment modal
+            $(document).on('change', 'input[name="payment_method"]', function() {
+                if ($(this).val() === 'cash') {
+                    $('#erp_cash_account_wrapper').removeClass('d-none').show();
+                    $('#erp_bank_account_wrapper').addClass('d-none').hide();
+                    $('#erp_bank_details_row').addClass('d-none').hide();
+                } else {
+                    $('#erp_cash_account_wrapper').addClass('d-none').hide();
+                    $('#erp_bank_account_wrapper').removeClass('d-none').show();
+                    $('#erp_bank_details_row').removeClass('d-none').show();
+                }
+            });
+
+            // Form Submission with Confirmation (Cash in Hand vs Bank Account prompt)
             $('#payrollPayForm').on('submit', function(e) {
                 e.preventDefault();
                 const form = $(this);
                 const net = $('#erp_net_payable').text();
+                const method = $('input[name="payment_method"]:checked').val() || 'cash';
+                const accountTitle = (method === 'cash')
+                    ? $('#erp_cash_account_select option:selected').text().split('—')[0].trim()
+                    : $('#erp_bank_account_select option:selected').text().split('—')[0].trim();
 
                 Swal.fire({
-                    title: '<span class="text-emerald-600">Final Confirmation</span>',
-                    html: `You are about to record a payment of <b>${net}</b>.<br>This will finalize the payroll for this month.`,
-                    icon: 'warning',
+                    title: '<span class="text-emerald-600 fw-bold">Confirm Salary Payment</span>',
+                    html: `You are about to record a salary payment of <b>${net}</b> via <b>${method === 'cash' ? 'Cash in Hand' : 'Bank Account'} (${accountTitle})</b> for <b>${$('#erp_emp_name').text()}</b>.<br><br>` +
+                          `<small class="text-muted">This will generate a ${method === 'cash' ? 'Cash Payment Voucher (CPV)' : 'Bank Payment Voucher (BPV)'} and finalize payroll records.</small>`,
+                    icon: 'question',
                     showCancelButton: true,
                     confirmButtonColor: '#10b981',
                     cancelButtonColor: '#6c757d',
-                    confirmButtonText: '<i class="fa fa-check-circle me-1"></i> Proceed with Payment'
+                    confirmButtonText: '<i class="fa fa-check-circle me-1"></i> Confirm & Disburse'
                 }).then((result) => {
                     if (result.isConfirmed) {
+                        Swal.fire({
+                            title: 'Processing Payment...',
+                            text: 'Creating voucher and updating financial records...',
+                            allowOutsideClick: false,
+                            didOpen: () => Swal.showLoading()
+                        });
+
                         $.ajax({
                             url: form.attr('action'),
                             type: 'POST',
@@ -2416,6 +2569,59 @@
                             error: function(xhr) {
                                 let error = 'Failed to process payment.';
                                 if (xhr.responseJSON && xhr.responseJSON.error) error = xhr.responseJSON.error;
+                                else if (xhr.responseJSON && xhr.responseJSON.errors) {
+                                    error = Object.values(xhr.responseJSON.errors).flat().join('<br>');
+                                }
+                                Swal.fire('Error', error, 'error');
+                            }
+                        });
+                    }
+                });
+            });
+
+            // Revert paid payroll to unpaid
+            $(document).on('click', '.revert-paid-btn', function() {
+                var id = $(this).data('id');
+                var name = $(this).data('name') || 'this employee';
+                var month = $(this).data('month') || '';
+
+                Swal.fire({
+                    title: '<span style="color:#f59e0b"><i class="fa fa-undo me-1"></i> Revert to Unpaid?</span>',
+                    html: `You are about to revert the <b>${month}</b> paid salary for <b>${name}</b>.<br><br>` +
+                          `<div class="alert alert-warning text-start small mb-0">` +
+                          `<i class="fa fa-exclamation-triangle me-1"></i> <b>This action will:</b><br>` +
+                          `• Safely cancel and reverse the payment voucher (CPV/BPV)<br>` +
+                          `• Reverse any loan deductions and restore remaining balance<br>` +
+                          `• Restore salary status to <b>Unpaid / Generated</b> so it can be re-calculated or re-paid.` +
+                          `</div>`,
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonColor: '#f59e0b',
+                    cancelButtonColor: '#6c757d',
+                    confirmButtonText: '<i class="fa fa-undo me-1"></i> Yes, Revert to Unpaid'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        Swal.fire({
+                            title: 'Reverting Payment...',
+                            allowOutsideClick: false,
+                            didOpen: () => Swal.showLoading()
+                        });
+
+                        $.ajax({
+                            url: '{{ url("/hr/payroll") }}/' + id + '/revert-payment',
+                            type: 'POST',
+                            data: {
+                                _method: 'PATCH',
+                                _token: '{{ csrf_token() }}'
+                            },
+                            success: function(response) {
+                                if (response.success) {
+                                    Swal.fire('Reverted!', response.success, 'success').then(() => location.reload());
+                                }
+                            },
+                            error: function(xhr) {
+                                let error = 'Failed to revert payment.';
+                                if (xhr.responseJSON && xhr.responseJSON.error) error = xhr.responseJSON.error;
                                 Swal.fire('Error', error, 'error');
                             }
                         });
@@ -2426,9 +2632,19 @@
             // Delete payroll
             $(document).on('click', '.delete-btn', function() {
                 var id = $(this).data('id');
+                var isPaid = $(this).data('paid') === true || $(this).data('paid') === 'true';
+                var name = $(this).data('name') || '';
+
+                let warningHtml = 'You are about to permanently delete this payroll record.<br><b>This action cannot be undone!</b>';
+                if (isPaid) {
+                    warningHtml = `<b>Warning:</b> This payroll for <b>${name}</b> is marked as <b>PAID</b>.<br><br>` +
+                                  `Deleting it will permanently remove the record, cancel its linked payment voucher, and reverse any deductions.<br><br>` +
+                                  `<b>Are you sure you want to proceed?</b>`;
+                }
+
                 Swal.fire({
                     title: '<span style="color:#ef4444">Remove Record?</span>',
-                    html: 'You are about to permanently delete this payroll record.<br><b>This action cannot be undone!</b>',
+                    html: warningHtml,
                     icon: 'warning',
                     showCancelButton: true,
                     confirmButtonColor: '#ef4444',

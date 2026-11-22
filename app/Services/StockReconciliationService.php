@@ -284,7 +284,7 @@ class StockReconciliationService
                 $expectedPieces = (float) $sg->total_sale_pieces;
                 if ($expectedPieces <= 0) continue;
 
-                $existingOut = (float) DB::table('stock_movements')
+                $outQty = (float) DB::table('stock_movements')
                     ->where('product_id', $pId)
                     ->where('ref_id', $sg->sale_id)
                     ->whereIn('ref_type', ['sale', 'SALE', 'SIN', 'sin', 'out'])
@@ -292,6 +292,17 @@ class StockReconciliationService
                         $q->where('type', 'out')->orWhere('qty', '<', 0);
                     })
                     ->sum(DB::raw('ABS(qty)'));
+
+                $inQty = (float) DB::table('stock_movements')
+                    ->where('product_id', $pId)
+                    ->where('ref_id', $sg->sale_id)
+                    ->whereIn('ref_type', ['sale_in', 'sale_cancel', 'SALE_IN', 'SALE_CANCEL'])
+                    ->where(function ($q) {
+                        $q->where('type', 'in')->orWhere('qty', '>', 0);
+                    })
+                    ->sum(DB::raw('ABS(qty)'));
+
+                $existingOut = max(0, $outQty - $inQty);
 
                 if ($existingOut < ($expectedPieces - 0.001)) {
                     $missingPieces = $expectedPieces - $existingOut;
