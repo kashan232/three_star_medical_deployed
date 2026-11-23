@@ -1335,7 +1335,7 @@
                     <input type="hidden" name="is_new_uom[]" class="is-new-uom" value="0">
                 </td>
                 <td>
-                    <input type="number" name="item_uom_factor[]" class="form-control text-center item-uom row-input" value="1" readonly>
+                    <input type="number" step="any" min="1" name="item_uom_factor[]" class="form-control text-center item-uom row-input" value="1">
                 </td>
                 <td>
                     <div class="d-flex gap-1">
@@ -1523,7 +1523,7 @@
                     data.packings.forEach(function(pkg) {
                         var ppb = pkg.pieces_per_box > 0 ? pkg.pieces_per_box : 1;
                         var piecePrice = pkg.purchase_price;
-                        $uomSelect.append('<option value="'+pkg.id+'" data-price="'+piecePrice+'" data-factor="'+ppb+'">'+pkg.name+'</option>');
+                        $uomSelect.append('<option value="'+pkg.id+'" data-price="'+piecePrice+'" data-factor="'+ppb+'">'+pkg.name+' ('+ppb+')</option>');
                     });
                 }
                 $uomSelect.append('<option value="new_uom" style="background:#f0f0f0; font-weight:bold; color:#2563eb;">+ Add New Packing</option>');
@@ -1666,7 +1666,7 @@
         });
 
         // Calculations & Removals
-        $('#purchaseItems').on('input', '.quantity, .loose_qty, .free_qty, .free_qty_pieces, .price, .item_discount, .st-tax', function() {
+        $('#purchaseItems').on('input', '.item-uom, .quantity, .loose_qty, .free_qty, .free_qty_pieces, .price, .item_discount, .st-tax', function() {
             recalcRow($(this).closest('tr'));
             recalcSummary();
         });
@@ -1870,7 +1870,7 @@
                         if (p.packings && p.packings.length > 0) {
                             p.packings.forEach(function(pkg) {
                                 let ppb = pkg.pieces_per_box > 0 ? pkg.pieces_per_box : 1;
-                                $uomSelect.append('<option value="'+pkg.id+'" data-price="'+pkg.purchase_price+'" data-factor="'+ppb+'">'+pkg.name+'</option>');
+                                $uomSelect.append('<option value="'+pkg.id+'" data-price="'+pkg.purchase_price+'" data-factor="'+ppb+'">'+pkg.name+' ('+ppb+')</option>');
                             });
                         }
                         $uomSelect.append('<option value="new_uom" style="background:#f0f0f0;font-weight:bold;color:#2563eb;">+ Add New Packing</option>');

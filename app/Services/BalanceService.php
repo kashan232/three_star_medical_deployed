@@ -674,6 +674,33 @@ class BalanceService
             ->orderBy('id')
             ->first();
 
+        if (!$account) {
+            $head = \App\Models\AccountHead::where(function($q) {
+                $q->where('name', 'like', '%Expense%')
+                  ->orWhere('type', 'Expense');
+            })->first();
+
+            if (!$head) {
+                $head = \App\Models\AccountHead::create([
+                    'name' => 'Purchases / Cost of Goods',
+                    'branch_id' => $branchId,
+                    'type' => 'Expense'
+                ]);
+            }
+
+            $account = Account::create([
+                'branch_id'       => $branchId,
+                'head_id'         => $head->id,
+                'title'           => 'Purchase / Cost of Goods Sold',
+                'account_code'    => '5-01-001-00001',
+                'type'            => 'Debit',
+                'opening_balance' => 0,
+                'current_balance' => 0,
+                'status'          => 1,
+                'is_active'       => 1,
+            ]);
+        }
+
         return $account?->id;
     }
 

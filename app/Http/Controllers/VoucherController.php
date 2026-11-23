@@ -2011,12 +2011,7 @@ class VoucherController extends Controller
             ];
         } elseif ($type === 'bpv') {
             $amount = (float)$request->amount;
-            $bankAccount = Account::find($request->bank_account_id);
-            if ($bankAccount && (float)$bankAccount->calculated_balance < $amount) {
-                $avail = number_format((float)$bankAccount->calculated_balance, 2);
-                $reqAmt = number_format($amount, 2);
-                return back()->withInput()->with('error', "Insufficient Bank Balance! '{$bankAccount->title}' has available balance of Rs. {$avail}, but requested payment is Rs. {$reqAmt}. Payment cannot exceed available balance.");
-            }
+            // Bank Payment Voucher (BPV) / Cheques: Post-dated & advance cheques allowed regardless of current balance
 
             $targetStr = $request->target_id;
             

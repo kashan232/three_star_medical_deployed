@@ -57,8 +57,7 @@ class JournalEntryService
             ->get();
 
         foreach ($entries as $entry) {
-            // Revert balance on Account: Dr subtracted, Cr added
-            $this->revertAccountBalance($entry->account_id, $entry->debit, $entry->credit);
+            // Note: JournalEntry model's deleting hook automatically reverts the account balance safely.
             $entry->delete();
         }
     }

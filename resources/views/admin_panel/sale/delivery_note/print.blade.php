@@ -3,6 +3,8 @@ $logoPath = public_path('assets/images/three_star_logo.jpg');
 $logoSrc = file_exists($logoPath)
     ? 'data:image/jpeg;base64,' . base64_encode(file_get_contents($logoPath))
     : asset('assets/images/three_star_logo.jpg');
+
+$branchCity = trim(preg_replace('/^THREE\s+STARS\s*/i', '', $dc->branch->name ?? 'LAHORE'));
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -25,9 +27,10 @@ body{font-family:Arial,sans-serif;font-size:11px;background:#888;color:#000;}
 
 .a4{
   width:794px;min-height:1123px;margin:20px auto;
-  background:#fff;padding:18px 24px 24px 24px;
+  background:#fff;padding:18px 24px 20px 24px;
   box-shadow:0 2px 14px rgba(0,0,0,0.35);
   display:flex;flex-direction:column;
+  box-sizing:border-box;
 }
 
 /* HEADER */
@@ -71,16 +74,16 @@ table.t thead th.r{text-align:right;}
 table.t tbody td{border:0.5px solid #ccd9e8;padding:2.5px 5px;font-size:10.5px;}
 table.t tbody td.r{text-align:right;}
 
-/* REMARKS / NET QTY */
-.remarks-net{display:flex;justify-content:space-between;border:0.5px solid #ccd9e8;border-top:none;padding:3px 6px;font-size:10.5px;}
+/* REMARKS */
+.remarks-net{display:flex;justify-content:flex-start;border:0.5px solid #ccd9e8;border-top:none;padding:4px 6px;font-size:10.5px;}
 
 /* ISSUED / CHECKED */
-.sig-row{display:flex;gap:60px;margin-top:18px;font-size:10.5px;}
+.sig-row{display:flex;gap:60px;margin-top:24px;margin-bottom:20px;font-size:10.5px;}
 .sig-field{display:flex;flex-direction:column;gap:3px;}
 .sig-line{border-bottom:1px solid #000;width:200px;margin-top:2px;}
 
 /* TERMS */
-.terms-section{margin-top:auto;padding-top:18px;font-size:9.5px;line-height:1.6;}
+.terms-section{margin-top:auto;padding-top:20px;font-size:9.5px;line-height:1.6;}
 .terms-title{font-weight:bold;font-size:10px;margin-bottom:4px;}
 .terms-list{padding-left:0;list-style:none;}
 .terms-list li{margin-bottom:3px;}
@@ -88,13 +91,23 @@ table.t tbody td.r{text-align:right;}
 .warranty-title{font-weight:bold;font-size:10px;margin-top:8px;margin-bottom:4px;}
 .warranty-text{font-size:9.5px;line-height:1.6;text-align:justify;}
 
-.page-footer{display:flex;justify-content:space-between;font-size:9px;color:#444;border-top:0.5px solid #aaa;margin-top:16px;padding-top:4px;}
+.page-footer{display:flex;justify-content:space-between;font-size:9px;color:#444;border-top:0.5px solid #aaa;margin-top:14px;padding-top:4px;}
 
 @media print{
-  body{background:#fff;}
+  html, body{background:#fff;margin:0;padding:0;height:100%;}
   .action-bar{display:none!important;}
-  .a4{box-shadow:none;margin:0;width:100%;padding:10mm 14mm;min-height:auto;}
-  @page{size:A4;margin:0;}
+  .a4{
+    box-shadow:none;
+    margin:0;
+    width:100%;
+    min-height:285mm;
+    padding:10mm 14mm 8mm 14mm;
+    display:flex;
+    flex-direction:column;
+    box-sizing:border-box;
+  }
+  .terms-section{margin-top:auto;}
+  @page{size:A4 portrait;margin:0;}
 }
 </style>
 </head>
@@ -119,8 +132,9 @@ table.t tbody td.r{text-align:right;}
       <img src="{{ $logoSrc }}" alt="Three Stars Medical Supplies">
     </div>
     <div class="co-info">
-      <strong>{{ $dc->branch->name ?? 'Head Office' }} :</strong> {{ $dc->branch->address ?? 'M17-18 Mezanine Floor Seth Centre 10 Syed Mouj Darya Road (Edward Road) Lahore..' }}<br>
-      <strong>Phone :</strong> {{ $dc->branch->number ?? '0092-42-37353433' }}
+      <strong>THREE STARS MEDICAL SUPPLIES :</strong> {{ $dc->branch->address ?? 'M17-18 Mezanine Floor Seth Centre 10 Syed Mouj Darya Road (Edward Road) Lahore..' }}<br>
+      <strong>Phone :</strong> {{ $dc->branch->number ?? '042-37353433' }}<br>
+      <strong>WhatsApp # :</strong> {{ $dc->branch->whatsapp ?? '0300-4811' }}
     </div>
   </div>
 
@@ -143,17 +157,19 @@ table.t tbody td.r{text-align:right;}
 
   <!-- DC / ORD -->
   <div style="font-size:10.5px;line-height:1.9;margin-bottom:4px;">
-    <div style="display:flex;gap:40px;">
-      <span><strong>DC #</strong> &nbsp;{{ $dc->dc_no }} &nbsp;&nbsp;&nbsp; <strong>Dated :</strong> &nbsp;{{ \Carbon\Carbon::parse($dc->delivery_date)->format('d/m/Y') }}</span>
+    <div style="display:flex;">
+      <span style="min-width:260px;"><strong>DC #</strong> &nbsp;{{ $dc->dc_no }}</span>
+      <span><strong>Dated :</strong> &nbsp;{{ \Carbon\Carbon::parse($dc->delivery_date)->format('d/m/Y') }}</span>
     </div>
-    <div>
-      <span><strong>ORD #</strong> &nbsp;&nbsp;{{ $dc->sale->invoice_no ?? 'N/A' }}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <strong>Dated :</strong> &nbsp;{{ $dc->sale ? \Carbon\Carbon::parse($dc->sale->created_at)->format('d/m/Y') : 'N/A' }}</span>
+    <div style="display:flex;">
+      <span style="min-width:260px;"><strong>ORD #</strong> &nbsp;{{ $dc->sale->invoice_no ?? 'N/A' }}</span>
+      <span><strong>Dated :</strong> &nbsp;{{ $dc->sale ? \Carbon\Carbon::parse($dc->sale->created_at)->format('d/m/Y') : 'N/A' }}</span>
     </div>
   </div>
 
   <!-- LOCATION / PAGE -->
   <div class="loc-page">
-    <span>Location : &nbsp;<span class="loc-val">{{ $dc->branch->name ?? 'HEAD OFFICE' }}</span></span>
+    <span>Location : &nbsp;<span class="loc-val">{{ $branchCity }}</span></span>
     <span>Page 1 of 1</span>
   </div>
 
@@ -192,10 +208,9 @@ table.t tbody td.r{text-align:right;}
     </tbody>
   </table>
 
-  <!-- REMARKS / NET QTY -->
+  <!-- REMARKS -->
   <div class="remarks-net">
     <span><strong>Remarks :</strong> {{ $dc->remarks ?? '' }}</span>
-    <span><strong>Net Quantity :</strong> &nbsp;&nbsp; {{ number_format($dc->items->sum('total_pieces'), 2) }}</span>
   </div>
 
   <!-- SIGNATURE ROW -->
@@ -227,7 +242,6 @@ table.t tbody td.r{text-align:right;}
   <!-- PAGE FOOTER -->
   <div class="page-footer">
     <span>ProWaves ver.8.0.1.4592 Copyrights &copy; {{ date('Y') }} Cybernetic Technologies. All rights reserved. &nbsp;&nbsp; rptDeliveryChallan</span>
-    <span><strong>Print Date :</strong> &nbsp;{{ date('d/m/Y') }}</span>
   </div>
 
 </div>

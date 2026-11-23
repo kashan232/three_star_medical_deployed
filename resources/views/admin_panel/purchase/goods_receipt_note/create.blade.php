@@ -1712,7 +1712,7 @@
                     <input type="hidden" name="is_new_uom[]" class="is-new-uom" value="0">
                 </td>
                 <td>
-                    <input type="number" name="item_uom_factor[]" class="form-control text-center item-uom row-input" value="1" readonly>
+                    <input type="number" step="any" min="1" name="item_uom_factor[]" class="form-control text-center item-uom row-input" value="1">
                 </td>
                 <td>
                     <div class="d-flex gap-1">
@@ -1732,17 +1732,17 @@
                     </div>
                 </td>
                 <td><input type="text" name="sub_total[]" class="form-control row-sub-total text-end" readonly></td>
-                <td>
+                <td class="tax-col">
                     <div class="input-group input-group-sm">
                         <input type="number" step="any" name="gst_percent[]" class="form-control gst text-end row-input" value="0">
                         <span class="input-group-text p-1">%</span>
                     </div>
                 </td>
-                <td><input type="text" class="form-control gst-amount-display text-end" value="0.00" readonly tabindex="-1" style="background:#f8fafc;">
+                <td class="tax-col"><input type="text" class="form-control gst-amount-display text-end" value="0.00" readonly tabindex="-1" style="background:#f8fafc;">
                     <input type="hidden" name="gst_amount[]" class="gst-amount-row" value="0">
                 </td>
-                <td><input type="number" step="any" name="it_percent[]" class="form-control inc-tax text-end row-input" value="0"></td>
-                <td>
+                <td class="tax-col"><input type="number" step="any" name="it_percent[]" class="form-control inc-tax text-end row-input" value="0"></td>
+                <td class="tax-col">
                     <div class="input-group input-group-sm shadow-sm" style="width: 100%; min-width: 110px;">
                         <input type="number" step="any" class="form-control adv-tax-val text-end row-input" value="0">
                         <button type="button" class="btn btn-sm btn-primary text-dark adv-tax-type-toggle p-1" data-type="percent" style="width: 32px; font-size: 0.7rem; font-weight: 700;">%</button>
@@ -1750,7 +1750,7 @@
                         <input type="hidden" name="adv_tax_percent[]" class="adv-tax" value="0">
                     </div>
                 </td>
-                <td><input type="text" name="total[]" class="form-control row-net-total input-highlight text-end" readonly></td>
+                <td class="tax-col"><input type="text" name="total[]" class="form-control row-net-total input-highlight text-end" readonly></td>
                 <td><input type="date" name="mfg_date[]" class="form-control text-secondary row-input"></td>
                 <td><input type="date" name="expiry[]" class="form-control text-secondary row-input"></td>
                 <td><input type="text" name="lot_no[]" class="form-control text-center row-input"></td>
@@ -1774,6 +1774,11 @@
 
             recalcRow($inserted);
             toggleGstFields();
+            if ($('#enable_hs_code').is(':checked')) {
+                $('.hs-code-col').show();
+            } else {
+                $('.hs-code-col').hide();
+            }
             recalcSummary();
             checkEmptyState();
             return $inserted;
@@ -1985,7 +1990,7 @@
         });
 
         // Calculations & Removals
-        $('#purchaseItems').on('input', '.quantity, .loose_qty, .free_qty, .free_qty_pieces, .price, .item_discount, .gst, .inc-tax, .adv-tax-val',
+        $('#purchaseItems').on('input', '.item-uom, .quantity, .loose_qty, .free_qty, .free_qty_pieces, .price, .item_discount, .gst, .inc-tax, .adv-tax-val',
             function() {
                 let $row = $(this).closest('tr');
                 recalcRow($row, false);

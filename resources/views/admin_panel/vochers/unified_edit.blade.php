@@ -907,7 +907,7 @@ function calculateEditTotals() {
 
         // Restriction Check: If Cash, Bank or general Asset account is Credited (withdrawn/deducted)
         let rowError = row.find('.jv-row-overdraft-error');
-        if ((itemType === 'cash' || itemType === 'bank' || itemType === 'account') && creditVal > availBal) {
+        if ((itemType === 'cash') && creditVal > availBal) {
             hasOverdraft = true;
             creditInput.addClass('is-invalid');
             const accTitle = selectedOpt.text().split('(')[0].trim() || 'Account';

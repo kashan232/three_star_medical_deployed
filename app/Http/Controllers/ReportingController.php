@@ -1976,7 +1976,7 @@ class ReportingController extends Controller
                 $totalCredit += $cr;
 
                 $ref = '-';
-                if (preg_match('/#(inv|pv|sr|jv|rv|re)-?\d+/i', $desc, $m)) $ref = $m[0];
+                if (preg_match('/\b(BPV|CPV|BRV|CRV|JV|SIN|SRN|GRN|INV|PV|RV|SO|PO|PRTN|PR)-?\d+/i', $desc, $m)) { $ref = $m[0]; } elseif (preg_match('/#(inv|pv|sr|jv|rv|re)-?\d+/i', $desc, $m)) { $ref = $m[0]; }
 
                 $transactions[] = [
                     'date'        => \Carbon\Carbon::parse($row->created_at)->format('d/m/Y'),
@@ -2188,16 +2188,24 @@ class ReportingController extends Controller
             $totalCredit += $cr;
 
             $ref = '-';
-            if (preg_match('/#\s*(sin|srn|grn|inv|pv|sr|so|po|jv|rv|re|pr|prtn|rvid)[- ]?([A-Z0-9\-_]+)/i', $desc, $m)) {
+            if (preg_match('/\b(BPV|CPV|BRV|CRV|JV|SIN|SRN|GRN|INV|PV|RV|SO|PO|PRTN|PR|RVID|PVID)[- ]?([A-Z0-9\-_]+)\b/i', $desc, $m)) {
                 $ref = $m[0];
+            } elseif (preg_match('/#\s*([A-Za-z0-9\-_]+)/', $desc, $m)) {
+                $ref = $m[1];
             }
 
             $type = 'journal';
-            if (str_contains($ldesc, 'sale') || str_contains($ldesc, 'srn'))     $type = 'sale';
-            if (str_contains($ldesc, 'purchase') || str_contains($ldesc, 'grn')) $type = 'purchase';
-            if (str_contains($ldesc, 'payment') || str_contains($ldesc, 'receipt') || str_contains($ldesc, 'rvid') || str_contains($ldesc, 'pvid')) $type = 'receipt';
-            if (str_contains($ldesc, 'return') || str_contains($ldesc, 'prtn'))  $type = 'return';
-
+            if (str_contains($ldesc, 'sale') || str_contains($ldesc, 'srn') || str_contains($ldesc, 'sin-')) {
+                $type = 'sale';
+            } elseif (str_contains($ldesc, 'purchase') || str_contains($ldesc, 'grn')) {
+                $type = 'purchase';
+            } elseif (str_contains($ldesc, 'return') || str_contains($ldesc, 'prtn')) {
+                $type = 'return';
+            } elseif (str_contains($ldesc, 'receipt') || str_contains($ldesc, 'crv') || str_contains($ldesc, 'brv') || str_contains($ldesc, 'rvid')) {
+                $type = 'receipt';
+            } elseif (str_contains($ldesc, 'payment') || str_contains($ldesc, 'cpv') || str_contains($ldesc, 'bpv') || str_contains($ldesc, 'pvid') || str_contains($ldesc, 'cdr deposit')) {
+                $type = 'payment';
+            }
             $transactions[] = [
                 'date'        => \Carbon\Carbon::parse($row->created_at)->format('d/m/Y'),
                 'invoice'     => $ref !== '-' ? strtoupper(str_replace('#', '', trim($ref))) : '-',

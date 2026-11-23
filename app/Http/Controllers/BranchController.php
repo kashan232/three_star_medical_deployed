@@ -46,6 +46,7 @@ class BranchController extends Controller
         'branch_code' => ['required', 'string', 'max:50', Rule::unique('branches')->ignore($editId)],
         'address' => 'nullable|string',
         'number' => 'nullable|string',
+        'whatsapp' => 'nullable|string',
     ], $messages);
 
     if ($validator->fails()) {
@@ -75,6 +76,7 @@ class BranchController extends Controller
         $branch->branch_code = $request->branch_code;
         $branch->address = $request->address;
         $branch->number = $request->number;
+        $branch->whatsapp = $request->whatsapp;
         $branch->is_active = $request->has('is_active') ? 1 : 0;
         if (empty($editId)) {
             $branch->user_id = auth()->id() ?: 1;

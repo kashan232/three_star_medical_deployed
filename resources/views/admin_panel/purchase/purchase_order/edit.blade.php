@@ -692,21 +692,32 @@
                                             </td>
                                             <input type="hidden" name="item_warehouse_id[]" class="item-warehouse" value="{{ $item->warehouse_id ?? $purchase->warehouse_id }}">
                                             <td>
+                                                @php
+                                                    $itemPpb = (float)($item->pieces_per_box ?: ($item->uom_factor ?: ($item->product->pieces_per_box ?? 1)));
+                                                    $baseFactor = (float)($item->product->pieces_per_box ?? 1);
+                                                    $hasMatchingUom = false;
+                                                @endphp
                                                 <select name="uom_id[]" class="form-select item-uom-select row-input" style="min-width:120px;">
-                                                    <option value="">-- Base --</option>
-                                                    @if($item->product->packings)
+                                                    <option value="" data-factor="{{ $baseFactor }}" {{ (!$item->uom_id && $itemPpb == $baseFactor) ? 'selected' : '' }}>-- Base --</option>
+                                                    @if($item->product && $item->product->packings)
                                                         @foreach($item->product->packings as $uom)
-                                                            <option value="{{ $uom->id }}" {{ $item->uom_id == $uom->id ? 'selected' : '' }} data-factor="{{ (float)$uom->pieces_per_box }}">
-                                                                {{ $uom->name }} ({{ (float)$uom->pieces_per_box }})
+                                                            @php
+                                                                $uomPpb = (float)$uom->pieces_per_box;
+                                                                $isSelected = ($item->uom_id == $uom->id) || (!$item->uom_id && $itemPpb == $uomPpb && !$hasMatchingUom);
+                                                                if ($isSelected) $hasMatchingUom = true;
+                                                            @endphp
+                                                            <option value="{{ $uom->id }}" {{ $isSelected ? 'selected' : '' }} data-factor="{{ $uomPpb }}" data-price="{{ (float)$uom->purchase_price }}">
+                                                                {{ $uom->name }} ({{ $uomPpb }})
                                                             </option>
                                                         @endforeach
                                                     @endif
+                                                    <option value="new_uom" style="background:#f0f0f0; font-weight:bold; color:#2563eb;">+ Add New Packing</option>
                                                 </select>
-                                                <input type="hidden" name="uom_name[]" class="uom-name-hidden" value="{{ $item->uom->name ?? 'Piece' }}">
+                                                <input type="hidden" name="uom_name[]" class="uom-name-hidden" value="{{ $item->uom->name ?? ($item->uom_name ?? 'Piece') }}">
                                                 <input type="hidden" name="is_new_uom[]" class="is-new-uom" value="0">
                                             </td>
                                             <td>
-                                                <input type="number" name="item_uom_factor[]" class="form-control text-center item-uom row-input" value="{{ (float)$item->pieces_per_box }}" readonly>
+                                                <input type="number" step="any" min="1" name="item_uom_factor[]" class="form-control text-center item-uom row-input" value="{{ $itemPpb }}">
                                             </td>
                                             <td>
                                                 <div class="d-flex gap-1">
@@ -727,17 +738,17 @@
                                             </td>
                                             <td><input type="text" name="sub_total[]" class="form-control row-sub-total text-end" readonly value="{{ (float)$item->subtotal }}"></td>
                                             @if(!$isPO)
-                                            <td>
+                                            <td class="tax-col">
                                                 <div class="input-group input-group-sm">
                                                     <input type="number" step="any" name="gst_percent[]" class="form-control gst text-end row-input" value="{{ (float)$item->gst_percent }}">
                                                     <span class="input-group-text p-1">%</span>
                                                 </div>
                                             </td>
-                                            <td><input type="text" class="form-control gst-amount-display text-end" value="{{ (float)$item->gst_amount }}" readonly tabindex="-1" style="background:#f8fafc;">
+                                            <td class="tax-col"><input type="text" class="form-control gst-amount-display text-end" value="{{ (float)$item->gst_amount }}" readonly tabindex="-1" style="background:#f8fafc;">
                                                 <input type="hidden" name="gst_amount[]" class="gst-amount-row" value="{{ (float)$item->gst_amount }}">
                                             </td>
-                                            <td><input type="number" step="any" name="it_percent[]" class="form-control inc-tax text-end row-input" value="{{ (float)$item->it_percent }}"></td>
-                                            <td>
+                                            <td class="tax-col"><input type="number" step="any" name="it_percent[]" class="form-control inc-tax text-end row-input" value="{{ (float)$item->it_percent }}"></td>
+                                            <td class="tax-col">
                                                 <div class="input-group input-group-sm shadow-sm" style="width: 100%; min-width: 110px;">
                                                     <input type="number" step="any" class="form-control adv-tax-val text-end row-input" value="{{ (float)$item->adv_tax_percent }}">
                                                     <button type="button" class="btn btn-sm btn-primary text-dark adv-tax-type-toggle p-1" data-type="percent" style="width: 32px; font-size: 0.7rem; font-weight: 700;">%</button>
@@ -745,7 +756,7 @@
                                                     <input type="hidden" name="adv_tax_percent[]" class="adv-tax" value="{{ (float)$item->adv_tax_percent }}">
                                                 </div>
                                             </td>
-                                            <td><input type="text" name="total[]" class="form-control row-net-total input-highlight text-end" readonly value="{{ (float)$item->total_amount }}"></td>
+                                            <td class="tax-col"><input type="text" name="total[]" class="form-control row-net-total input-highlight text-end" readonly value="{{ (float)$item->total_amount }}"></td>
                                             <td><input type="date" name="mfg_date[]" class="form-control text-secondary row-input" value="{{ $item->mfg_date ? date('Y-m-d', strtotime($item->mfg_date)) : '' }}"></td>
                                             <td><input type="date" name="expiry[]" class="form-control text-secondary row-input" value="{{ $item->exp_date ? date('Y-m-d', strtotime($item->exp_date)) : '' }}"></td>
                                             <td><input type="text" name="lot_no[]" class="form-control text-center row-input" value="{{ $item->batch_no ?? '' }}"></td>
@@ -1838,13 +1849,14 @@
                 </td>
                 <td>
                     <select name="uom_id[]" class="form-control item-uom-select p-1">
-                        <option value="">-- Base --</option>
+                        <option value="" data-factor="1">-- Base --</option>
+                        <option value="new_uom" style="background:#f0f0f0; font-weight:bold; color:#2563eb;">+ Add New Packing</option>
                     </select>
                     <input type="hidden" name="uom_name[]" class="uom-name-hidden" value="Piece">
                     <input type="hidden" name="is_new_uom[]" class="is-new-uom" value="0">
                 </td>
                 <td>
-                    <input type="number" name="item_uom_factor[]" class="form-control text-center item-uom row-input" value="1" readonly>
+                    <input type="number" step="any" min="1" name="item_uom_factor[]" class="form-control text-center item-uom row-input" value="1">
                 </td>
                 <td>
                     <div class="d-flex gap-1">
@@ -1865,17 +1877,17 @@
                 </td>
                 <td><input type="text" name="sub_total[]" class="form-control row-sub-total text-end" readonly></td>
                 @if(!$isPO)
-                <td>
+                <td class="tax-col">
                     <div class="input-group input-group-sm">
                         <input type="number" step="any" name="gst_percent[]" class="form-control gst text-end row-input" value="0">
                         <span class="input-group-text p-1">%</span>
                     </div>
                 </td>
-                <td><input type="text" class="form-control gst-amount-display text-end" value="0.00" readonly tabindex="-1" style="background:#f8fafc;">
+                <td class="tax-col"><input type="text" class="form-control gst-amount-display text-end" value="0.00" readonly tabindex="-1" style="background:#f8fafc;">
                     <input type="hidden" name="gst_amount[]" class="gst-amount-row" value="0">
                 </td>
-                <td><input type="number" step="any" name="it_percent[]" class="form-control inc-tax text-end row-input" value="0"></td>
-                <td>
+                <td class="tax-col"><input type="number" step="any" name="it_percent[]" class="form-control inc-tax text-end row-input" value="0"></td>
+                <td class="tax-col">
                     <div class="input-group input-group-sm shadow-sm" style="width: 100%; min-width: 110px;">
                         <input type="number" step="any" class="form-control adv-tax-val text-end row-input" value="0">
                         <button type="button" class="btn btn-sm btn-primary text-dark adv-tax-type-toggle p-1" data-type="percent" style="width: 32px; font-size: 0.7rem; font-weight: 700;">%</button>
@@ -1883,7 +1895,7 @@
                         <input type="hidden" name="adv_tax_percent[]" class="adv-tax" value="0">
                     </div>
                 </td>
-                <td><input type="text" name="total[]" class="form-control row-net-total input-highlight text-end" readonly></td>
+                <td class="tax-col"><input type="text" name="total[]" class="form-control row-net-total input-highlight text-end" readonly></td>
                 <td><input type="date" name="mfg_date[]" class="form-control text-secondary row-input"></td>
                 <td><input type="date" name="expiry[]" class="form-control text-secondary row-input"></td>
                 <td><input type="text" name="lot_no[]" class="form-control text-center row-input"></td>
@@ -1903,6 +1915,12 @@
             
             if (typeof initGlobalDatepickers === 'function') {
                 initGlobalDatepickers($row[0]);
+            }
+            if (typeof toggleGstFields === 'function') {
+                toggleGstFields();
+            }
+            if (typeof toggleHsCodeFields === 'function') {
+                toggleHsCodeFields();
             }
             
             recalcRow($row);
@@ -2057,7 +2075,7 @@
         });
 
         // Calculations & Removals
-        $('#purchaseItems').on('input', '.quantity, .loose_qty, .free_qty, .free_qty_pieces, .price, .item_discount, .gst, .inc-tax, .adv-tax-val',
+        $('#purchaseItems').on('input', '.item-uom, .quantity, .loose_qty, .free_qty, .free_qty_pieces, .price, .item_discount, .gst, .inc-tax, .adv-tax-val',
             function() {
                 let $row = $(this).closest('tr');
                 recalcRow($row, false);
@@ -2141,8 +2159,8 @@
                 }
             } else {
                 var $opt = $(this).find(':selected');
-                var selectedPrice = parseFloat($opt.data('price'));
-                var selectedFactor = parseFloat($opt.data('factor'));
+                var selectedPrice = parseFloat($opt.attr('data-price') || $opt.data('price'));
+                var selectedFactor = parseFloat($opt.attr('data-factor') || $opt.data('factor'));
                 var uomName = $opt.text().split('(')[0].trim();
                 
                 if (!isNaN(selectedPrice) && selectedPrice > 0) {

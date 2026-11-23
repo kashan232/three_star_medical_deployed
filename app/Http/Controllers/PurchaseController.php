@@ -451,7 +451,7 @@ class PurchaseController extends Controller
         }
         $attributes = [];
         if ($request->has('product_id') && is_array($request->product_id)) {
-            foreach ($request->product_id as $i => $id) {
+            foreach ($request->product_id as $i => $pidVal) {
                 $row = $i + 1;
                 $attributes["product_id.$i"]    = "Row $row Product";
                 $attributes["qty.$i"]           = "Row $row Quantity";
@@ -769,6 +769,8 @@ class PurchaseController extends Controller
                 'wht_amount'       => $totalWht,
                 'adv_tax_amount'   => $totalAdv,
                 'net_amount'       => $netAmount,
+                'paid_amount'      => $paidAmount,
+                'due_amount'       => $dueAmount,
                 'is_gst_invoice'   => $request->has('is_gst_invoice') ? 1 : 0,
             ]);
 
@@ -1230,7 +1232,7 @@ class PurchaseController extends Controller
         }
         $attributes = [];
         if ($request->has('product_id') && is_array($request->product_id)) {
-            foreach ($request->product_id as $i => $id) {
+            foreach ($request->product_id as $i => $pidVal) {
                 $row = $i + 1;
                 $attributes["product_id.$i"]    = "Row $row Product";
                 $attributes["qty.$i"]           = "Row $row Quantity";
@@ -1297,7 +1299,7 @@ class PurchaseController extends Controller
 
             // Snapshot fields (Raw Request)
             $sizeModes = $request->size_mode ?? [];
-            $ppbs = $request->pieces_per_box ?? [];
+            $ppbs = $request->item_uom_factor ?? $request->pieces_per_box ?? [];
             $ppm2 = $request->pieces_per_m2 ?? [];
             $boxesQtys = $request->boxes_qty ?? [];
             $looseQtys = $request->loose_qty ?? [];
@@ -1311,59 +1313,75 @@ class PurchaseController extends Controller
             $lotNos = $request->lot_no ?? [];
             $expDates = $request->expiry ?? [];
             $mfgDates = $request->mfg_date ?? [];
+            $freeQtys = $request->free_qty ?? [];
+            $freeLooseQtys = $request->free_qty_pieces ?? [];
 
             $totalGst = 0;
             foreach ($pids as $i => $pid) {
                 $pid = (int) ($pid ?? 0);
-                $qty = (float) ($qtys[$i] ?? 0);
+                $qtyInput = $qtys[$i] ?? 0;
+                $qty = (float) $qtyInput;
                 $price = (float) ($prices[$i] ?? 0);
+                $looseInput = (float)($looseQtys[$i] ?? 0);
 
-                if (! $pid || $qty <= 0) {
+                if (! $pid || ($qty <= 0 && $looseInput <= 0)) {
                     continue;
                 }
 
                 $disc = (float) ($itemDiscs[$i] ?? 0);
                 $unit = $units[$i] ?? null;
-                $uomId = $uomIds[$i] ?? null;
+                $uomIdRaw = $uomIds[$i] ?? null;
+                $isNewUom = ($uomIdRaw === 'NEW' || ($request->is_new_uom[$i] ?? '0') === '1');
+                $uomName = $request->uom_name[$i] ?? null;
 
                 // Handle Packing (UOM) Logic
+                $rawFactor = $ppbs[$i] ?? null;
+                $uomFactor = ($rawFactor !== null && $rawFactor !== '' && (float)$rawFactor > 0)
+                    ? (float)$rawFactor
+                    : null;
+
                 $uom = null;
-                if ($uomId) {
+                $uomId = null;
+                if ($isNewUom) {
+                    $uom = \App\Models\ProductUom::create([
+                        'product_id' => $pid,
+                        'name' => $uomName ?: 'Box',
+                        'pieces_per_box' => $uomFactor ?: 1,
+                        'purchase_price' => $price,
+                    ]);
+                    $uomId = $uom->id;
+                    $uomName = $uom->name;
+                    $ppb = (float)$uom->pieces_per_box;
+                } elseif ($uomIdRaw && is_numeric($uomIdRaw)) {
+                    $uomId = (int)$uomIdRaw;
                     $uom = \App\Models\ProductUom::find($uomId);
+                    if ($uom) {
+                        $uomName = $uom->name;
+                        if ($uomFactor && $uomFactor > 0) {
+                            $uom->update([
+                                'purchase_price' => $price,
+                                'pieces_per_box' => $uomFactor,
+                            ]);
+                        }
+                        $ppb = (float)($uomFactor ?: $uom->pieces_per_box ?: 1);
+                    } else {
+                        $ppb = (float)($uomFactor ?: 1);
+                    }
+                } else {
+                    $productModel = \App\Models\Product::find($pid);
+                    $ppb = (float)($uomFactor ?: ($productModel ? $productModel->pieces_per_box : 1));
+                    $uomName = $uomName ?: ($productModel ? $productModel->unit : 'Piece');
                 }
 
-                $ppb = 1;
-                $uomName = 'Piece';
-                if ($uom) {
-                    $uomName = $uom->name;
-                    $ppb = $uom->pieces_per_box ?: 1;
-                    // Update prices permanently if needed, but for PO, we just use the price
+                if ($ppb <= 0) {
+                    $ppb = 1;
                 }
 
                 // --- Calculation Logic (Matches store()) ---
-                $curSizeMode = $sizeModes[$i] ?? null;
+                $curSizeMode = $sizeModes[$i] ?? 'by_cartons';
                 $curPPM2 = (float) ($ppm2[$i] ?? 0);
 
-                $ppb = isset($ppbs[$i]) && $ppbs[$i] > 0 ? (float) $ppbs[$i] : 1;
-
-                $totalPieces = 0;
-                if ($curSizeMode === 'by_cartons' || $curSizeMode === 'by_carton') {
-                    $qtyStr = (string) $qty;
-                    if (str_contains($qtyStr, '.')) {
-                        $parts = explode('.', $qtyStr);
-                        $boxes = (int) $parts[0];
-                        $pieces = (int) $parts[1];
-                        $totalPieces = ($boxes * $ppb) + $pieces;
-                    } else {
-                        $totalPieces = $qty * $ppb;
-                    }
-                } else {
-                    if ($curSizeMode === 'by_size') {
-                        $totalPieces = $qty;
-                    } else {
-                        $totalPieces = $qty * $ppb;
-                    }
-                }
+                $totalPieces = $this->parseNotationToPieces($qty, $ppb, $curSizeMode, $looseInput);
 
                 // Regardless of mode, the user expects 'price' to be the Rate Per Piece (as per Turn 7 req)
                 $grossTotal = $totalPieces * $price;
@@ -1371,25 +1389,31 @@ class PurchaseController extends Controller
                 $curDiscType = $itemDiscTypes[$i] ?? 'amount';
                 $lineDiscAmount = ($curDiscType === 'percent') ? ($grossTotal * $disc / 100) : $disc;
 
-                $lineTotal = $grossTotal - $lineDiscAmount;
-                // ------------------------------------------
+                $lineTotal = max(0, $grossTotal - $lineDiscAmount);
+
+                $freeQtyInput = $freeQtys[$i] ?? 0;
+                $freeLooseInput = $freeLooseQtys[$i] ?? 0;
+                $freeQtyPieces = $this->parseNotationToPieces($freeQtyInput, $ppb, $curSizeMode, $freeLooseInput);
 
                 PurchaseItem::create([
                     'purchase_id' => $purchase->id,
                     'product_id' => $pid,
-                    'unit' => $unit,
+                    'warehouse_id' => $request->item_warehouse_id[$i] ?? $warehouseId,
+                    'unit' => $unit ?: $uomName,
                     'price' => $price,
                     'item_discount' => $disc,
                     'item_discount_type' => $curDiscType,
                     'qty' => $qty,
+                    'free_qty' => $freeQtyInput,
+                    'free_qty_pieces' => $freeQtyPieces,
                     'line_total' => $lineTotal,
 
                     // Snapshots
-                    'size_mode' => $sizeModes[$i] ?? null,
+                    'size_mode' => $curSizeMode,
                     'pieces_per_box' => $ppb,
                     'pieces_per_m2' => $ppm2[$i] ?? 0,
                     'boxes_qty' => $boxesQtys[$i] ?? 0,
-                    'loose_qty' => $looseQtys[$i] ?? 0,
+                    'loose_qty' => $looseInput,
                     'length' => (string) ($lengths[$i] ?? ''),
                     'width' => (string) ($widths[$i] ?? ''),
                     'gst_percent' => (float) ($gstPercents[$i] ?? 0),
@@ -1400,9 +1424,9 @@ class PurchaseController extends Controller
                     'uom_name' => $uomName,
                     'uom_factor' => $ppb,
                     'hs_code' => $request->hs_code[$i] ?? null,
-                    'batch_no' => $lotNos[$i] ?? null,
-                    'mfg_date' => $mfgDates[$i] ?? null,
-                    'exp_date' => $expDates[$i] ?? null,
+                    'batch_no' => !empty(trim((string)($lotNos[$i] ?? ''))) ? trim((string)$lotNos[$i]) : null,
+                    'mfg_date' => !empty($mfgDates[$i]) ? $mfgDates[$i] : null,
+                    'exp_date' => !empty($expDates[$i]) ? $expDates[$i] : null,
                 ]);
 
                 $subtotal += $lineTotal;
@@ -1734,7 +1758,7 @@ class PurchaseController extends Controller
     {
         $attributes = [];
         if ($request->has('product_id') && is_array($request->product_id)) {
-            foreach ($request->product_id as $i => $id) {
+            foreach ($request->product_id as $i => $pidVal) {
                 $row = $i + 1;
                 $attributes["product_id.$i"]    = "Row $row Product";
                 $attributes["qty.$i"]           = "Row $row Quantity";

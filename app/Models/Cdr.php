@@ -11,8 +11,8 @@ class Cdr extends Model
 
     protected $fillable = [
         'code', 'city', 'cdr_no', 'cdr_date', 'fiscal_year', 
-        'customer_id', 'account_id', 'percentage', 
-        'amount', 'status', 'dated', 'branch_id'
+        'customer_id', 'account_id', 'voucher_id', 'clear_voucher_id',
+        'percentage', 'amount', 'status', 'dated', 'branch_id'
     ];
 
     public function customer()
@@ -23,5 +23,15 @@ class Cdr extends Model
     public function bankAccount()
     {
         return $this->belongsTo(Account::class, 'account_id');
+    }
+
+    public function voucher()
+    {
+        return $this->belongsTo(VoucherMaster::class, 'voucher_id');
+    }
+
+    public function clearVoucher()
+    {
+        return $this->belongsTo(VoucherMaster::class, 'clear_voucher_id');
     }
 }

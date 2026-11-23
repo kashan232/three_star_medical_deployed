@@ -1449,26 +1449,48 @@ function validateSinglePaymentBalance() {
 
     let errorBox = $('#paymentBalanceAlert');
     if (!errorBox.length) {
-        errorBox = $('<div id="paymentBalanceAlert" class="alert alert-danger p-2 mt-2 fw-bold" style="display:none; font-size:0.85rem; border-radius:8px;"></div>');
+        errorBox = $('<div id="paymentBalanceAlert" class="alert p-2 mt-2 fw-bold" style="display:none; font-size:0.85rem; border-radius:8px;"></div>');
         amountInput.closest('.form-group-modern').append(errorBox);
     }
 
-    if (enteredAmt > availBal) {
-        const typeLabel = isCpv ? 'Cash in Hand' : 'Bank';
-        const formattedAvail = 'Rs. ' + Math.max(0, availBal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const formattedReq = 'Rs. ' + enteredAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        errorBox.html(`<i class="fas fa-exclamation-triangle"></i> <strong>Insufficient Balance!</strong> Entered amount (${formattedReq}) exceeds available balance in ${typeLabel} (${formattedAvail}).`).show();
-        amountInput.addClass('is-invalid');
-        $('#submitBtn').prop('disabled', true);
-        return false;
-    } else {
-        errorBox.hide();
+    // Cash Payment Voucher (CPV): Strict cash check
+    if (isCpv) {
+        if (enteredAmt > availBal) {
+            const formattedAvail = 'Rs. ' + Math.max(0, availBal).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const formattedReq = 'Rs. ' + enteredAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            errorBox.removeClass('alert-info').addClass('alert-danger')
+                .html(`<i class="fas fa-exclamation-triangle"></i> <strong>Insufficient Balance!</strong> Entered amount (${formattedReq}) exceeds available balance in Cash in Hand (${formattedAvail}).`).show();
+            amountInput.addClass('is-invalid');
+            $('#submitBtn').prop('disabled', true);
+            return false;
+        } else {
+            errorBox.hide();
+            amountInput.removeClass('is-invalid');
+            if (enteredAmt > 0) {
+                $('#submitBtn').prop('disabled', false);
+            }
+            return true;
+        }
+    }
+
+    // Bank Payment Voucher (BPV) / Cheques: Cheques can be post-dated / issued in advance, so do NOT block submission!
+    if (isBpv) {
         amountInput.removeClass('is-invalid');
+        if (enteredAmt > availBal) {
+            const formattedAvail = 'Rs. ' + availBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const formattedReq = 'Rs. ' + enteredAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            errorBox.removeClass('alert-danger').addClass('alert-info')
+                .html(`<i class="fas fa-info-circle"></i> <strong>Note:</strong> Cheque amount (${formattedReq}) exceeds current bank balance (${formattedAvail}). Post-dated / advance cheques are allowed.`).show();
+        } else {
+            errorBox.hide();
+        }
         if (enteredAmt > 0) {
             $('#submitBtn').prop('disabled', false);
         }
         return true;
     }
+
+    return true;
 }
 
 $(document).on('input change', 'input[name="amount"], #cash_account_id, #bank_account_id', function() {
@@ -1550,7 +1572,7 @@ function calculateJvTotals() {
 
         // Restriction Check: If Cash, Bank or general Asset account is Credited (withdrawn/deducted)
         let rowError = row.find('.jv-row-overdraft-error');
-        if ((itemType === 'cash' || itemType === 'bank' || itemType === 'account') && creditVal > availBal) {
+        if ((itemType === 'cash') && creditVal > availBal) {
             hasOverdraft = true;
             creditInput.addClass('is-invalid');
             const accTitle = selectedOpt.text().split('(')[0].trim() || 'Account';

@@ -284,9 +284,9 @@ class DualPartyLedgerService
 
             // Ref invoice extraction
             $ref = '—';
-            if (preg_match('/#(inv|sin|grn|pv|cpv|crv|sr|so|po|jv|rv|re|pr|prtn|rvid)[- ]?([A-Z0-9\-_]+)/i', $item->description, $matches)) {
+            if (preg_match('/#(inv|sin|grn|pv|cpv|bpv|crv|brv|sr|so|po|jv|rv|re|pr|prtn|rvid)[- ]?([A-Z0-9\-_]+)/i', $item->description, $matches)) {
                 $ref = strtoupper($matches[0]);
-            } elseif (preg_match('/\b(INV|SIN|GRN|CPV|CRV|PRTN|SRN)-\d+\b/i', $item->description, $matches)) {
+            } elseif (preg_match('/\b(INV|SIN|GRN|CPV|BPV|CRV|BRV|JV|PRTN|SRN)-\d+\b/i', $item->description, $matches)) {
                 $ref = strtoupper($matches[0]);
             }
 

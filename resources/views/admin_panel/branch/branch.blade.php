@@ -21,6 +21,7 @@
                                              <th class="text-center">Name</th>
                                              <th class="text-center">Address</th>
                                              <th class="text-center">Number</th>
+                                             <th class="text-center">WhatsApp</th>
                                              <th class="text-center">Status</th>
                                              <th class="text-center">Users</th>
                                              <th class="text-center">Action</th>
@@ -35,6 +36,7 @@
                                                      <td class="name">{{ $branch->name }}</td>
                                                      <td class="address">{{ $branch->address }}</td>
                                                      <td class="number">{{ $branch->number }}</td>
+                                                     <td class="whatsapp">{{ $branch->whatsapp ?? '-' }}</td>
                                                      <td class="status">
                                                          @if ($branch->is_active)
                                                              <span class="badge bg-success">Active</span>
@@ -106,6 +108,10 @@
                          <div class="mb-3">
                              <label for="number" class="form-label">Number</label>
                              <input type="text" name="number" class="form-control" id="number" />
+                        </div>
+                        <div class="mb-3">
+                            <label for="whatsapp" class="form-label">WhatsApp Number</label>
+                            <input type="text" name="whatsapp" class="form-control" id="whatsapp" />
                          </div>
                          <div class="mb-3 form-check">
                              <input type="checkbox" name="is_active" class="form-check-input" id="is_active" value="1"
@@ -153,6 +159,7 @@
              var name = tr.find(".name").text();
              var address = tr.find(".address").text();
              var number = tr.find(".number").text();
+            var whatsapp = tr.find(".whatsapp").text().trim();
              var statusText = tr.find(".status").text().trim();
 
              $('#id').val(id);
@@ -160,6 +167,7 @@
              $('#name').val(name)
              $('#address').val(address)
              $('#number').val(number)
+            $('#whatsapp').val(whatsapp !== '-' ? whatsapp : '')
              $('#is_active').prop('checked', statusText === 'Active');
 
              $("#exampleModal").modal("show")
@@ -174,6 +182,7 @@
              $('#name').val('');
              $('#address').val('');
              $('#number').val('');
+            $('#whatsapp').val('');
              $('#is_active').prop('checked', true);
              $("#exampleModal").modal("show")
          });

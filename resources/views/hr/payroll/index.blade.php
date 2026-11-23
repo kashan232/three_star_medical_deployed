@@ -1010,8 +1010,8 @@
                                                     @if ($payroll->canMarkPaid() && auth()->user()->can('hr.payroll.edit'))
                                                         <button class="btn btn-sm btn-success mark-paid-btn px-2.5 fw-bold" title="Process Payment"
                                                             data-id="{{ $payroll->id }}"
-                                                            data-name="{{ $payroll->employee->full_name }}"
-                                                            data-month="{{ \Carbon\Carbon::parse($payroll->month)->format('F Y') }}"
+                                                            data-name="{{ $payroll->employee->full_name ?? 'Employee' }}"
+                                                            data-month="{{ (strlen($payroll->month) === 7 && str_contains($payroll->month, '-')) ? \Carbon\Carbon::parse($payroll->month.'-01')->format('F Y') : \Carbon\Carbon::parse($payroll->month)->format('d M Y') }}"
                                                             data-net="{{ number_format($payroll->net_salary, 2) }}"
                                                             data-base="{{ number_format($payroll->basic_salary + $payroll->allowances + $payroll->commission, 2) }}"
                                                             style="font-size: 0.75rem; padding: 4px 10px;">
@@ -1023,7 +1023,7 @@
                                                         @if (auth()->user()->can('hr.payroll.edit'))
                                                             <button class="btn btn-sm btn-outline-warning revert-paid-btn px-2 fw-semibold" title="Revert to Unpaid (Cancel Voucher)"
                                                                 data-id="{{ $payroll->id }}"
-                                                                data-name="{{ $payroll->employee->full_name }}"
+                                                                data-name="{{ $payroll->employee->full_name ?? 'Employee' }}"
                                                                 data-month="{{ (strlen($payroll->month) === 7 && str_contains($payroll->month, '-')) ? \Carbon\Carbon::parse($payroll->month.'-01')->format('M Y') : $payroll->month }}"
                                                                 style="font-size: 0.75rem; padding: 4px 8px;">
                                                                 <i class="fa fa-undo me-1"></i>Revert
@@ -1033,7 +1033,7 @@
                                                             <button class="btn btn-sm btn-outline-danger delete-btn px-2" title="Delete Paid Payroll"
                                                                 data-id="{{ $payroll->id }}"
                                                                 data-paid="true"
-                                                                data-name="{{ $payroll->employee->full_name }}"
+                                                                data-name="{{ $payroll->employee->full_name ?? 'Employee' }}"
                                                                 style="font-size: 0.75rem; padding: 4px 8px;">
                                                                 <i class="fa fa-trash"></i>
                                                             </button>
@@ -1043,7 +1043,7 @@
                                                             <button class="btn btn-sm btn-outline-danger delete-btn px-2" title="Delete Payroll"
                                                                 data-id="{{ $payroll->id }}"
                                                                 data-paid="false"
-                                                                data-name="{{ $payroll->employee->full_name }}"
+                                                                data-name="{{ $payroll->employee->full_name ?? 'Employee' }}"
                                                                 style="font-size: 0.75rem; padding: 4px 8px;">
                                                                 <i class="fa fa-trash"></i>
                                                             </button>
@@ -1228,10 +1228,12 @@
                         <h4 class="modal-title fw-800 mb-1" style="letter-spacing: -0.02em;">Process Payroll Payment</h4>
                         <p class="mb-0 text-slate-300 small opacity-75">Review employee earnings and deductions before confirming payment</p>
                     </div>
-                    <button type="button" class="btn-close btn-close-white opacity-50" data-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close" style="font-size: 1.5rem; opacity: 0.8; text-shadow: none;">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
                 </div>
 
-                <form id="payrollPayForm" action="" method="POST" data-ajax-validate="true">
+                <form id="payrollPayForm" action="" method="POST">
                     @csrf
                     @method('PATCH')
                     <input type="hidden" name="payment_type" id="erp_payment_type" value="net">
@@ -1477,17 +1479,25 @@
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label class="form-label erp-label fw-700 text-slate-700 mb-2">Select Payment Method <span class="text-danger">*</span></label>
-                                    <div class="d-flex gap-2">
-                                        <div class="flex-fill">
-                                            <input type="radio" class="btn-check" name="payment_method" id="pay_method_cash" value="cash" checked autocomplete="off">
-                                            <label class="btn btn-outline-success w-100 py-2.5 d-flex align-items-center justify-content-center gap-2 fw-bold shadow-xs" for="pay_method_cash" style="border-radius: 12px; font-size: 0.85rem;">
-                                                <i class="fa fa-money-bill-wave"></i> Cash in Hand
+                                    <div class="row g-2 payment-method-selector">
+                                        <div class="col-6">
+                                            <label class="pay-method-card active w-100 p-2.5 rounded border text-center mb-0 cursor-pointer" id="label_method_cash" for="pay_method_cash" style="cursor: pointer; border: 2px solid #10b981 !important; background: #ecfdf5; border-radius: 12px; transition: all 0.2s ease;">
+                                                <input type="radio" name="payment_method" id="pay_method_cash" value="cash" checked style="display:none;">
+                                                <div class="d-flex align-items-center justify-content-center gap-2 mb-1">
+                                                    <i class="fa fa-money-bill-wave text-success fs-5"></i>
+                                                    <strong class="text-success" style="font-size: 0.9rem;">Cash in Hand</strong>
+                                                </div>
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">Cash Register / Petty Cash</small>
                                             </label>
                                         </div>
-                                        <div class="flex-fill">
-                                            <input type="radio" class="btn-check" name="payment_method" id="pay_method_bank" value="bank" autocomplete="off">
-                                            <label class="btn btn-outline-primary w-100 py-2.5 d-flex align-items-center justify-content-center gap-2 fw-bold shadow-xs" for="pay_method_bank" style="border-radius: 12px; font-size: 0.85rem;">
-                                                <i class="fa fa-university"></i> Bank Account
+                                        <div class="col-6">
+                                            <label class="pay-method-card w-100 p-2.5 rounded border text-center mb-0 cursor-pointer" id="label_method_bank" for="pay_method_bank" style="cursor: pointer; border: 1px solid #cbd5e1; background: #ffffff; border-radius: 12px; transition: all 0.2s ease;">
+                                                <input type="radio" name="payment_method" id="pay_method_bank" value="bank" style="display:none;">
+                                                <div class="d-flex align-items-center justify-content-center gap-2 mb-1">
+                                                    <i class="fa fa-university text-primary fs-5"></i>
+                                                    <strong class="text-primary" style="font-size: 0.9rem;">Bank Account</strong>
+                                                </div>
+                                                <small class="text-muted d-block" style="font-size: 0.7rem;">Cheque / IBFT Transfer</small>
                                             </label>
                                         </div>
                                     </div>
@@ -1497,41 +1507,59 @@
                                     <!-- Cash Account Selector -->
                                     <div id="erp_cash_account_wrapper">
                                         <label class="form-label erp-label fw-700 text-slate-700 mb-2">
-                                            <i class="fa fa-wallet text-success me-1"></i> Cash Account <span class="text-danger">*</span>
+                                            <i class="fa fa-wallet text-success me-1"></i> Disbursing Cash Account <span class="text-danger">*</span>
                                         </label>
-                                        <select name="cash_account_id" id="erp_cash_account_select" class="form-select shadow-xs" style="border-radius: 10px; font-size: 0.85rem; font-weight: 600;">
+                                        <select name="cash_account_id" id="erp_cash_account_select" class="form-control" style="border-radius: 10px; font-size: 0.85rem; font-weight: 600; height: calc(1.5em + 1rem + 2px);">
                                             @forelse($cashAccounts ?? [] as $cashAcc)
                                                 <option value="{{ $cashAcc->id }}" data-balance="{{ $cashAcc->calculated_balance ?? $cashAcc->current_balance }}">
-                                                    {{ $cashAcc->title }} — (Available: Rs. {{ number_format($cashAcc->calculated_balance ?? $cashAcc->current_balance, 2) }})
+                                                    💵 {{ $cashAcc->title }} ({{ $cashAcc->account_code }}) — Rs. {{ number_format($cashAcc->calculated_balance ?? $cashAcc->current_balance, 2) }}
                                                 </option>
                                             @empty
-                                                <option value="">No Cash Account Found</option>
+                                                <option value="">No Active Cash Account Found</option>
                                             @endforelse
                                         </select>
                                     </div>
 
                                     <!-- Bank Account Selector -->
-                                    <div id="erp_bank_account_wrapper" class="d-none">
+                                    <div id="erp_bank_account_wrapper" class="d-none" style="display: none;">
                                         <label class="form-label erp-label fw-700 text-slate-700 mb-2">
-                                            <i class="fa fa-building-columns text-primary me-1"></i> Bank Account <span class="text-danger">*</span>
+                                            <i class="fa fa-building-columns text-primary me-1"></i> Disbursing Bank Account <span class="text-danger">*</span>
                                         </label>
-                                        <select name="bank_account_id" id="erp_bank_account_select" class="form-select shadow-xs" style="border-radius: 10px; font-size: 0.85rem; font-weight: 600;">
+                                        <select name="bank_account_id" id="erp_bank_account_select" class="form-control" style="border-radius: 10px; font-size: 0.85rem; font-weight: 600; height: calc(1.5em + 1rem + 2px);">
                                             @forelse($bankAccounts ?? [] as $bankAcc)
                                                 <option value="{{ $bankAcc->id }}" data-balance="{{ $bankAcc->calculated_balance ?? $bankAcc->current_balance }}">
-                                                    {{ $bankAcc->title }} — (Available: Rs. {{ number_format($bankAcc->calculated_balance ?? $bankAcc->current_balance, 2) }})
+                                                    🏦 {{ $bankAcc->title }} ({{ $bankAcc->account_code }}) — Rs. {{ number_format($bankAcc->calculated_balance ?? $bankAcc->current_balance, 2) }}
                                                 </option>
                                             @empty
-                                                <option value="">No Bank Account Found</option>
+                                                <option value="">No Active Bank Account Found</option>
                                             @endforelse
                                         </select>
                                     </div>
                                 </div>
                             </div>
 
+                            <!-- Live Balance Impact Preview Box -->
+                            <div class="mt-3 p-3 rounded-3" style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px;">
+                                <div class="row text-center g-2 align-items-center">
+                                    <div class="col-4 border-right border-slate-200">
+                                        <span class="text-muted text-uppercase d-block font-weight-bold" style="font-size: 0.65rem; letter-spacing: 0.05em;">Current Available</span>
+                                        <strong id="erp_acc_curr_balance" class="text-dark fs-6 font-monospace">Rs. 0.00</strong>
+                                    </div>
+                                    <div class="col-4 border-right border-slate-200">
+                                        <span class="text-danger text-uppercase d-block font-weight-bold" style="font-size: 0.65rem; letter-spacing: 0.05em;">Salary Deduction</span>
+                                        <strong id="erp_acc_deduct_amount" class="text-danger fs-6 font-monospace">- Rs. 0.00</strong>
+                                    </div>
+                                    <div class="col-4">
+                                        <span class="text-uppercase d-block font-weight-bold" style="font-size: 0.65rem; letter-spacing: 0.05em;">Balance After Payment</span>
+                                        <strong id="erp_acc_remaining_balance" class="text-success fs-6 font-monospace">Rs. 0.00</strong>
+                                    </div>
+                                </div>
+                            </div>
+
                             <!-- Bank Cheque / Ref Details (Row toggles with Bank) -->
-                            <div id="erp_bank_details_row" class="row g-3 mt-1 d-none">
+                            <div id="erp_bank_details_row" class="row g-3 mt-1 d-none" style="display: none;">
                                 <div class="col-md-6">
-                                    <label class="form-label erp-label fw-700 text-slate-600 mb-1">Cheque # / Online Ref</label>
+                                    <label class="form-label erp-label fw-700 text-slate-600 mb-1">Cheque # / Online Ref (IBFT)</label>
                                     <input type="text" name="cheque_no" id="erp_cheque_no" class="form-control form-control-sm" style="border-radius: 8px; font-size: 0.85rem;" placeholder="e.g. CHQ-829102 / IBFT-91823">
                                 </div>
                                 <div class="col-md-6">
@@ -2264,14 +2292,80 @@
             // Professional ERP Payroll Payment Modal Logic
             let activePayrollData = null;
 
+            function updatePaymentMethodUI(method) {
+                if (method === 'cash') {
+                    $('#label_method_cash').css({ 'border': '2px solid #10b981', 'background': '#ecfdf5' });
+                    $('#label_method_bank').css({ 'border': '1px solid #cbd5e1', 'background': '#ffffff' });
+                    $('#erp_cash_account_wrapper').removeClass('d-none').show();
+                    $('#erp_bank_account_wrapper').addClass('d-none').hide();
+                    $('#erp_bank_details_row').addClass('d-none').hide();
+                    $('#erp_cash_account_select').prop('required', true);
+                    $('#erp_bank_account_select').prop('required', false);
+                } else {
+                    $('#label_method_bank').css({ 'border': '2px solid #2563eb', 'background': '#eff6ff' });
+                    $('#label_method_cash').css({ 'border': '1px solid #cbd5e1', 'background': '#ffffff' });
+                    $('#erp_cash_account_wrapper').addClass('d-none').hide();
+                    $('#erp_bank_account_wrapper').removeClass('d-none').show();
+                    $('#erp_bank_details_row').removeClass('d-none').show();
+                    $('#erp_bank_account_select').prop('required', true);
+                    $('#erp_cash_account_select').prop('required', false);
+                }
+                updateAccountBalancePreview();
+            }
+
+            function updateAccountBalancePreview() {
+                const method = $('input[name="payment_method"]:checked').val() || 'cash';
+                const select = (method === 'cash') ? $('#erp_cash_account_select') : $('#erp_bank_account_select');
+                const selectedOpt = select.find('option:selected');
+                
+                const currBalance = parseFloat(selectedOpt.data('balance')) || 0;
+                const netPayableText = $('#erp_net_payable').text().replace(/[^0-9.-]+/g, '');
+                const netPayable = parseFloat(netPayableText) || 0;
+                const remaining = currBalance - netPayable;
+
+                $('#erp_acc_curr_balance').text('Rs. ' + currBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                $('#erp_acc_deduct_amount').text('- Rs. ' + netPayable.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                
+                const remEl = $('#erp_acc_remaining_balance');
+                remEl.text('Rs. ' + remaining.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}));
+                if (remaining < 0) {
+                    remEl.removeClass('text-success').addClass('text-danger');
+                } else {
+                    remEl.removeClass('text-danger').addClass('text-success');
+                }
+            }
+
+            $(document).on('change', 'input[name="payment_method"]', function() {
+                updatePaymentMethodUI($(this).val());
+            });
+
+            $(document).on('change', '#erp_cash_account_select, #erp_bank_account_select', function() {
+                updateAccountBalancePreview();
+            });
+
             $(document).on('click', '.mark-paid-btn', function() {
                 const btn = $(this);
                 const id = btn.data('id');
-                const name = btn.data('name');
-                const avatar = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+                const name = btn.data('name') || 'Employee';
+                const originalHtml = btn.html();
 
-                // Show loading state or clear previous
-                $('#erp_emp_name').text(name);
+                // Show spinner on the clicked button
+                btn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin"></i>');
+
+                // Crash-proof avatar generation
+                const nameClean = String(name).trim();
+                const parts = nameClean.split(/\s+/).filter(Boolean);
+                let avatar = 'EM';
+                if (parts.length >= 2) {
+                    avatar = (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+                } else if (parts.length === 1 && parts[0].length >= 2) {
+                    avatar = parts[0].substring(0, 2).toUpperCase();
+                } else if (parts.length === 1 && parts[0].length === 1) {
+                    avatar = parts[0].toUpperCase();
+                }
+
+                // Fill basic data upfront
+                $('#erp_emp_name').text(nameClean);
                 $('#erp_emp_avatar').text(avatar);
                 $('#payrollPayForm').attr('action', `/hr/payroll/${id}/mark-paid`);
                 $('#erp_bonus_input').val('');
@@ -2279,220 +2373,239 @@
                 $('#erp_earning_type_container').addClass('d-none').hide();
                 $('#erp_commission_metrics_box').addClass('d-none').hide();
                 $('#pay_method_cash').prop('checked', true);
-                $('#erp_cash_account_wrapper').removeClass('d-none').show();
-                $('#erp_bank_account_wrapper').addClass('d-none').hide();
-                $('#erp_bank_details_row').addClass('d-none').hide();
+                updatePaymentMethodUI('cash');
                 $('#erp_cheque_no').val('');
-                $('#erp_payment_notes').val('');
+                $('#erp_payment_notes').val('Salary Payment - ' + nameClean);
+                $('#erp_payment_date').val(new Date().toISOString().split('T')[0]);
+
+                if (btn.data('net')) {
+                    $('#erp_net_payable').text('Rs. ' + btn.data('net'));
+                    $('#erp_monthly_earnings').text('Rs. ' + (btn.data('base') || btn.data('net')));
+                }
+                if (btn.data('month')) {
+                    $('#erp_payroll_month').text(btn.data('month'));
+                }
 
                 // Load detailed stats via AJAX
-                $.get('{{ url("/hr/payroll") }}/' + id + '/details', function(data) {
-                    activePayrollData = data;
-                    const p = data.payroll;
-                    const stats = data.stats;
+                $.get('{{ url("/hr/payroll") }}/' + id + '/details')
+                    .done(function(data) {
+                        activePayrollData = data;
+                        const p = data.payroll;
+                        const stats = data.stats || {};
 
-                    // Header Info
-                    $('#erp_emp_designation').text(p.employee?.designation?.name || 'Employee');
-                    $('#erp_payroll_month').text(p.month + ' ' + p.year);
-                    $('#erp_payroll_type').text(p.payroll_type + ' Payroll');
+                        // Header Info
+                        $('#erp_emp_designation').text(p.employee?.designation?.name || 'Employee');
+                        $('#erp_payroll_month').text(p.month + (p.year ? ' ' + p.year : ''));
+                        $('#erp_payroll_type').text((p.payroll_type || 'Monthly') + ' Payroll');
 
-                    // Earnings Section
-                    $('#erp_monthly_earnings').text(`Rs. ${parseFloat(p.basic_salary).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
-                    
-                    const hasCommDetails = (data.commission_details && data.commission_details.length > 0);
-                    const hasCommMetrics = !!data.commission_metrics;
-                    
-                    let commAmount = p.commission;
-                    if (!commAmount && data.breakdown && data.breakdown.earnings) {
-                        commAmount = data.breakdown.earnings.commission;
-                    }
-                    const hasCommAmount = (commAmount && parseFloat(commAmount) > 0);
-
-                    if (p.payroll_type === 'commission' || hasCommAmount || hasCommMetrics || hasCommDetails) {
-                        $('#erp_earning_type_container').removeClass('d-none').css('display', 'block');
-                        $('#erp_earning_type_label').text('Commission Earned');
-                        $('#erp_earning_type_value').text(`Rs. ${parseFloat(commAmount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
+                        // Earnings Section
+                        $('#erp_monthly_earnings').text(`Rs. ${parseFloat(p.basic_salary || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
                         
-                        // Populate Metrics
-                        if (data.commission_metrics) {
-                            const cm = data.commission_metrics;
-                            $('#erp_commission_metrics_box').removeClass('d-none').css('display', 'block');
-                            
-                            const formatVal = (val) => {
-                                if (val === 'N/A' || isNaN(parseFloat(val))) return val;
-                                return `Rs. ${parseFloat(val).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-                            };
-
-                            $('#erp_sale_amount').text(formatVal(cm.sale_total));
-                            $('#erp_comm_total').text(formatVal(cm.total_commission));
-                            $('#erp_comm_paid').text(formatVal(cm.paid_so_far));
-                            $('#erp_comm_remaining').text(formatVal(cm.remaining_commission));
-                            $('#erp_comm_customer_ratio').text(`Customer Paid: ${formatVal(cm.customer_paid_total)} (${cm.payment_ratio})`);
-                            $('#erp_comm_customer_name').text(`Customer: ${cm.customer_name}`);
-                        } else if (hasCommDetails) {
-                            // Build aggregated metrics from detail rows (monthly with multiple sales)
-                            $('#erp_commission_metrics_box').removeClass('d-none').css('display', 'block');
-                            let aggSaleTotal = 0, aggMaxComm = 0, aggCustPaid = 0, aggCurrComm = 0, aggRemaining = 0;
-                            data.commission_details.forEach(d => {
-                                if (d.meta && d.meta.max_commission !== undefined) {
-                                    aggSaleTotal   += parseFloat(d.meta.sale_total || 0);
-                                    aggMaxComm     += parseFloat(d.meta.max_commission || 0);
-                                    aggCustPaid    += parseFloat(d.meta.customer_paid_total || 0);
-                                    aggCurrComm    += parseFloat(d.meta.current_commission || 0);
-                                    aggRemaining   += parseFloat(d.meta.remaining_commission || 0);
-                                } else {
-                                    aggCurrComm    += parseFloat(d.amount || 0);
+                        // Populate Payment Accounts dynamically if available
+                        if (data.payment_accounts) {
+                            if (data.payment_accounts.cash && data.payment_accounts.cash.length > 0) {
+                                const cashSelect = $('#erp_cash_account_select');
+                                const curVal = cashSelect.val();
+                                cashSelect.empty();
+                                data.payment_accounts.cash.forEach(function(acc) {
+                                    cashSelect.append(`<option value="${acc.id}" data-balance="${acc.balance}">💵 ${acc.title} (${acc.account_code}) — Rs. ${acc.balance_formatted}</option>`);
+                                });
+                                if (curVal && cashSelect.find(`option[value="${curVal}"]`).length) {
+                                    cashSelect.val(curVal);
                                 }
-                            });
-                            const Rs = v => `Rs. ${parseFloat(v).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-                            $('#erp_sale_amount').text(Rs(aggSaleTotal));
-                            $('#erp_comm_total').text(Rs(aggMaxComm));
-                            $('#erp_comm_paid').text(Rs(aggCurrComm));
-                            $('#erp_comm_remaining').text(Rs(aggRemaining));
-                            $('#erp_comm_customer_ratio').text(`Customer Paid: ${Rs(aggCustPaid)} (${aggSaleTotal > 0 ? Math.round((aggCustPaid/aggSaleTotal)*100) : 0}%)`);
-                            $('#erp_comm_customer_name').text(`Multiple Sales (${data.commission_details.length})`);
+                            }
+                            if (data.payment_accounts.bank && data.payment_accounts.bank.length > 0) {
+                                const bankSelect = $('#erp_bank_account_select');
+                                const curVal = bankSelect.val();
+                                bankSelect.empty();
+                                data.payment_accounts.bank.forEach(function(acc) {
+                                    bankSelect.append(`<option value="${acc.id}" data-balance="${acc.balance}">🏦 ${acc.title} (${acc.account_code}) — Rs. ${acc.balance_formatted}</option>`);
+                                });
+                                if (curVal && bankSelect.find(`option[value="${curVal}"]`).length) {
+                                    bankSelect.val(curVal);
+                                }
+                            }
+                        }
+
+                        const hasCommDetails = (data.commission_details && data.commission_details.length > 0);
+                        const hasCommMetrics = !!data.commission_metrics;
+                        
+                        let commAmount = p.commission;
+                        if (!commAmount && data.breakdown && data.breakdown.earnings) {
+                            commAmount = data.breakdown.earnings.commission;
+                        }
+                        const hasCommAmount = (commAmount && parseFloat(commAmount) > 0);
+
+                        if (p.payroll_type === 'commission' || hasCommAmount || hasCommMetrics || hasCommDetails) {
+                            $('#erp_earning_type_container').removeClass('d-none').css('display', 'block');
+                            $('#erp_earning_type_label').text('Commission Earned');
+                            $('#erp_earning_type_value').text(`Rs. ${parseFloat(commAmount || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
+                            
+                            // Populate Metrics
+                            if (data.commission_metrics) {
+                                const cm = data.commission_metrics;
+                                $('#erp_commission_metrics_box').removeClass('d-none').css('display', 'block');
+                                
+                                const formatVal = (val) => {
+                                    if (val === 'N/A' || isNaN(parseFloat(val))) return val;
+                                    return `Rs. ${parseFloat(val).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                                };
+
+                                $('#erp_sale_amount').text(formatVal(cm.sale_total));
+                                $('#erp_comm_total').text(formatVal(cm.total_commission));
+                                $('#erp_comm_paid').text(formatVal(cm.paid_so_far));
+                                $('#erp_comm_remaining').text(formatVal(cm.remaining_commission));
+                                $('#erp_comm_customer_ratio').text(`Customer Paid: ${formatVal(cm.customer_paid_total)} (${cm.payment_ratio})`);
+                                $('#erp_comm_customer_name').text(`Customer: ${cm.customer_name}`);
+                            } else if (hasCommDetails) {
+                                $('#erp_commission_metrics_box').removeClass('d-none').css('display', 'block');
+                                let aggSaleTotal = 0, aggMaxComm = 0, aggCustPaid = 0, aggCurrComm = 0, aggRemaining = 0;
+                                data.commission_details.forEach(d => {
+                                    if (d.meta && d.meta.max_commission !== undefined) {
+                                        aggSaleTotal   += parseFloat(d.meta.sale_total || 0);
+                                        aggMaxComm     += parseFloat(d.meta.max_commission || 0);
+                                        aggCustPaid    += parseFloat(d.meta.customer_paid_total || 0);
+                                        aggCurrComm    += parseFloat(d.meta.current_commission || 0);
+                                        aggRemaining   += parseFloat(d.meta.remaining_commission || 0);
+                                    } else {
+                                        aggCurrComm    += parseFloat(d.amount || 0);
+                                    }
+                                });
+                                const Rs = v => `Rs. ${parseFloat(v).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                                $('#erp_sale_amount').text(Rs(aggSaleTotal));
+                                $('#erp_comm_total').text(Rs(aggMaxComm));
+                                $('#erp_comm_paid').text(Rs(aggCurrComm));
+                                $('#erp_comm_remaining').text(Rs(aggRemaining));
+                                $('#erp_comm_customer_ratio').text(`Customer Paid: ${Rs(aggCustPaid)} (${aggSaleTotal > 0 ? Math.round((aggCustPaid/aggSaleTotal)*100) : 0}%)`);
+                                $('#erp_comm_customer_name').text(`Multiple Sales (${data.commission_details.length})`);
+                            } else {
+                                $('#erp_commission_metrics_box').addClass('d-none').hide();
+                            }
+
+                            // Populate individual items breakdown
+                            const itemsList = $('#erp_commission_items_list');
+                            const itemsUl = itemsList.find('ul');
+                            itemsUl.empty();
+                            if (hasCommDetails) {
+                                itemsList.removeClass('d-none').show();
+                                data.commission_details.forEach(detail => {
+                                    let metaHtml = '';
+                                    if (detail.meta && detail.meta.max_commission !== undefined) {
+                                        const saleTotal = parseFloat(detail.meta.sale_total || 0);
+                                        const custPaid = parseFloat(detail.meta.customer_paid_total || 0);
+                                        const maxComm = parseFloat(detail.meta.max_commission || 0);
+                                        const ratio = saleTotal > 0 ? (custPaid / saleTotal) * 100 : 0;
+                                        const alreadyPaid = parseFloat(detail.meta.paid_so_far || 0);
+                                        const currentComm = parseFloat(detail.meta.current_commission || detail.amount || 0);
+                                        const remaining = parseFloat(detail.meta.remaining_commission || 0);
+
+                                        metaHtml = `
+                                            <div class="mt-1 pb-1" style="font-size: 0.65rem; background: #f8fafc; border-radius: 4px; padding: 6px;">
+                                                <div class="row g-1 text-muted">
+                                                    <div class="col-6"><strong>Sale Amount:</strong> Rs. ${saleTotal.toLocaleString()}</div>
+                                                    <div class="col-6"><strong>Max Comm (Total):</strong> Rs. ${maxComm.toLocaleString()}</div>
+                                                    <div class="col-6"><strong>Cust. Paid:</strong> Rs. ${custPaid.toLocaleString()} (${Math.round(ratio)}%)</div>
+                                                    <div class="col-6 text-success"><strong>Current Comm:</strong> Rs. ${currentComm.toLocaleString()}</div>
+                                                    <div class="col-6 text-primary"><strong>Already Disbursed:</strong> Rs. ${alreadyPaid.toLocaleString()}</div>
+                                                    <div class="col-6 text-warning"><strong>Comm Remaining:</strong> Rs. ${remaining.toLocaleString()}</div>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }
+                                    itemsUl.append(`
+                                        <li class="mb-2 pb-1 border-bottom border-blue-100">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <span class="text-slate-700 fw-bold">${detail.name}</span>
+                                                <span class="text-blue-600 fw-bold">Rs. ${parseFloat(detail.amount).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                            </div>
+                                            ${metaHtml}
+                                        </li>
+                                    `);
+                                });
+                            } else {
+                                itemsList.addClass('d-none').hide();
+                            }
                         } else {
+                            $('#erp_earning_type_container').addClass('d-none').hide();
                             $('#erp_commission_metrics_box').addClass('d-none').hide();
                         }
 
-                        // Populate individual items breakdown
-                        const itemsList = $('#erp_commission_items_list');
-                        const itemsUl = itemsList.find('ul');
-                        itemsUl.empty();
-                        if (hasCommDetails) {
-                            itemsList.removeClass('d-none').show();
-                            data.commission_details.forEach(detail => {
-                                let metaHtml = '';
-                                if (detail.meta && detail.meta.max_commission !== undefined) {
-                                    const saleTotal = parseFloat(detail.meta.sale_total || 0);
-                                    const custPaid = parseFloat(detail.meta.customer_paid_total || 0);
-                                    const maxComm = parseFloat(detail.meta.max_commission || 0);
-                                    const ratio = saleTotal > 0 ? (custPaid / saleTotal) * 100 : 0;
-                                    const earnedSoFar = saleTotal > 0 ? (custPaid / saleTotal) * maxComm : 0;
-                                    const alreadyPaid = parseFloat(detail.meta.paid_so_far || 0);
-                                    const currentComm = parseFloat(detail.meta.current_commission || detail.amount || 0);
-                                    const remaining = parseFloat(detail.meta.remaining_commission || 0);
+                        // Allowances
+                        $('#erp_total_allowances').text(`Rs. ${parseFloat(p.allowances || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
 
-                                    metaHtml = `
-                                        <div class="mt-1 pb-1" style="font-size: 0.65rem; background: #f8fafc; border-radius: 4px; padding: 6px;">
-                                            <div class="row g-1 text-muted">
-                                                <div class="col-6"><strong>Sale Amount:</strong> Rs. ${saleTotal.toLocaleString()}</div>
-                                                <div class="col-6"><strong>Max Comm (Total):</strong> Rs. ${maxComm.toLocaleString()}</div>
-                                                <div class="col-12 mt-1">
-                                                    <strong>Cust Paid So Far:</strong> Rs. ${custPaid.toLocaleString()} 
-                                                    <span class="badge bg-secondary ms-1" style="font-size: 0.55rem;">${ratio.toFixed(1)}% of sale</span>
-                                                </div>
-                                            </div>
-                                            <div class="border-top mt-1 pt-1 row g-1">
-                                                <div class="col-12 text-primary" style="font-size: 0.6rem;">
-                                                    <i class="fa fa-info-circle me-1"></i>
-                                                    Earned (${ratio.toFixed(1)}% of max): Rs. ${earnedSoFar.toLocaleString()} 
-                                                    - Already Paid: Rs. ${alreadyPaid.toLocaleString()}
-                                                </div>
-                                                <div class="col-8 mt-1">
-                                                    <strong class="text-success">Yield This Month: Rs. ${currentComm.toLocaleString(undefined, {minimumFractionDigits: 2})}</strong>
-                                                </div>
-                                                <div class="col-4 mt-1 text-end text-warning fw-bold">
-                                                    Left: Rs. ${remaining.toLocaleString()}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                } else if(detail.meta && detail.meta.text_desc) {
-                                    metaHtml = `<div class="text-muted mt-1" style="font-size: 0.6rem;">${detail.meta.text_desc}</div>`;
-                                } else if (detail.description) {
-                                    metaHtml = `<div class="text-muted mt-1" style="font-size: 0.6rem;">${detail.description}</div>`;
-                                }
-                            
-                                itemsUl.append(`
-                                    <li class="border-bottom border-light pb-2 mb-2">
-                                        <div class="d-flex justify-content-between mb-0">
-                                            <span class="text-slate-600 fw-bold">${detail.name}</span>
-                                            <span class="fw-700 text-success">Rs. ${parseFloat(detail.amount).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
-                                        </div>
-                                        ${metaHtml}
-                                    </li>
-                                `);
+                        // Assigned & Worked Hours
+                        $('#erp_assigned_hours').text(`${stats.assigned_hours || 0} hrs`);
+                        $('#erp_worked_hours').text(`${stats.worked_hours || 0} hrs`);
+                        $('#erp_extra_hours').text(`${stats.extra_hours || 0} hrs`);
+                        $('#erp_late_early_minutes').text(`${stats.late_early_minutes || 0} mins`);
+
+                        // Deductions Section
+                        $('#erp_rule_deductions').text(`Rs. ${parseFloat(p.deductions || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
+                        $('#erp_attendance_deductions').text(`Rs. ${parseFloat(p.attendance_deductions || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
+                        $('#erp_cf_deductions').text(`Rs. ${parseFloat(p.carried_forward_deduction || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
+
+                        // Loan Info
+                        if (data.loan_info && data.loan_info.has_loan) {
+                            $('#erp_loan_installment').text(`Rs. ${parseFloat(data.loan_info.installment || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
+                        } else {
+                            $('#erp_loan_installment').text('Rs. 0.00');
+                        }
+
+                        // Absent Days List
+                        const absentContainer = $('#erp_absent_days_list');
+                        absentContainer.empty();
+                        
+                        let records = [];
+                        if (data.attendance_breakdown) {
+                            if (data.attendance_breakdown.absent_records) {
+                                records = data.attendance_breakdown.absent_records;
+                            } else if (p.payroll_type === 'daily' && data.attendance_breakdown.status && data.attendance_breakdown.status.toLowerCase() !== 'present') {
+                                records = [{
+                                    date: data.attendance_breakdown.formatted_date,
+                                    note: data.attendance_breakdown.status,
+                                    deduction: data.attendance_breakdown.total_deduction || 0
+                                }];
+                            }
+                        }
+                        
+                        if (records.length > 0) {
+                            records.forEach(day => {
+                                const deductionText = day.deduction > 0 ? `<span class="text-slate-500 ms-2" style="font-size: 0.75rem;">(-Rs. ${parseFloat(day.deduction).toLocaleString()})</span>` : '';
+                                absentContainer.append(`<div class="absent-day-item d-flex justify-content-between align-items-center mb-1">
+                                    <span><i class="fa fa-calendar-times text-slate-300 me-2"></i>${day.date}</span>
+                                    <div class="text-end">
+                                        <span class="text-red-500 fw-bold small">${day.note || day.status || 'Absent'}</span>
+                                        ${deductionText}
+                                    </div>
+                                </div>`);
                             });
                         } else {
-                            itemsList.addClass('d-none').hide();
+                            absentContainer.append('<div class="text-center py-2 bg-white rounded border border-dashed text-slate-400 small">No attendance deductions found</div>');
                         }
-                    } else {
-                        $('#erp_earning_type_container').addClass('d-none').hide();
-                        $('#erp_commission_metrics_box').addClass('d-none').hide();
-                    }
 
-                    $('#erp_total_allowances').text(`Rs. ${parseFloat(p.allowances).toLocaleString(undefined, {minimumFractionDigits: 2})}`);
-                    $('#erp_shift_hours').text(`${stats.assigned_hours}h`);
-                    $('#erp_worked_hours').text(`${stats.worked_hours}h`);
-                    $('#erp_attendance_pattern').text(stats.attendance_time_pattern);
-                    $('#erp_extra_hours_pattern').text(stats.extra_time_pattern);
+                        $('#erp_attendance_summary_pattern').text(stats.attendance_summary_pattern || '00 | 00 | 00');
 
-                    // Deductions Section — Loan
-                    const loanInfo = data.loan_info;
-                    const loanInst = loanInfo ? parseFloat(loanInfo.monthly_installment || 0) : parseFloat(stats.loan_installment || 0);
-                    $('#erp_loan_deduction').text(`Rs. ${loanInst.toLocaleString(undefined, {minimumFractionDigits: 2})}`);
+                        // Calculations
+                        calculateERPTotals();
+                        updateAccountBalancePreview();
 
-                    if (loanInfo && loanInst > 0) {
-                        const fmt = v => `Rs. ${parseFloat(v).toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-                        $('#erp_li_total').text(fmt(loanInfo.amount));
-                        $('#erp_li_remaining').text(fmt(loanInfo.remaining_amount));
-                        $('#erp_li_inst_left').text(`${loanInfo.remaining_installments} / ${loanInfo.total_installments || '?'}`);
-                        $('#erp_li_progress_bar').css('width', loanInfo.progress_percentage + '%');
-                        $('#erp_li_progress_label').text(loanInfo.progress_percentage + '% repaid');
-                        $('#erp_li_end_month').text(loanInfo.expected_end_month ? 'Ends ' + loanInfo.expected_end_month : '');
-                        $('#erp_loan_info_card').removeClass('d-none');
-                        $('#erp_loan_desc').text(`Auto-deducting Rs. ${loanInst.toLocaleString()} this month`);
-                    } else {
-                        $('#erp_loan_info_card').addClass('d-none');
-                        $('#erp_loan_desc').text(loanInst > 0 ? 'Active loan deduction' : 'No active salary-deduction loan');
-                    }
-
-                    // Absent Days List
-                    const absentContainer = $('#erp_absent_days_list');
-                    absentContainer.empty();
-                    
-                    let records = [];
-                    if (data.attendance_breakdown) {
-                        if (data.attendance_breakdown.absent_records) {
-                            records = data.attendance_breakdown.absent_records;
-                        } else if (p.payroll_type === 'daily' && data.attendance_breakdown.status && data.attendance_breakdown.status.toLowerCase() !== 'present') {
-                            records = [{
-                                date: data.attendance_breakdown.formatted_date,
-                                note: data.attendance_breakdown.status,
-                                deduction: data.attendance_breakdown.total_deduction || 0
-                            }];
-                        }
-                    }
-                    
-                    if (records.length > 0) {
-                        records.forEach(day => {
-                            const deductionText = day.deduction > 0 ? `<span class="text-slate-500 ms-2" style="font-size: 0.75rem;">(-Rs. ${parseFloat(day.deduction).toLocaleString()})</span>` : '';
-                            absentContainer.append(`<div class="absent-day-item d-flex justify-content-between align-items-center mb-1">
-                                <span><i class="fa fa-calendar-times text-slate-300 me-2"></i>${day.date}</span>
-                                <div class="text-end">
-                                    <span class="text-red-500 fw-bold small">${day.note || day.status || 'Absent'}</span>
-                                    ${deductionText}
-                                </div>
-                            </div>`);
-                        });
-                    } else {
-                        absentContainer.append('<div class="text-center py-2 bg-white rounded border border-dashed text-slate-400 small">No attendance deductions found</div>');
-                    }
-
-                    $('#erp_attendance_summary_pattern').text(stats.attendance_summary_pattern);
-
-                    // Calculations
-                    calculateERPTotals();
-
-                    // Show Modal
-                    $('#payrollPayModal').modal('show');
-                });
+                        // Show Modal
+                        $('#payrollPayModal').modal('show');
+                    })
+                    .fail(function(xhr) {
+                        calculateERPTotals();
+                        updateAccountBalancePreview();
+                        $('#payrollPayModal').modal('show');
+                    })
+                    .always(function() {
+                        btn.prop('disabled', false).html(originalHtml);
+                    });
             });
 
             // Dynamic Recalculation
             $('#erp_bonus_input, #erp_manual_deduction_input').on('input', function() {
                 calculateERPTotals();
+                updateAccountBalancePreview();
             });
 
             function calculateERPTotals() {
@@ -2507,8 +2620,8 @@
                     comm = activePayrollData.breakdown.earnings.commission || 0;
                 }
 
-                const totalGross = parseFloat(p.basic_salary) + parseFloat(p.allowances) + parseFloat(comm) + bonus;
-                const totalDeductions = parseFloat(p.deductions) + parseFloat(p.attendance_deductions) + parseFloat(p.carried_forward_deduction) + manualDeduction;
+                const totalGross = parseFloat(p.basic_salary || 0) + parseFloat(p.allowances || 0) + parseFloat(comm) + bonus;
+                const totalDeductions = parseFloat(p.deductions || 0) + parseFloat(p.attendance_deductions || 0) + parseFloat(p.carried_forward_deduction || 0) + manualDeduction;
                 const netPayable = Math.max(0, totalGross - totalDeductions);
 
                 $('#erp_total_gross').text(`Rs. ${totalGross.toLocaleString(undefined, {minimumFractionDigits: 2})}`);
@@ -2516,43 +2629,51 @@
                 $('#erp_net_payable').text(`Rs. ${netPayable.toLocaleString(undefined, {minimumFractionDigits: 2})}`);
             }
 
-            // Toggle Cash vs Bank Account selection in payment modal
-            $(document).on('change', 'input[name="payment_method"]', function() {
-                if ($(this).val() === 'cash') {
-                    $('#erp_cash_account_wrapper').removeClass('d-none').show();
-                    $('#erp_bank_account_wrapper').addClass('d-none').hide();
-                    $('#erp_bank_details_row').addClass('d-none').hide();
-                } else {
-                    $('#erp_cash_account_wrapper').addClass('d-none').hide();
-                    $('#erp_bank_account_wrapper').removeClass('d-none').show();
-                    $('#erp_bank_details_row').removeClass('d-none').show();
-                }
-            });
-
             // Form Submission with Confirmation (Cash in Hand vs Bank Account prompt)
-            $('#payrollPayForm').on('submit', function(e) {
+            $('#payrollPayForm').off('submit').on('submit', function(e) {
                 e.preventDefault();
                 const form = $(this);
                 const net = $('#erp_net_payable').text();
                 const method = $('input[name="payment_method"]:checked').val() || 'cash';
-                const accountTitle = (method === 'cash')
-                    ? $('#erp_cash_account_select option:selected').text().split('—')[0].trim()
-                    : $('#erp_bank_account_select option:selected').text().split('—')[0].trim();
+                const select = (method === 'cash') ? $('#erp_cash_account_select') : $('#erp_bank_account_select');
+                const accountId = select.val();
+                const accountTitle = select.find('option:selected').text().split('—')[0].trim();
+                const empName = $('#erp_emp_name').text();
+                const payDate = $('#erp_payment_date').val();
+
+                if (!accountId) {
+                    Swal.fire('Account Required', 'Please select the ' + (method === 'cash' ? 'Cash' : 'Bank') + ' account to disburse from.', 'warning');
+                    return;
+                }
+
+                const voucherTypeLabel = (method === 'cash') ? 'Cash Payment Voucher (CPV)' : 'Bank Payment Voucher (BPV)';
 
                 Swal.fire({
-                    title: '<span class="text-emerald-600 fw-bold">Confirm Salary Payment</span>',
-                    html: `You are about to record a salary payment of <b>${net}</b> via <b>${method === 'cash' ? 'Cash in Hand' : 'Bank Account'} (${accountTitle})</b> for <b>${$('#erp_emp_name').text()}</b>.<br><br>` +
-                          `<small class="text-muted">This will generate a ${method === 'cash' ? 'Cash Payment Voucher (CPV)' : 'Bank Payment Voucher (BPV)'} and finalize payroll records.</small>`,
+                    title: '<span style="color:#059669; font-weight:700;">Confirm Salary Disbursement</span>',
+                    html: `<div class="text-left p-3 rounded" style="background:#f8fafc; font-size: 0.9rem;">
+                            <div class="mb-2"><strong>Employee:</strong> <span class="text-dark">${empName}</span></div>
+                            <div class="mb-2"><strong>Net Payable Salary:</strong> <span class="text-success font-weight-bold">${net}</span></div>
+                            <div class="mb-2"><strong>Payment Method:</strong> <span class="badge ${method === 'cash' ? 'badge-success' : 'badge-primary'}">${method === 'cash' ? 'Cash in Hand' : 'Bank Account'}</span></div>
+                            <div class="mb-2"><strong>Paying Account:</strong> <span class="text-dark font-weight-bold">${accountTitle}</span></div>
+                            <div class="mb-2"><strong>Payment Date:</strong> <span class="text-dark">${payDate}</span></div>
+                            <hr class="my-2">
+                            <small class="text-muted"><i class="fa fa-info-circle text-primary mr-1"></i> A <b>${voucherTypeLabel}</b> will be generated and posted in the financial ledger. The salary amount will be automatically deducted from <b>${accountTitle}</b>.</small>
+                           </div>`,
                     icon: 'question',
                     showCancelButton: true,
                     confirmButtonColor: '#10b981',
                     cancelButtonColor: '#6c757d',
-                    confirmButtonText: '<i class="fa fa-check-circle me-1"></i> Confirm & Disburse'
+                    confirmButtonText: '<i class="fa fa-check-circle mr-1"></i> Confirm & Disburse',
+                    cancelButtonText: '<i class="fa fa-times mr-1"></i> Cancel'
                 }).then((result) => {
                     if (result.isConfirmed) {
+                        const submitBtn = form.find('button[type="submit"]');
+                        const originalBtnHtml = submitBtn.html();
+                        submitBtn.prop('disabled', true).html('<i class="fa fa-spinner fa-spin mr-1"></i> Processing...');
+
                         Swal.fire({
-                            title: 'Processing Payment...',
-                            text: 'Creating voucher and updating financial records...',
+                            title: 'Disbursing Salary...',
+                            text: 'Creating ERP voucher and deducting from account...',
                             allowOutsideClick: false,
                             didOpen: () => Swal.showLoading()
                         });
@@ -2561,18 +2682,34 @@
                             url: form.attr('action'),
                             type: 'POST',
                             data: form.serialize(),
+                            headers: {
+                                'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content')
+                            },
                             success: function(response) {
+                                $('#payrollPayModal').modal('hide');
                                 if (response.success) {
-                                    Swal.fire('Success', response.success, 'success').then(() => location.reload());
+                                    Swal.fire({
+                                        title: 'Payment Successful!',
+                                        html: response.success,
+                                        icon: 'success',
+                                        confirmButtonColor: '#10b981'
+                                    }).then(() => {
+                                        location.reload();
+                                    });
                                 }
                             },
                             error: function(xhr) {
+                                submitBtn.prop('disabled', false).html(originalBtnHtml);
                                 let error = 'Failed to process payment.';
                                 if (xhr.responseJSON && xhr.responseJSON.error) error = xhr.responseJSON.error;
                                 else if (xhr.responseJSON && xhr.responseJSON.errors) {
                                     error = Object.values(xhr.responseJSON.errors).flat().join('<br>');
                                 }
-                                Swal.fire('Error', error, 'error');
+                                Swal.fire({
+                                    title: 'Payment Error',
+                                    html: error,
+                                    icon: 'error'
+                                });
                             }
                         });
                     }

@@ -523,6 +523,22 @@ class PayrollController extends Controller
                 'deduction_details' => $deductionDetails,
                 'attendance_breakdown' => $attendanceBreakdown,
                 'loan_info' => $loanInfo,
+                'payment_accounts' => [
+                    'cash' => $cashAccounts->map(fn($a) => [
+                        'id' => $a->id,
+                        'title' => $a->title,
+                        'account_code' => $a->account_code,
+                        'balance' => (float)($a->calculated_balance ?? $a->current_balance),
+                        'balance_formatted' => number_format($a->calculated_balance ?? $a->current_balance, 2),
+                    ])->values(),
+                    'bank' => $bankAccounts->map(fn($a) => [
+                        'id' => $a->id,
+                        'title' => $a->title,
+                        'account_code' => $a->account_code,
+                        'balance' => (float)($a->calculated_balance ?? $a->current_balance),
+                        'balance_formatted' => number_format($a->calculated_balance ?? $a->current_balance, 2),
+                    ])->values(),
+                ],
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -1517,15 +1533,25 @@ class PayrollController extends Controller
 
             DB::commit();
 
-            $loanNote = $loanDeductionAmount > 0
-                ? " (includes Rs. " . number_format($loanDeductionAmount, 2) . " loan deduction)"
-                : "";
-
+            $payingAccount->refresh();
+            $newBalance = (float)($payingAccount->calculated_balance ?? $payingAccount->current_balance);
+            $voucherNo = $voucher ? $voucher->voucher_no : 'N/A';
+            $voucherId = $voucher ? $voucher->id : null;
             $modeLabel = ($paymentMethod === 'bank') ? "Bank ({$payingAccount->title})" : "Cash in Hand ({$payingAccount->title})";
 
             return response()->json([
-                'success' => "💸 <b>Payment Recorded!</b> Rs. " . number_format($netSalary, 2) . " paid via <b>{$modeLabel}</b> for <b>" . $payroll->employee->full_name . "</b>. Voucher <b>{$voucher->voucher_no}</b> posted.{$loanNote}",
-                'reload'  => true,
+                'success' => "💸 <b>Salary Disbursed Successfully!</b><br>" .
+                             "Amount: <b>Rs. " . number_format($netSalary, 2) . "</b><br>" .
+                             "Disbursed From: <b>{$modeLabel}</b><br>" .
+                             "Account Balance: <b>Rs. " . number_format($newBalance, 2) . "</b><br>" .
+                             ($voucher ? "Payment Voucher: <b><a href='/vouchers/{$voucherId}' target='_blank' style='color:#2563eb; text-decoration:underline;'>{$voucherNo}</a></b> posted to ledger." : "") .
+                             $loanNote,
+                'voucher_no'     => $voucherNo,
+                'voucher_id'     => $voucherId,
+                'paying_account' => $payingAccount->title,
+                'new_balance'    => $newBalance,
+                'net_salary'     => $netSalary,
+                'reload'         => true,
             ]);
         } catch (\Exception $e) {
             DB::rollBack();
