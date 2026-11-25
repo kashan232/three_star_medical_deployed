@@ -921,42 +921,54 @@ class SaleController extends Controller
         $sale = Sale::with(['customer_relation.salesOfficer', 'items.batches', 'items.product.unit', 'items.product.brand'])->findOrFail($id);
         $items = $this->_getSaleItems($sale);
 
-        // Calculate Balances for Invoice
+        // ─── BF Balance: Invoice create hone se pehle ka complete ledger balance ───
         $previousBalance = 0;
-        $currentBalance = 0;
+        $currentBalance  = 0;
 
-        // Find the Journal Entry for this Sale (Debit side)
-        // We look for where source is Sale and it's a Debit (Customer side)
-        $journalEntry = \App\Models\JournalEntry::where('source_type', \App\Models\Sale::class)
-            ->where('source_id', $sale->id)
-            ->where('debit', '>', 0) // The debit to customer
-            ->first();
+        $customer   = $sale->customer_relation;
+        $customerId = $sale->customer_id;
 
-        if ($journalEntry && $sale->customer_id) {
-            // Calculate Previous Balance: Sum of (Dr - Cr) for all entries BEFORE this one
-            $previousBalance = \App\Models\JournalEntry::where('party_type', \App\Models\Customer::class)
-                ->where('party_id', $sale->customer_id)
-                ->where('id', '<', $journalEntry->id)
-                ->sum(\Illuminate\Support\Facades\DB::raw('debit - credit'));
+        if ($customerId && $customer) {
 
-            // Current Balance (after this bill, before payment if payment is separate)
-            $currentBalance = $previousBalance + $sale->total_net;
+            // 1. Find the CustomerLedger entry that belongs to THIS sale
+            //    (the row inserted by legacyLedgerInvoice when sale was posted)
+            $thisSaleLedgerEntry = \App\Models\CustomerLedger::where('customer_id', $customerId)
+                ->where('source_type', \App\Models\Sale::class)
+                ->where('source_id', $sale->id)
+                ->orderBy('id', 'asc')
+                ->first();
 
-            // Note: If payment was made, it's usually a separate receipt voucher (even if immediate).
-            // So "Current Balance" here naturally excludes the payment unless we look for payment next.
-            // But the user wants "Previous Bal +/- Current Amount = Net".
-        } else {
-            // Fallback if no journal entry (legacy or draft)
-            $customer = $sale->customer_relation;
-            $previousBalance = $customer->opening_balance ?? 0;
-            // This is an estimate if we can't find the entry
+            if ($thisSaleLedgerEntry) {
+                // previous_balance on that row = balance before this sale was posted
+                $previousBalance = (float) $thisSaleLedgerEntry->previous_balance;
+            } else {
+                // 2. Fallback: closing_balance of last CustomerLedger entry
+                //    whose id is LESS than any entry created at/after this sale
+                $minIdAtSale = \App\Models\CustomerLedger::where('customer_id', $customerId)
+                    ->where('created_at', '>=', $sale->created_at)
+                    ->min('id');
+
+                $lastEntryBeforeSale = \App\Models\CustomerLedger::where('customer_id', $customerId)
+                    ->when($minIdAtSale, fn($q) => $q->where('id', '<', $minIdAtSale))
+                    ->orderBy('id', 'desc')
+                    ->first();
+
+                if ($lastEntryBeforeSale) {
+                    $previousBalance = (float) $lastEntryBeforeSale->closing_balance;
+                } else {
+                    // 3. No prior ledger entries — use customer opening balance
+                    $previousBalance = (float) ($customer->opening_balance ?? 0);
+                }
+            }
+
+            $currentBalance = $previousBalance + (float) $sale->total_net;
         }
 
         return view('admin_panel.sale.saleinvoice', [
-            'sale' => $sale,
-            'saleItems' => $items,
+            'sale'            => $sale,
+            'saleItems'       => $items,
             'previousBalance' => $previousBalance,
-            'currentBalance' => $currentBalance,
+            'currentBalance'  => $currentBalance,
         ]);
     }
 

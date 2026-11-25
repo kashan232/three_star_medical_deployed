@@ -149,13 +149,13 @@ if (!$logoSrc) {
       <h1>THREE STARS MEDICAL SUPPLIES</h1>
       <div class="addr">
         <strong>{{ $sale->branch->name ?? 'Head Office' }} :</strong> {{ $sale->branch->address ?? 'M17-18 Mezanine Floor Seth Centre 10 Syed Mouj Darya Road (Edward Road) Lahore.' }}<br>
-        <strong>Phone :</strong> {{ $sale->branch->number ?? '0092-42-37353433' }} &nbsp; | &nbsp; <strong>GST Invoice</strong>
+        <strong>Phone :</strong> {{ $sale->branch->number ?? '0092-42-37353433' }}
       </div>
     </div>
   </div>
 
   <!-- TITLE -->
-  <div class="doc-title">Sales Invoice</div>
+  <div class="doc-title">Estimate</div>
 
   <!-- PARTY + BARCODE -->
   <div class="party-meta">
