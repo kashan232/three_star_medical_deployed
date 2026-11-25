@@ -484,6 +484,10 @@ class PayrollController extends Controller
                 ];
             }
 
+            // Fetch payment accounts for modal payment panel
+            $branchId = auth()->user()?->getBranchId();
+            [$cashAccounts, $bankAccounts] = $this->getPaymentAccounts($branchId);
+
             return response()->json([
                 'payroll' => $payroll,
                 'payroll_period' => $payrollPeriod,

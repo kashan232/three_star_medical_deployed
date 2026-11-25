@@ -1,4 +1,4 @@
-@php
+﻿@php
 if (!function_exists('numberToWords')) {
     function numberToWords($num) {
         if (!$num || $num == 0) return "ZERO RUPEES ONLY";
@@ -149,7 +149,7 @@ if (!$logoSrc) {
       <h1>THREE STARS MEDICAL SUPPLIES</h1>
       <div class="addr">
         <strong>{{ $sale->branch->name ?? 'Head Office' }} :</strong> {{ $sale->branch->address ?? 'M17-18 Mezanine Floor Seth Centre 10 Syed Mouj Darya Road (Edward Road) Lahore.' }}<br>
-        <strong>Phone :</strong> {{ $sale->branch->number ?? '0092-42-37353433' }}
+        <strong>Phone :</strong> {{ $sale->branch->number ?? '0092-42-37353433' }} &nbsp;|&nbsp; <strong>WhatsApp :</strong> 0300-4811178
       </div>
     </div>
   </div>
@@ -249,7 +249,7 @@ if (!$logoSrc) {
         } else {
             $freeDisp = $freePcs > 0 ? $freePcs : '-';
         }
-        // GST per item — try to read directly; fall back to calculating from total
+        // GST per item â€” try to read directly; fall back to calculating from total
         $gstPct = (float)($item['gst_percent'] ?? $item['gst'] ?? 0);
         $gstAmt = (float)($item['gst_amount'] ?? 0);
         if ($gstAmt == 0 && $gstPct > 0) {
@@ -276,10 +276,10 @@ if (!$logoSrc) {
         <td class="c"><strong>{{ $qtyDisp }}</strong></td>
         <td class="c">{{ $freeDisp }}</td>
         <td class="r">{{ number_format($item['price'], 2) }}</td>
-        <td class="r">{{ $item['discount_amount'] > 0 ? number_format($item['discount_amount'], 2) : '—' }}</td>
+        <td class="r">{{ $item['discount_amount'] > 0 ? number_format($item['discount_amount'], 2) : 'â€”' }}</td>
         @if($hasGst)
-        <td class="c">{{ $gstPct > 0 ? (fmod($gstPct, 1) == 0 ? number_format($gstPct, 0).'%' : number_format($gstPct, 1).'%') : '—' }}</td>
-        <td class="r">{{ $gstAmt > 0 ? number_format($gstAmt, 2) : '—' }}</td>
+        <td class="c">{{ $gstPct > 0 ? (fmod($gstPct, 1) == 0 ? number_format($gstPct, 0).'%' : number_format($gstPct, 1).'%') : 'â€”' }}</td>
+        <td class="r">{{ $gstAmt > 0 ? number_format($gstAmt, 2) : 'â€”' }}</td>
         @endif
         <td class="r"><strong>{{ number_format($item['total'], 2) }}</strong></td>
       </tr>
@@ -290,7 +290,7 @@ if (!$logoSrc) {
         <td class="c">
           {{ $grandPackPieces > 0 ? "$grandBox.$grandPackPieces" : $grandBox }} <small>B.P</small>
         </td>
-        <td class="c">{{ $grandFree > 0 ? $grandFree : '—' }}</td>
+        <td class="c">{{ $grandFree > 0 ? $grandFree : 'â€”' }}</td>
         @if($hasGst)
         <td colspan="4"></td>
         @else
