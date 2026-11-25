@@ -944,27 +944,37 @@
         `;
 
                 // ── KPI Cards ─────────────────────────────────────────────────
+                const isDual = !!v.has_twin_customer;
                 const netBal = cb;
-                const balLabel = netBal > 0.01 ? 'Net Payable (Cr)' : (netBal < -0.01 ? 'Advance Paid (Dr)' : 'Settled ✔');
-                const balKlass = netBal > 0.01 ? 'k-red' : 'k-green';
-                const crLabel = v.has_twin_customer ? 'Total Cr (Purchases + Sale Ret.)' : 'Purchases (Cr)';
-                const drLabel = v.has_twin_customer ? 'Total Dr (Payments + Sales)' : 'Payments (Dr)';
+                let balLabel, balKlass, crLabel, drLabel;
+
+                if (isDual) {
+                    balLabel = netBal > 0.01 ? 'Net Receivable (Dr)' : (netBal < -0.01 ? 'Net Payable (Cr)' : 'Settled ✔');
+                    balKlass = netBal > 0.01 ? 'k-red' : 'k-green';
+                    drLabel  = 'Total Dr (Sales + Payments)';
+                    crLabel  = 'Total Cr (Purchases + Receipts)';
+                } else {
+                    balLabel = netBal > 0.01 ? 'Net Payable (Cr)' : (netBal < -0.01 ? 'Advance Paid (Dr)' : 'Settled ✔');
+                    balKlass = netBal > 0.01 ? 'k-red' : 'k-green';
+                    crLabel  = 'Purchases (Cr)';
+                    drLabel  = 'Payments (Dr)';
+                }
 
                 document.getElementById('kpiRow').innerHTML = `
             <div class="kpi-box k-blue">
                 <div class="kpi-lbl">Opening Balance</div>
                 <div class="kpi-val">Rs ${fmt(Math.abs(ob))}</div>
-                <div class="kpi-sub">${ob >= 0 ? 'Payable' : 'Advance'}</div>
+                <div class="kpi-sub">${isDual ? (ob >= 0 ? 'Receivable (Dr)' : 'Payable (Cr)') : (ob >= 0 ? 'Payable (Cr)' : 'Advance (Dr)')}</div>
             </div>
             <div class="kpi-box k-sky">
-                <div class="kpi-lbl">${crLabel}</div>
-                <div class="kpi-val" style="color:var(--red)">Rs ${fmt(res.total_credit)}</div>
-                <div class="kpi-sub">Credit entries</div>
+                <div class="kpi-lbl">${isDual ? drLabel : crLabel}</div>
+                <div class="kpi-val" style="color:var(--red)">Rs ${fmt(isDual ? res.total_debit : res.total_credit)}</div>
+                <div class="kpi-sub">${isDual ? 'Debit entries' : 'Credit entries'}</div>
             </div>
             <div class="kpi-box k-green">
-                <div class="kpi-lbl">${drLabel}</div>
-                <div class="kpi-val" style="color:var(--green)">Rs ${fmt(res.total_debit)}</div>
-                <div class="kpi-sub">Debit entries</div>
+                <div class="kpi-lbl">${isDual ? crLabel : drLabel}</div>
+                <div class="kpi-val" style="color:var(--green)">Rs ${fmt(isDual ? res.total_credit : res.total_debit)}</div>
+                <div class="kpi-sub">${isDual ? 'Credit entries' : 'Debit entries'}</div>
             </div>
             <div class="kpi-box k-amber">
                 <div class="kpi-lbl">Transactions</div>
@@ -973,7 +983,7 @@
             </div>
             <div class="kpi-box ${balKlass}">
                 <div class="kpi-lbl">Closing Balance</div>
-                <div class="kpi-val" style="color:${netBal > 0.01 ? 'var(--red)' : 'var(--green)'}">Rs ${fmt(Math.abs(cb))}</div>
+                <div class="kpi-val" style="color:${(isDual ? netBal > 0.01 : netBal > 0.01) ? 'var(--red)' : 'var(--green)'}">Rs ${fmt(Math.abs(cb))}</div>
                 <div class="kpi-sub">${balLabel}</div>
             </div>
         `;
@@ -982,18 +992,26 @@
                 let html = '';
 
                 // Opening row
-                const obClass = ob > 0.01 ? 'bal-cr' : (ob < -0.01 ? 'bal-dr' : 'bal-zero');
-                const obLabel = ob > 0.01 ? 'Cr' : (ob < -0.01 ? 'Dr' : '—');
-                const obDr = ob < -0.01 ? `Rs ${fmt(Math.abs(ob))}` : '—';
-                const obCr = ob > 0.01 ? `Rs ${fmt(Math.abs(ob))}` : '—';
+                let obClass, obLabel, obDr, obCr;
+                if (isDual) {
+                    obClass = ob > 0.01 ? 'bal-dr' : (ob < -0.01 ? 'bal-cr' : 'bal-zero');
+                    obLabel = ob > 0.01 ? 'Dr' : (ob < -0.01 ? 'Cr' : '—');
+                    obDr = ob > 0.01 ? `Rs ${fmt(Math.abs(ob))}` : '—';
+                    obCr = ob < -0.01 ? `Rs ${fmt(Math.abs(ob))}` : '—';
+                } else {
+                    obClass = ob > 0.01 ? 'bal-cr' : (ob < -0.01 ? 'bal-dr' : 'bal-zero');
+                    obLabel = ob > 0.01 ? 'Cr' : (ob < -0.01 ? 'Dr' : '—');
+                    obDr = ob < -0.01 ? `Rs ${fmt(Math.abs(ob))}` : '—';
+                    obCr = ob > 0.01 ? `Rs ${fmt(Math.abs(ob))}` : '—';
+                }
                 html += `
             <tr class="row-opening">
                 <td>—</td>
                 <td>—</td>
                 <td><span class="tx-type tx-journal">B/F</span></td>
                 <td>Opening Balance Brought Forward</td>
-                <td class="tr ${ob < -0.01 ? 'amt-dr' : 'amt-nil'}">${obDr}</td>
-                <td class="tr ${ob > 0.01 ? 'amt-cr' : 'amt-nil'}">${obCr}</td>
+                <td class="tr ${isDual ? (ob > 0.01 ? 'amt-dr' : 'amt-nil') : (ob < -0.01 ? 'amt-dr' : 'amt-nil')}">${obDr}</td>
+                <td class="tr ${isDual ? (ob < -0.01 ? 'amt-cr' : 'amt-nil') : (ob > 0.01 ? 'amt-cr' : 'amt-nil')}">${obCr}</td>
                 <td class="tr ${obClass}">
                     Rs ${fmt(Math.abs(ob))}
                     <small style="font-size:.7em;opacity:.7">${obLabel}</small>
@@ -1015,8 +1033,13 @@
                         const dr = parseFloat(t.debit || 0);
                         const cr = parseFloat(t.credit || 0);
                         const bal = parseFloat(t.balance || 0);
-                        const bc = balClass(bal);
-                        const bl = bal > 0.01 ? 'Cr' : (bal < -0.01 ? 'Dr' : '—');
+                        // For dual parties use customer convention: positive balance = Dr (receivable)
+                        const bc = isDual
+                            ? (Math.abs(bal) < 0.01 ? 'bal-zero' : bal > 0 ? 'bal-dr' : 'bal-cr')
+                            : balClass(bal);
+                        const bl = isDual
+                            ? (bal > 0.01 ? 'Dr' : (bal < -0.01 ? 'Cr' : '—'))
+                            : (bal > 0.01 ? 'Cr' : (bal < -0.01 ? 'Dr' : '—'));
 
                         html += `
                     <tr>

@@ -318,13 +318,13 @@ class TransactionService
                 'narration'  => "Payable to Vendor " . ($purchase->vendor->name ?? ''),
             ];
 
-            // 3. Voucher Header for pure purchase
+            // 3. Voucher Header for pure purchase (Internal GL voucher; do not attach Vendor to header to prevent duplicate VendorLedger entry)
             $voucherData = [
                 'voucher_type' => \App\Models\VoucherMaster::TYPE_JOURNAL, // Purchase is basic journal
                 'date'         => $purchase->purchase_date ? \Carbon\Carbon::parse($purchase->purchase_date)->format('Y-m-d') : now()->format('Y-m-d'),
                 'status'       => \App\Models\VoucherMaster::STATUS_POSTED,
-                'party_type'   => \App\Models\Vendor::class,
-                'party_id'     => $purchase->vendor_id,
+                'party_type'   => null,
+                'party_id'     => null,
                 'branch_id'    => $purchase->branch_id,
                 'remarks'      => "Purchase Voucher #{$purchase->invoice_no}",
             ];
@@ -354,13 +354,13 @@ class TransactionService
                     'narration'  => "Payable Extra Cost to Vendor " . ($purchase->vendor->name ?? ''),
                 ];
 
-                // Header for Expense Ticket
+                // Header for Expense Ticket (GL only, party_type null to prevent duplicate VendorLedger entry)
                 $expenseData = [
                     'voucher_type' => \App\Models\VoucherMaster::TYPE_EXPENSE,
                     'date'         => $purchase->purchase_date ? \Carbon\Carbon::parse($purchase->purchase_date)->format('Y-m-d') : now()->format('Y-m-d'),
                     'status'       => \App\Models\VoucherMaster::STATUS_POSTED,
-                    'party_type'   => \App\Models\Vendor::class,
-                    'party_id'     => $purchase->vendor_id,
+                    'party_type'   => null,
+                    'party_id'     => null,
                     'branch_id'    => $purchase->branch_id,
                     'remarks'      => "Purchase Extra Cost (Freight) for Invoice #{$purchase->invoice_no}",
                 ];
@@ -393,13 +393,13 @@ class TransactionService
                     'narration'  => "Payable Freight Charges to Vendor " . ($purchase->vendor->name ?? ''),
                 ];
 
-                // Header for Expense Ticket
+                // Header for Expense Ticket (GL only, party_type null to prevent duplicate VendorLedger entry)
                 $freightData = [
                     'voucher_type' => \App\Models\VoucherMaster::TYPE_EXPENSE,
                     'date'         => $purchase->purchase_date ? \Carbon\Carbon::parse($purchase->purchase_date)->format('Y-m-d') : now()->format('Y-m-d'),
                     'status'       => \App\Models\VoucherMaster::STATUS_POSTED,
-                    'party_type'   => \App\Models\Vendor::class,
-                    'party_id'     => $purchase->vendor_id,
+                    'party_type'   => null,
+                    'party_id'     => null,
                     'branch_id'    => $purchase->branch_id,
                     'remarks'      => "Purchase Freight Charges for Invoice #{$purchase->invoice_no}",
                 ];

@@ -2056,6 +2056,20 @@ class ReportingController extends Controller
             $vendorOpeningBalance = $lastVendEntry
                 ? (float)$lastVendEntry->closing_balance
                 : (float)($twinVendor->opening_balance ?? 0);
+
+            if ($vendorOpeningBalance == 0 && (float)($twinVendor->opening_balance ?? 0) != 0) {
+                $hasRealTxBeforeStart = DB::table('vendor_ledgers')
+                    ->where('vendor_id', $twinVendor->id)
+                    ->whereNull('deleted_at')
+                    ->where(function($q) {
+                        $q->where('debit', '>', 0)->orWhere('credit', '>', 0);
+                    })
+                    ->whereDate('created_at', '<', $start)
+                    ->exists();
+                if (!$hasRealTxBeforeStart) {
+                    $vendorOpeningBalance = (float)($twinVendor->opening_balance ?? 0);
+                }
+            }
         }
         $netOpeningBalance = $openingBalance - $vendorOpeningBalance;
 
@@ -2172,6 +2186,9 @@ class ReportingController extends Controller
                 $diff  = $close - $prev;
                 $dr = max(0.0, $diff);
                 $cr = max(0.0, -$diff);
+                if ($dr == 0 && $cr == 0 && (empty(trim($desc)) || strtolower(trim($desc)) === 'purchase / payment')) {
+                    continue;
+                }
                 $runningBalance += $diff;
             } else {
                 $vdr = (float)($row->debit  ?? 0);
@@ -2181,6 +2198,9 @@ class ReportingController extends Controller
                     $vcr = max(0.0, $d2); $vdr = max(0.0, -$d2);
                 }
                 $dr = $vdr; $cr = $vcr;
+                if ($dr == 0 && $cr == 0 && (empty(trim($desc)) || strtolower(trim($desc)) === 'purchase / payment')) {
+                    continue;
+                }
                 $runningBalance += ($dr - $cr);
             }
 
@@ -2209,7 +2229,7 @@ class ReportingController extends Controller
             $transactions[] = [
                 'date'        => \Carbon\Carbon::parse($row->created_at)->format('d/m/Y'),
                 'invoice'     => $ref !== '-' ? strtoupper(str_replace('#', '', trim($ref))) : '-',
-                'description' => ($row->_src === 'vendor' ? '[Purchase] ' : '') . $desc,
+                'description' => ($row->_src === 'vendor' && !str_starts_with($desc, '[Purchase') && !str_starts_with($desc, '[Vendor') ? '[Purchase] ' : '') . $desc,
                 'type'        => $type,
                 'debit'       => round($dr, 2),
                 'credit'      => round($cr, 2),
@@ -3004,6 +3024,26 @@ class ReportingController extends Controller
         $vendModel = \App\Models\Vendor::find($vendorId);
         $twinCustomer = $vendModel ? $dualService->findTwinCustomer($vendModel) : null;
 
+        // If vendor is also a customer, use unified combined ledger data
+        if ($twinCustomer) {
+            $custReq = new Request(array_merge($request->all(), ['customer_id' => $twinCustomer->id]));
+            $custData = $this->buildCustomerLedgerData($custReq);
+            if (is_array($custData)) {
+                $custData['vendor'] = [
+                    'id'                => $vendor->id,
+                    'vendor_id'         => $vendor->vendor_code ?? $vendor->id,
+                    'name'              => $vendor->name,
+                    'mobile'            => $vendor->phone   ?? '-',
+                    'address'           => $vendor->address ?? '-',
+                    'opening_balance'   => $vendor->opening_balance ?? 0,
+                    'has_twin_customer' => true,
+                    'twin_customer_name'=> $twinCustomer->customer_name,
+                ];
+                $custData['is_dual'] = true;
+                return $custData;
+            }
+        }
+
         // ── 2. Opening balance ─────────────────────────────────────────────────
         $lastVendEntry = DB::table('vendor_ledgers')
             ->where('vendor_id', $vendorId)
@@ -3160,6 +3200,7 @@ class ReportingController extends Controller
                     $d2 = (float)($row->closing_balance ?? 0) - (float)($row->previous_balance ?? 0);
                     $cr = max(0.0, $d2); $dr = max(0.0, -$d2);
                 }
+                if ($dr == 0 && $cr == 0 && empty(trim($desc))) continue;
                 $runningBalance += ($cr - $dr);
             } else {
                 $prev  = (float)($row->previous_balance ?? 0);
@@ -3167,6 +3208,7 @@ class ReportingController extends Controller
                 $diff  = $close - $prev;
                 $dr = max(0.0, $diff);
                 $cr = max(0.0, -$diff);
+                if ($dr == 0 && $cr == 0 && empty(trim($desc))) continue;
                 $runningBalance -= $diff;
             }
 
@@ -3174,8 +3216,10 @@ class ReportingController extends Controller
             $totalCredit += $cr;
 
             $ref = '-';
-            if (preg_match('/#\s*(srn|grn|inv|pv|sr|so|po|jv|rv|re|pr|prtn|rvid)[- ]?([A-Z0-9\-_]+)/i', $desc, $m)) {
+            if (preg_match('/\b(BPV|CPV|BRV|CRV|JV|SIN|SRN|GRN|INV|PV|RV|SO|PO|PRTN|PR|RVID|PVID)[- ]?([A-Z0-9\-_]+)\b/i', $desc, $m)) {
                 $ref = $m[0];
+            } elseif (preg_match('/#\s*([A-Za-z0-9\-_]+)/', $desc, $m)) {
+                $ref = $m[1];
             }
 
             $type = 'journal';

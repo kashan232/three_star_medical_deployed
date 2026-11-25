@@ -93,9 +93,13 @@ table.t tbody td.r{text-align:right;}
 
 .page-footer{display:flex;justify-content:space-between;font-size:9px;color:#444;border-top:0.5px solid #aaa;margin-top:14px;padding-top:4px;}
 
+.no-print{user-select:none;}
+body.hide-dc-date #dc-date-container{display:none!important;}
+
 @media print{
   html, body{background:#fff;margin:0;padding:0;height:100%;}
-  .action-bar{display:none!important;}
+  .action-bar, .no-print{display:none!important;}
+  body.hide-dc-date #dc-date-container{display:none!important;}
   .a4{
     box-shadow:none;
     margin:0;
@@ -114,6 +118,17 @@ table.t tbody td.r{text-align:right;}
 <body>
 
 <div class="action-bar">
+  <div class="no-print" style="margin-right:auto;display:flex;align-items:center;gap:10px;color:#fff;font-size:12px;">
+    <span style="font-weight:bold;">Delivery Date:</span>
+    <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:4px;font-weight:bold;color:#2ecc71;">
+      <input type="radio" name="bar_dc_date_toggle" id="barDateRadioOn" value="on" checked style="cursor:pointer;">
+      <span>ON</span>
+    </label>
+    <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;background:rgba(255,255,255,0.15);padding:4px 10px;border-radius:4px;font-weight:bold;color:#e74c3c;">
+      <input type="radio" name="bar_dc_date_toggle" id="barDateRadioOff" value="off" style="cursor:pointer;">
+      <span>OFF</span>
+    </label>
+  </div>
   <button class="btn btn-print" onclick="window.print()">
     <svg viewBox="0 0 24 24"><path d="M19 8H5c-1.66 0-3 1.34-3 3v6h4v4h12v-4h4v-6c0-1.66-1.34-3-3-3zm-3 11H8v-5h8v5zm3-7c-.55 0-1-.45-1-1s.45-1 1-1 1 .45 1 1-.45 1-1 1zm-1-9H6v4h12V3z"/></svg>
     Print
@@ -157,9 +172,23 @@ table.t tbody td.r{text-align:right;}
 
   <!-- DC / ORD -->
   <div style="font-size:10.5px;line-height:1.9;margin-bottom:4px;">
+    <div class="no-print" data-html2canvas-ignore="true" style="display:flex;align-items:center;margin-bottom:3px;">
+      <span style="min-width:260px;"></span>
+      <div style="display:inline-flex;align-items:center;gap:8px;background:#f1f5f9;border:1px solid #cbd5e1;padding:2px 10px;border-radius:12px;font-size:10.5px;user-select:none;">
+        <span style="font-weight:bold;color:#334155;">Dated:</span>
+        <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin:0;font-weight:bold;color:#16a34a;">
+          <input type="radio" name="doc_dc_date_toggle" id="docDateRadioOn" value="on" checked style="cursor:pointer;">
+          <span>ON</span>
+        </label>
+        <label style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin:0;font-weight:bold;color:#dc2626;">
+          <input type="radio" name="doc_dc_date_toggle" id="docDateRadioOff" value="off" style="cursor:pointer;">
+          <span>OFF</span>
+        </label>
+      </div>
+    </div>
     <div style="display:flex;">
       <span style="min-width:260px;"><strong>DC #</strong> &nbsp;{{ $dc->dc_no }}</span>
-      <span><strong>Dated :</strong> &nbsp;{{ \Carbon\Carbon::parse($dc->delivery_date)->format('d/m/Y') }}</span>
+      <span id="dc-date-container"><strong>Dated :</strong> &nbsp;{{ \Carbon\Carbon::parse($dc->delivery_date)->format('d/m/Y') }}</span>
     </div>
     <div style="display:flex;">
       <span style="min-width:260px;"><strong>ORD #</strong> &nbsp;{{ $dc->sale->invoice_no ?? 'N/A' }}</span>
@@ -247,10 +276,82 @@ table.t tbody td.r{text-align:right;}
 </div>
 
 <script>
+let isDateVisible = true;
+
+function setDateVisibility(show) {
+  isDateVisible = !!show;
+
+  // Sync document radios
+  const docOn = document.getElementById('docDateRadioOn');
+  const docOff = document.getElementById('docDateRadioOff');
+  if (docOn) docOn.checked = isDateVisible;
+  if (docOff) docOff.checked = !isDateVisible;
+
+  // Sync action bar radios
+  const barOn = document.getElementById('barDateRadioOn');
+  const barOff = document.getElementById('barDateRadioOff');
+  if (barOn) barOn.checked = isDateVisible;
+  if (barOff) barOff.checked = !isDateVisible;
+
+  // Toggle visibility of date container
+  const dateContainer = document.getElementById('dc-date-container');
+  if (dateContainer) {
+    dateContainer.style.display = isDateVisible ? '' : 'none';
+  }
+  document.body.classList.toggle('hide-dc-date', !isDateVisible);
+}
+
+function initRadio(onId, offId) {
+  const rOn = document.getElementById(onId);
+  const rOff = document.getElementById(offId);
+  if (!rOn || !rOff) return;
+
+  rOn.addEventListener('change', function() {
+    if (this.checked) setDateVisibility(true);
+  });
+  rOff.addEventListener('change', function() {
+    if (this.checked) setDateVisibility(false);
+  });
+
+  // Support clicking an already checked radio button to toggle it
+  rOn.addEventListener('mousedown', function() {
+    this.dataset.wasChecked = this.checked ? 'true' : 'false';
+  });
+  rOff.addEventListener('mousedown', function() {
+    this.dataset.wasChecked = this.checked ? 'true' : 'false';
+  });
+
+  rOn.addEventListener('click', function() {
+    if (this.dataset.wasChecked === 'true') {
+      setDateVisibility(false);
+    } else {
+      setDateVisibility(true);
+    }
+  });
+
+  rOff.addEventListener('click', function() {
+    if (this.dataset.wasChecked === 'true') {
+      setDateVisibility(true);
+    } else {
+      setDateVisibility(false);
+    }
+  });
+}
+
+initRadio('docDateRadioOn', 'docDateRadioOff');
+initRadio('barDateRadioOn', 'barDateRadioOff');
+
 async function downloadPDF(){
   const {jsPDF}=window.jspdf;
   const el=document.getElementById('invoice');
-  const canvas=await html2canvas(el,{scale:2,useCORS:true,backgroundColor:'#ffffff'});
+  const canvas=await html2canvas(el,{
+    scale:2,
+    useCORS:true,
+    backgroundColor:'#ffffff',
+    ignoreElements: function(element) {
+      return element.classList && element.classList.contains('no-print');
+    }
+  });
   const imgData=canvas.toDataURL('image/png');
   const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
   pdf.addImage(imgData,'PNG',0,0,pdf.internal.pageSize.getWidth(),pdf.internal.pageSize.getHeight());

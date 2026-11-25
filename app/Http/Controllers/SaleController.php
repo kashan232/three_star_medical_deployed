@@ -1338,6 +1338,7 @@ class SaleController extends Controller
                 }
 
                 SaleItem::where('sale_id', $sale->id)->delete();
+                $sale->unsetRelation('items');
             }
 
             \Log::info('Processing Sale: ' . json_encode($request->only(['action', 'mode', 'customer', 'product_id', 'qty', 'loose_pieces'])));
@@ -1726,9 +1727,8 @@ class SaleController extends Controller
     {
         // Type: 'out' (Sale Posted), 'in' (Sale Cancelled), 'return' (Returned)
 
-        if (! $sale->relationLoaded('items')) {
-            $sale->load('items.product');
-        }
+        $sale->unsetRelation('items');
+        $sale->load('items.product');
 
         $branchId = $sale->branch_id ?? 1;
 

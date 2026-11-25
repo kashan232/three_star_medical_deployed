@@ -356,9 +356,13 @@ class VoucherService
             }
         }
 
-        // Also sync CustomerLedger / VendorLedger for single-party vouchers (CRV, BRV, CPV, BPV) if no line-level party was posted
-        if ($voucher->party && $voucher->details->whereNotNull('party_type')->isEmpty()) {
-            $this->syncPartyLedger($voucher);
+        // Also sync CustomerLedger / VendorLedger for single-party vouchers (CRV, BRV, CPV, BPV, etc.) if no line-level party was posted.
+        // DO NOT run for Journal Vouchers (JVs) or auto-generated purchase vouchers to prevent double posting in party ledgers.
+        $singlePartyTypes = ['crv', 'brv', 'receipt', 'cpv', 'bpv', 'payment', 'expense'];
+        if ($voucher->party && in_array($vType, $singlePartyTypes) && $voucher->details->whereNotNull('party_type')->isEmpty()) {
+            if (!str_contains(strtolower($voucher->remarks ?? ''), 'purchase')) {
+                $this->syncPartyLedger($voucher);
+            }
         }
     }
 

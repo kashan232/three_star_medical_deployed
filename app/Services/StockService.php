@@ -78,11 +78,11 @@ class StockService
 
         $stock = $query->first();
 
-        if (!$stock && $pieceDelta < 0) {
-            // Fallback: search for any stock row for this (warehouse, product) regardless of uom_id
+        if (!$stock) {
+            // Fallback: search for any existing stock row for this (warehouse, product) regardless of uom_id
             $stock = WarehouseStock::where('warehouse_id', $warehouseId)
                 ->where('product_id', $productId)
-                ->where('total_pieces', '>', 0)
+                ->when($pieceDelta < 0, fn($q) => $q->where('total_pieces', '>', 0))
                 ->lockForUpdate()
                 ->first();
         }

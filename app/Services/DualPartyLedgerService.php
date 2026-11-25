@@ -13,16 +13,49 @@ use Illuminate\Support\Facades\DB;
 class DualPartyLedgerService
 {
     /**
+     * Normalize string by collapsing non-breaking spaces, multi-spaces and uppercase.
+     */
+    public static function normalizeString(?string $str): string
+    {
+        if (!$str) return '';
+        $str = preg_replace('/[\xc2\xa0\s]+/u', ' ', $str);
+        return strtoupper(trim($str));
+    }
+
+    /**
+     * Clean base name by stripping punctuation and normalizing common suffixes/plurals.
+     */
+    public static function cleanBaseName(?string $str): string
+    {
+        $str = self::normalizeString($str);
+        if ($str === '') return '';
+        $str = preg_replace('/[^A-Z0-9 ]/', '', $str);
+        $words = array_filter(explode(' ', $str));
+        
+        $cleanWords = array_map(function($w) {
+            if (strlen($w) > 4 && str_ends_with($w, 'S') && !in_array($w, ['PLUS', 'STATUS', 'SERVICES'])) {
+                return substr($w, 0, -1);
+            }
+            return $w;
+        }, $words);
+
+        return implode(' ', $cleanWords);
+    }
+
+    /**
      * Find twin Vendor for a given Customer.
      */
     public function findTwinVendor(Customer $customer): ?Vendor
     {
         $cCode = trim($customer->customer_id ?? '');
         $cCnic = preg_replace('/[^0-9]/', '', $customer->cnic ?? '');
-        $cName = strtoupper(trim(preg_replace('/\s+/', ' ', $customer->customer_name ?? '')));
+        $cPhone = preg_replace('/[^0-9]/', '', $customer->mobile ?? '');
+        $cEmail = strtolower(trim($customer->email_address ?? ''));
+        $cName = self::normalizeString($customer->customer_name ?? '');
+        $cBase = self::cleanBaseName($customer->customer_name ?? '');
         $cNum  = preg_match('/(\d+)$/', $cCode, $m) ? (int)$m[1] : null;
 
-        // 1. Direct code exact match (e.g. CUST-0001 == CUST-0001)
+        // 1. Direct code exact match (e.g. 1 == 1 or CUST-0001 == CUST-0001 or CUST-0234 == CUST-0234)
         if ($cCode !== '') {
             $v = Vendor::where('vendor_code', $cCode)->first();
             if ($v) return $v;
@@ -32,27 +65,52 @@ class DualPartyLedgerService
         if (strlen($cCnic) >= 10) {
             $v = Vendor::where(function ($q) use ($customer, $cCnic) {
                 $q->where('cnic', $customer->cnic)
-                  ->orWhereRaw("REPLACE(REPLACE(cnic, '-', ''), ' ', '') = ?", [$cCnic]);
+                  ->orWhereRaw("REPLACE(REPLACE(REPLACE(cnic, '-', ''), ' ', ''), '.', '') = ?", [$cCnic]);
             })->first();
             if ($v) return $v;
         }
 
-        // 3. Exact Name match
+        // 3. Exact Name match (ignoring whitespace / case / non-breaking spaces)
         if (strlen($cName) >= 3) {
-            $v = Vendor::whereRaw('UPPER(TRIM(name)) = ?', [$cName])->first();
+            $v = Vendor::all()->first(function($item) use ($cName) {
+                return self::normalizeString($item->name) === $cName;
+            });
             if ($v) return $v;
         }
 
-        // 4. Code numeric suffix match + Name similarity / ID match
-        if ($cNum && strlen($cName) >= 3) {
-            $v = Vendor::where(function ($q) use ($cNum) {
-                $pad = str_pad($cNum, 4, '0', STR_PAD_LEFT);
+        // 4. Clean Base Name match (handles extra spaces, punctuation, BROTHER vs BROTHERS, etc.)
+        if (strlen($cBase) >= 4) {
+            $v = Vendor::all()->first(function($item) use ($cBase) {
+                return self::cleanBaseName($item->name) === $cBase;
+            });
+            if ($v) return $v;
+        }
+
+        // 5. Phone / Mobile match (when at least 10 digits)
+        if (strlen($cPhone) >= 10 && !preg_match('/^0+$/', $cPhone)) {
+            $v = Vendor::all()->first(function($item) use ($cPhone) {
+                $vPhone = preg_replace('/[^0-9]/', '', $item->phone ?? '');
+                return strlen($vPhone) >= 10 && $vPhone === $cPhone;
+            });
+            if ($v) return $v;
+        }
+
+        // 6. Email match (valid email)
+        if (strlen($cEmail) >= 6 && filter_var($cEmail, FILTER_VALIDATE_EMAIL)) {
+            $v = Vendor::whereRaw('LOWER(TRIM(email)) = ?', [$cEmail])->first();
+            if ($v) return $v;
+        }
+
+        // 7. Code numeric suffix match + Name similarity / ID match
+        if ($cNum && strlen($cBase) >= 4) {
+            $pad = str_pad($cNum, 4, '0', STR_PAD_LEFT);
+            $v = Vendor::where(function ($q) use ($pad) {
                 $q->where('vendor_code', "VND-{$pad}")
                   ->orWhere('vendor_code', "VEND-{$pad}")
                   ->orWhere('vendor_code', "V-{$pad}");
             })->first();
 
-            if ($v && (strtoupper(trim($v->name)) === $cName || $v->id === $customer->id)) {
+            if ($v && (self::cleanBaseName($v->name) === $cBase || $v->id === $customer->id)) {
                 return $v;
             }
         }
@@ -67,7 +125,10 @@ class DualPartyLedgerService
     {
         $vCode = trim($vendor->vendor_code ?? '');
         $vCnic = preg_replace('/[^0-9]/', '', $vendor->cnic ?? '');
-        $vName = strtoupper(trim(preg_replace('/\s+/', ' ', $vendor->name ?? '')));
+        $vPhone = preg_replace('/[^0-9]/', '', $vendor->phone ?? '');
+        $vEmail = strtolower(trim($vendor->email ?? ''));
+        $vName = self::normalizeString($vendor->name ?? '');
+        $vBase = self::cleanBaseName($vendor->name ?? '');
         $vNum  = preg_match('/(\d+)$/', $vCode, $m) ? (int)$m[1] : null;
 
         // 1. Direct code exact match
@@ -80,26 +141,51 @@ class DualPartyLedgerService
         if (strlen($vCnic) >= 10) {
             $c = Customer::where(function ($q) use ($vendor, $vCnic) {
                 $q->where('cnic', $vendor->cnic)
-                  ->orWhereRaw("REPLACE(REPLACE(cnic, '-', ''), ' ', '') = ?", [$vCnic]);
+                  ->orWhereRaw("REPLACE(REPLACE(REPLACE(cnic, '-', ''), ' ', ''), '.', '') = ?", [$vCnic]);
             })->first();
             if ($c) return $c;
         }
 
-        // 3. Exact Name match
+        // 3. Exact Name match (ignoring whitespace / case / non-breaking spaces)
         if (strlen($vName) >= 3) {
-            $c = Customer::whereRaw('UPPER(TRIM(customer_name)) = ?', [$vName])->first();
+            $c = Customer::all()->first(function($item) use ($vName) {
+                return self::normalizeString($item->customer_name) === $vName;
+            });
             if ($c) return $c;
         }
 
-        // 4. Code numeric suffix match + Name similarity / ID match
-        if ($vNum && strlen($vName) >= 3) {
-            $c = Customer::where(function ($q) use ($vNum) {
-                $pad = str_pad($vNum, 4, '0', STR_PAD_LEFT);
+        // 4. Clean Base Name match
+        if (strlen($vBase) >= 4) {
+            $c = Customer::all()->first(function($item) use ($vBase) {
+                return self::cleanBaseName($item->customer_name) === $vBase;
+            });
+            if ($c) return $c;
+        }
+
+        // 5. Phone / Mobile match
+        if (strlen($vPhone) >= 10 && !preg_match('/^0+$/', $vPhone)) {
+            $c = Customer::all()->first(function($item) use ($vPhone) {
+                $cPhone = preg_replace('/[^0-9]/', '', $item->mobile ?? '');
+                return strlen($cPhone) >= 10 && $cPhone === $vPhone;
+            });
+            if ($c) return $c;
+        }
+
+        // 6. Email match
+        if (strlen($vEmail) >= 6 && filter_var($vEmail, FILTER_VALIDATE_EMAIL)) {
+            $c = Customer::whereRaw('LOWER(TRIM(email_address)) = ?', [$vEmail])->first();
+            if ($c) return $c;
+        }
+
+        // 7. Code numeric suffix match + Name similarity / ID match
+        if ($vNum && strlen($vBase) >= 4) {
+            $pad = str_pad($vNum, 4, '0', STR_PAD_LEFT);
+            $c = Customer::where(function ($q) use ($pad) {
                 $q->where('customer_id', "CUST-{$pad}")
                   ->orWhere('customer_id', "C-{$pad}");
             })->first();
 
-            if ($c && (strtoupper(trim($c->customer_name)) === $vName || $c->id === $vendor->id)) {
+            if ($c && (self::cleanBaseName($c->customer_name) === $vBase || $c->id === $vendor->id)) {
                 return $c;
             }
         }
@@ -196,6 +282,11 @@ class DualPartyLedgerService
             $desc = $row->description ?? '';
             $type = $this->classifyTransactionType($desc, 'customer');
 
+            // Skip zero-amount placeholder/opening rows if empty description
+            if ($dr == 0 && $cr == 0 && (empty(trim($desc)) || strtolower(trim($desc)) === 'purchase / payment')) {
+                continue;
+            }
+
             $mergedEntries->push((object) [
                 'id'          => $row->id,
                 'created_at'  => $row->created_at ? $row->created_at->format('Y-m-d H:i:s') : $startDate,
@@ -243,10 +334,15 @@ class DualPartyLedgerService
                 $desc = $row->description ?? '';
                 $type = $this->classifyTransactionType($desc, 'vendor');
 
+                // Skip zero-amount placeholder/opening rows if empty description
+                if ($dr == 0 && $cr == 0 && (empty(trim($desc)) || strtolower(trim($desc)) === 'purchase / payment')) {
+                    continue;
+                }
+
                 // Prefix description clearly for user awareness
                 $displayDesc = $desc;
                 if (!str_starts_with($desc, '[Vendor') && !str_starts_with($desc, '[Purchase')) {
-                    $displayDesc = '[Vendor / Purchase] ' . ($desc ?: 'Purchase / Payment');
+                    $displayDesc = '[Purchase] ' . ($desc ?: 'Purchase / Payment');
                 }
 
                 $mergedEntries->push((object) [
@@ -284,10 +380,10 @@ class DualPartyLedgerService
 
             // Ref invoice extraction
             $ref = '—';
-            if (preg_match('/#(inv|sin|grn|pv|cpv|bpv|crv|brv|sr|so|po|jv|rv|re|pr|prtn|rvid)[- ]?([A-Z0-9\-_]+)/i', $item->description, $matches)) {
+            if (preg_match('/\b(BPV|CPV|BRV|CRV|JV|SIN|SRN|GRN|INV|PV|RV|SO|PO|PRTN|PR|RVID|PVID)[- ]?([A-Z0-9\-_]+)\b/i', $item->description, $matches)) {
                 $ref = strtoupper($matches[0]);
-            } elseif (preg_match('/\b(INV|SIN|GRN|CPV|BPV|CRV|BRV|JV|PRTN|SRN)-\d+\b/i', $item->description, $matches)) {
-                $ref = strtoupper($matches[0]);
+            } elseif (preg_match('/#\s*([A-Za-z0-9\-_]+)/', $item->description, $matches)) {
+                $ref = strtoupper($matches[1]);
             }
 
             return (object) [
@@ -432,8 +528,10 @@ class DualPartyLedgerService
             $type = $this->classifyTransactionType($desc, 'vendor');
 
             $ref = '—';
-            if (preg_match('/#(inv|sin|grn|pv|cpv|crv|sr|so|po|jv|rv|re|pr|prtn|rvid)[- ]?([A-Z0-9\-_]+)/i', $desc, $matches)) {
+            if (preg_match('/\b(BPV|CPV|BRV|CRV|JV|SIN|SRN|GRN|INV|PV|RV|SO|PO|PRTN|PR|RVID|PVID)[- ]?([A-Z0-9\-_]+)\b/i', $desc, $matches)) {
                 $ref = strtoupper($matches[0]);
+            } elseif (preg_match('/#\s*([A-Za-z0-9\-_]+)/', $desc, $matches)) {
+                $ref = strtoupper($matches[1]);
             }
 
             return (object) [
