@@ -334,24 +334,37 @@ class PurchaseController extends Controller
             }
         }
 
-        // 2. Vendor Ledger
-        $netAmount = $purchase->net_amount;
-        $prevClosing = \App\Models\VendorLedger::where('vendor_id', $purchase->vendor_id)
-            ->value('closing_balance') ?? 0;
+        // 2. Vendor Ledger (Single, non-duplicated entry)
+        $netAmount = (float) $purchase->net_amount;
+        $lastLedger = \App\Models\VendorLedger::where('vendor_id', $purchase->vendor_id)
+            ->whereNull('deleted_at')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+        $prevClosing = $lastLedger ? (float) $lastLedger->closing_balance : (float) ($purchase->vendor->opening_balance ?? 0);
 
-        \App\Models\VendorLedger::create([
-            'vendor_id' => $purchase->vendor_id,
-            'branch_id' => $purchase->branch_id,
-            'admin_or_user_id' => auth()->id(),
-            'previous_balance' => $prevClosing,
-            'opening_balance' => 0,
-            'debit' => 0,
-            'credit' => $netAmount,
-            'closing_balance' => $prevClosing + $netAmount,
-            'description' => "Purchase Confirmed #{$purchase->invoice_no}",
-            'source_type' => \App\Models\Purchase::class,
-            'source_id' => $purchase->id,
-        ]);
+        \App\Models\VendorLedger::updateOrCreate(
+            [
+                'source_type' => \App\Models\Purchase::class,
+                'source_id'   => $purchase->id,
+                'debit'       => 0,
+            ],
+            [
+                'vendor_id'        => $purchase->vendor_id,
+                'branch_id'        => $purchase->branch_id,
+                'admin_or_user_id' => auth()->id() ?? 1,
+                'previous_balance' => $prevClosing,
+                'opening_balance'  => 0,
+                'debit'            => 0,
+                'credit'           => $netAmount,
+                'closing_balance'  => $prevClosing + $netAmount,
+                'description'      => "Purchase Confirmed #{$purchase->invoice_no}",
+                'created_at'       => $purchase->purchase_date ? \Carbon\Carbon::parse($purchase->purchase_date)->setTime((int) date('H'), (int) date('i'), (int) date('s')) : now(),
+            ]
+        );
+
+        $txService = app(\App\Services\TransactionService::class);
+        $txService->recalculateVendorLedger($purchase->vendor_id);
 
         // 3. Accounting
         try {
@@ -1488,6 +1501,8 @@ class PurchaseController extends Controller
                 }
                 $purchase->update($updateData);
 
+                $txService = app(\App\Services\TransactionService::class);
+                $txService->reversePurchaseAccounting($purchase);
                 $this->approvePurchase($purchase); // Basic Stock + Ledger + Voucher
 
                 // B. Record Payment (Only available in immediate Request)
@@ -1543,7 +1558,7 @@ class PurchaseController extends Controller
                     ];
 
                     // stocks rollback — UOM-aware debit
-                    $uomIdForRollback = $item->uom_id ?? null;
+                    $uomIdForRollback = $it->uom_id ?? null;
                     StockService::debit($pid, $uomIdForRollback, $warehouseId, $branchId, $qty);
                 }
 
@@ -1554,6 +1569,9 @@ class PurchaseController extends Controller
 
             // Delete any batches linked to these items to avoid orphans
             \App\Models\ProductBatch::whereIn('purchase_item_id', $purchase->items->pluck('id'))->delete();
+
+            $txService = app(\App\Services\TransactionService::class);
+            $txService->reversePurchaseAccounting($purchase);
 
             $purchase->items()->delete();
             $purchase->delete();

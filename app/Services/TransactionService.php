@@ -108,6 +108,7 @@ class TransactionService
                 'party_id' => $sale->customer_id,
                 'branch_id' => $sale->branch_id,
                 'remarks' => "Auto-Receipt for Sale Invoice #{$sale->invoice_no}. Total: $totalPaid",
+                'sync_ledger' => false,
             ];
 
             // 5. Create via VoucherService
@@ -243,6 +244,7 @@ class TransactionService
                 'party_type' => \App\Models\Vendor::class,
                 'party_id' => $purchase->vendor_id,
                 'remarks' => "Auto-Payment for Purchase #{$purchase->invoice_no}",
+                'sync_ledger' => false,
             ];
 
             // 4. Create Voucher
@@ -313,20 +315,23 @@ class TransactionService
             // 2. Credit Accounts Payable full pure purchase price
             $lines[] = [
                 'account_id' => $apAccountId,
+                'party_type' => \App\Models\Vendor::class,
+                'party_id'   => $purchase->vendor_id,
                 'debit'      => 0,
                 'credit'     => $purchasePrice,
                 'narration'  => "Payable to Vendor " . ($purchase->vendor->name ?? ''),
             ];
 
-            // 3. Voucher Header for pure purchase (Internal GL voucher; do not attach Vendor to header to prevent duplicate VendorLedger entry)
+            // 3. Voucher Header for pure purchase (GL voucher; sync_ledger=false prevents duplicate VendorLedger entry)
             $voucherData = [
                 'voucher_type' => \App\Models\VoucherMaster::TYPE_JOURNAL, // Purchase is basic journal
                 'date'         => $purchase->purchase_date ? \Carbon\Carbon::parse($purchase->purchase_date)->format('Y-m-d') : now()->format('Y-m-d'),
                 'status'       => \App\Models\VoucherMaster::STATUS_POSTED,
-                'party_type'   => null,
-                'party_id'     => null,
+                'party_type'   => \App\Models\Vendor::class,
+                'party_id'     => $purchase->vendor_id,
                 'branch_id'    => $purchase->branch_id,
                 'remarks'      => "Purchase Voucher #{$purchase->invoice_no}",
+                'sync_ledger'  => false,
             ];
 
             // 4. Create the main Purchase Voucher
@@ -349,20 +354,23 @@ class TransactionService
                 // Credit AP for the extra cost (since it's added to vendor balance)
                 $expenseLines[] = [
                     'account_id' => $apAccountId,
+                    'party_type' => \App\Models\Vendor::class,
+                    'party_id'   => $purchase->vendor_id,
                     'debit'      => 0,
                     'credit'     => $extraCost,
                     'narration'  => "Payable Extra Cost to Vendor " . ($purchase->vendor->name ?? ''),
                 ];
 
-                // Header for Expense Ticket (GL only, party_type null to prevent duplicate VendorLedger entry)
+                // Header for Expense Ticket (GL only; sync_ledger=false prevents duplicate VendorLedger entry)
                 $expenseData = [
                     'voucher_type' => \App\Models\VoucherMaster::TYPE_EXPENSE,
                     'date'         => $purchase->purchase_date ? \Carbon\Carbon::parse($purchase->purchase_date)->format('Y-m-d') : now()->format('Y-m-d'),
                     'status'       => \App\Models\VoucherMaster::STATUS_POSTED,
-                    'party_type'   => null,
-                    'party_id'     => null,
+                    'party_type'   => \App\Models\Vendor::class,
+                    'party_id'     => $purchase->vendor_id,
                     'branch_id'    => $purchase->branch_id,
                     'remarks'      => "Purchase Extra Cost (Freight) for Invoice #{$purchase->invoice_no}",
+                    'sync_ledger'  => false,
                 ];
 
                 $this->voucherService->createVoucher($expenseData, $expenseLines, auth()->id());
@@ -388,20 +396,23 @@ class TransactionService
                 // Credit AP for freight cost
                 $freightLines[] = [
                     'account_id' => $apAccountId,
+                    'party_type' => \App\Models\Vendor::class,
+                    'party_id'   => $purchase->vendor_id,
                     'debit'      => 0,
                     'credit'     => $freightCharges,
                     'narration'  => "Payable Freight Charges to Vendor " . ($purchase->vendor->name ?? ''),
                 ];
 
-                // Header for Expense Ticket (GL only, party_type null to prevent duplicate VendorLedger entry)
+                // Header for Expense Ticket (GL only; sync_ledger=false prevents duplicate VendorLedger entry)
                 $freightData = [
                     'voucher_type' => \App\Models\VoucherMaster::TYPE_EXPENSE,
                     'date'         => $purchase->purchase_date ? \Carbon\Carbon::parse($purchase->purchase_date)->format('Y-m-d') : now()->format('Y-m-d'),
                     'status'       => \App\Models\VoucherMaster::STATUS_POSTED,
-                    'party_type'   => null,
-                    'party_id'     => null,
+                    'party_type'   => \App\Models\Vendor::class,
+                    'party_id'     => $purchase->vendor_id,
                     'branch_id'    => $purchase->branch_id,
                     'remarks'      => "Purchase Freight Charges for Invoice #{$purchase->invoice_no}",
+                    'sync_ledger'  => false,
                 ];
 
                 $this->voucherService->createVoucher($freightData, $freightLines, auth()->id());
@@ -476,6 +487,8 @@ class TransactionService
             // 1. Debit Accounts Payable (Vendor Liability Reduces)
             $lines[] = [
                 'account_id' => $apAccountId,
+                'party_type' => \App\Models\Vendor::class,
+                'party_id' => $return->vendor_id,
                 'debit' => $return->net_amount,
                 'credit' => 0,
                 'narration' => "Debit Note for Return #{$return->return_invoice}",
@@ -499,6 +512,7 @@ class TransactionService
                 'party_type' => \App\Models\Vendor::class,
                 'party_id' => $return->vendor_id,
                 'remarks' => $return->remarks ?? "Purchase Return #{$return->return_invoice}",
+                'sync_ledger' => false,
             ];
 
             // 4. Create Voucher
@@ -539,6 +553,8 @@ class TransactionService
             // 2. Credit Accounts Receivable (Customer Debt Reduces)
             $lines[] = [
                 'account_id' => $arAccountId,
+                'party_type' => \App\Models\Customer::class,
+                'party_id' => $return->customer_id,
                 'debit' => 0,
                 'credit' => $return->net_amount,
                 'narration' => "Sale Return #{$return->return_invoice}",
@@ -553,6 +569,7 @@ class TransactionService
                 'party_id' => $return->customer_id,
                 'branch_id' => $return->branch_id,
                 'remarks' => $return->remarks ?? "Sale Return #{$return->return_invoice}",
+                'sync_ledger' => false,
             ];
 
             // 4. Create Voucher

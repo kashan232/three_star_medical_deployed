@@ -86,7 +86,8 @@ class VoucherService
                 $voucher->posted_at = now();
                 $voucher->save();
 
-                $this->postToJournal($voucher);
+                $syncLedger = $data['sync_ledger'] ?? true;
+                $this->postToJournal($voucher, (bool) $syncLedger);
             }
 
             return $voucher;
@@ -160,7 +161,8 @@ class VoucherService
                 $voucher->posted_at = now();
                 $voucher->save();
 
-                $this->postToJournal($voucher);
+                $syncLedger = $data['sync_ledger'] ?? true;
+                $this->postToJournal($voucher, (bool) $syncLedger);
             }
 
             // 6. Recalculate Ledger for old party if party changed
@@ -253,13 +255,14 @@ class VoucherService
     /**
      * Convert Voucher Details into Journal Entries and update party ledgers.
      */
-    public function postToJournal(VoucherMaster $voucher)
+    public function postToJournal(VoucherMaster $voucher, bool $syncLedger = true)
     {
         $vType = strtolower($voucher->voucher_type);
         $txService = app(TransactionService::class);
+        $singlePartyTypes = ['crv', 'brv', 'receipt', 'cpv', 'bpv', 'payment'];
 
         foreach ($voucher->details as $detail) {
-            $includeParty = true;
+            $includeParty = in_array($vType, $singlePartyTypes);
 
             // In Cash/Bank Receiving (CRV/BRV/Receipt):
             // Debit is Cash/Bank (No Party)
@@ -297,7 +300,7 @@ class VoucherService
             );
 
             // If this line item has a direct Customer or Vendor attached (e.g. in JV):
-            if ($detail->party_type && $detail->party_id) {
+            if ($syncLedger && $detail->party_type && $detail->party_id) {
                 $lineParty = $detail->party;
                 $createdAt = $voucher->date ? \Carbon\Carbon::parse($voucher->date)->setTime(date('H'), date('i'), date('s')) : now();
                 $userId = $voucher->created_by ?? auth()->id() ?? 1;
@@ -356,10 +359,9 @@ class VoucherService
             }
         }
 
-        // Also sync CustomerLedger / VendorLedger for single-party vouchers (CRV, BRV, CPV, BPV, etc.) if no line-level party was posted.
-        // DO NOT run for Journal Vouchers (JVs) or auto-generated purchase vouchers to prevent double posting in party ledgers.
-        $singlePartyTypes = ['crv', 'brv', 'receipt', 'cpv', 'bpv', 'payment', 'expense'];
-        if ($voucher->party && in_array($vType, $singlePartyTypes) && $voucher->details->whereNotNull('party_type')->isEmpty()) {
+        // Also sync CustomerLedger / VendorLedger for single-party vouchers (CRV, BRV, CPV, BPV) if no line-level party was posted.
+        // DO NOT run for Journal Vouchers (JVs), Expense vouchers, or vouchers with sync_ledger = false to prevent double posting in party ledgers.
+        if ($syncLedger && $voucher->party && in_array($vType, $singlePartyTypes) && $voucher->details->whereNotNull('party_type')->isEmpty()) {
             if (!str_contains(strtolower($voucher->remarks ?? ''), 'purchase')) {
                 $this->syncPartyLedger($voucher);
             }
