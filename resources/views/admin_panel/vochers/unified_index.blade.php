@@ -131,7 +131,27 @@
                                             <div class="fw-semibold text-dark">{{ $partyName }}</div>
                                             <small class="text-muted">{{ Str::limit($v->remarks ?? '-', 50) }}</small>
                                             @if($v->cheque_no)
-                                                <small class="d-block text-primary"><i class="fas fa-money-check"></i> Chq # {{ $v->cheque_no }}</small>
+                                                @php
+                                                    $vCheque = $v->cheques->first();
+                                                    $chqBadge = match($vCheque?->status) {
+                                                        'cleared' => 'bg-success text-white',
+                                                        'deposited' => 'bg-info text-dark',
+                                                        'bounced', 'cancelled' => 'bg-danger text-white',
+                                                        'pending' => 'bg-warning text-dark',
+                                                        default => 'bg-light text-primary border',
+                                                    };
+                                                @endphp
+                                                <small class="d-block text-primary mt-1">
+                                                    <i class="fas fa-money-check"></i> Chq # {{ $v->cheque_no }}
+                                                    @if($v->cheque_date)
+                                                        <span class="text-muted">({{ \Carbon\Carbon::parse($v->cheque_date)->format('d M, Y') }})</span>
+                                                    @endif
+                                                    @if($vCheque)
+                                                        <a href="{{ route('cheques.index', ['search' => $v->cheque_no]) }}" class="badge {{ $chqBadge }} text-decoration-none ms-1" style="font-size:0.65rem;">
+                                                            {{ strtoupper($vCheque->status) }}
+                                                        </a>
+                                                    @endif
+                                                </small>
                                             @endif
                                         </td>
                                         <td class="text-end fw-bold fs-6">

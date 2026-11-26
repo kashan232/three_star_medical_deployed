@@ -518,6 +518,13 @@
                 </div>
             @endif
 
+            @if(session('error'))
+                <div class="alert alert-danger alert-dismissible fade show py-2 px-3 rounded-3 shadow-sm mb-3" role="alert">
+                    <i class="fas fa-exclamation-triangle me-1"></i> {{ session('error') }}
+                    <button type="button" class="close btn-close" data-dismiss="alert" data-bs-dismiss="alert"></button>
+                </div>
+            @endif
+
             @if(isset($errors) && $errors->any())
                 <div class="alert alert-danger alert-dismissible fade show py-2 px-3 rounded-3 shadow-sm mb-3" role="alert">
                     <i class="fas fa-exclamation-triangle me-1"></i>
@@ -576,14 +583,30 @@
                                 @if(in_array($type, ['brv', 'bpv']))
                                 <div class="col-12">
                                     <div class="form-group-modern">
-                                        <label class="label-modern">Cheque Number</label>
-                                        <input type="text" name="cheque_no" class="input-modern" placeholder="e.g. CHQ 1145628">
+                                        <label class="label-modern">Payment Mode <span class="text-danger">*</span></label>
+                                        <select name="payment_mode" id="voucherPaymentMode" class="input-modern" onchange="toggleVoucherChequeMode(this.value)" required>
+                                            <option value="cheque" {{ old('payment_mode', 'cheque') === 'cheque' ? 'selected' : '' }}>Cheque (PDC / Standard)</option>
+                                            <option value="online" {{ old('payment_mode') === 'online' ? 'selected' : '' }}>Online / Direct Bank Transfer</option>
+                                        </select>
                                     </div>
                                 </div>
-                                <div class="col-12">
-                                    <div class="form-group-modern">
-                                        <label class="label-modern">Cheque Date</label>
-                                        <input type="date" name="cheque_date" class="input-modern" value="{{ date('Y-m-d') }}">
+                                <div class="col-12" id="chequeMetaGroup">
+                                    <div class="p-2 rounded-3 mb-2" style="background: #f8fafc; border: 1px dashed #cbd5e1;">
+                                        <div class="form-group-modern mb-2">
+                                            <label class="label-modern">Cheque Number <span class="text-danger">*</span></label>
+                                            <input type="text" name="cheque_no" id="chequeNoInput" class="input-modern" value="{{ old('cheque_no') }}" placeholder="e.g. 1145628" required>
+                                        </div>
+                                        <div class="form-group-modern mb-2">
+                                            <label class="label-modern">Cheque / Due Date <span class="text-danger">*</span></label>
+                                            <input type="date" name="cheque_date" id="chequeDateInput" class="input-modern" value="{{ old('cheque_date', date('Y-m-d')) }}" required>
+                                            <small class="text-muted d-block mt-1" style="font-size:0.72rem;">
+                                                <i class="fas fa-calendar-check text-primary"></i> Post-dated cheques (PDC) are tracked in Cheque Management until cleared.
+                                            </small>
+                                        </div>
+                                        <div class="form-group-modern mb-0">
+                                            <label class="label-modern">{{ $type === 'brv' ? 'Drawer / Customer Bank' : 'Bank Name (Optional)' }}</label>
+                                            <input type="text" name="bank_name" id="chequeBankNameInput" class="input-modern" value="{{ old('bank_name') }}" placeholder="{{ $type === 'brv' ? 'e.g. Meezan Bank' : 'Auto-fills from selected bank' }}">
+                                        </div>
                                     </div>
                                 </div>
                                 @endif
@@ -1053,7 +1076,23 @@ $(document).ready(function() {
     runSelect2Init();
     initAccountBalanceBadges();
     initJvRows();
+    if ($('#voucherPaymentMode').length) {
+        toggleVoucherChequeMode($('#voucherPaymentMode').val());
+    }
 });
+
+function toggleVoucherChequeMode(mode) {
+    const isCheque = (mode === 'cheque');
+    const group = $('#chequeMetaGroup');
+    if (isCheque) {
+        group.slideDown(150);
+        $('#chequeNoInput, #chequeDateInput').prop('required', true);
+    } else {
+        group.slideUp(150);
+        $('#chequeNoInput, #chequeDateInput').prop('required', false);
+    }
+    validateSinglePaymentBalance();
+}
 
 function runSelect2Init() {
     if ($.fn.select2) {
@@ -1473,14 +1512,17 @@ function validateSinglePaymentBalance() {
         }
     }
 
-    // Bank Payment Voucher (BPV) / Cheques: Cheques can be post-dated / issued in advance, so do NOT block submission!
+    // Bank Payment Voucher (BPV) / Cheques: Post-dated & advance cheques allowed regardless of current bank balance!
     if (isBpv) {
         amountInput.removeClass('is-invalid');
+        const mode = $('#voucherPaymentMode').val() || 'cheque';
         if (enteredAmt > availBal) {
             const formattedAvail = 'Rs. ' + availBal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const formattedReq = 'Rs. ' + enteredAmt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-            errorBox.removeClass('alert-danger').addClass('alert-info')
-                .html(`<i class="fas fa-info-circle"></i> <strong>Note:</strong> Cheque amount (${formattedReq}) exceeds current bank balance (${formattedAvail}). Post-dated / advance cheques are allowed.`).show();
+            const msg = mode === 'cheque'
+                ? `<i class="fas fa-info-circle"></i> <strong>PDC / Advance Cheque Allowed:</strong> Cheque amount (${formattedReq}) exceeds current bank balance (${formattedAvail}). Bank balance will only be deducted when cleared in Cheque Management.`
+                : `<i class="fas fa-info-circle"></i> <strong>Note:</strong> Payment amount (${formattedReq}) exceeds current bank balance (${formattedAvail}). Entry is permitted.`;
+            errorBox.removeClass('alert-danger').addClass('alert-info').html(msg).show();
         } else {
             errorBox.hide();
         }

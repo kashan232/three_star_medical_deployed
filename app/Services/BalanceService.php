@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Account;
+use App\Models\AccountHead;
 use App\Models\Customer;
 use App\Models\JournalEntry;
 use App\Models\VoucherDetail;
@@ -724,6 +725,92 @@ class BalanceService
             ->first();
 
         return $account?->id ?? $this->getPurchaseExpenseId($branchId);
+    }
+
+    /**
+     * Get the "Cheque In Hand" Asset control account ID for received uncleared cheques.
+     */
+    public function getChequeInHandId(?int $branchId = null): ?int
+    {
+        return $this->getOrCreateChequeControlAccount(
+            $branchId,
+            '1-02-045',
+            'Cheque In Hand',
+            'Asset',
+            'Debit'
+        );
+    }
+
+    /**
+     * Get the "Cheques Issued (PDC)" Liability control account ID for issued uncleared cheques.
+     */
+    public function getChequeIssuedId(?int $branchId = null): ?int
+    {
+        return $this->getOrCreateChequeControlAccount(
+            $branchId,
+            '2-02-015',
+            'Cheques Issued (PDC)',
+            'Liability',
+            'Credit'
+        );
+    }
+
+    /**
+     * Find or create a branch-scoped cheque clearing control account and its head.
+     */
+    private function getOrCreateChequeControlAccount(
+        ?int $branchId,
+        string $codePrefix,
+        string $title,
+        string $headType,
+        string $accountType
+    ): ?int {
+        if ($branchId === null && auth()->check()) {
+            $branchId = auth()->user()->getBranchId();
+        }
+        $branchId = $branchId ?? 1;
+        $normalizedTitle = strtolower(trim($title));
+
+        $account = Account::where('branch_id', $branchId)
+            ->where(function ($q) use ($codePrefix, $normalizedTitle) {
+                $q->where('account_code', 'like', $codePrefix . '%')
+                    ->orWhereRaw('LOWER(TRIM(title)) = ?', [$normalizedTitle]);
+            })
+            ->orderBy('id')
+            ->first();
+
+        if (! $account) {
+            $head = AccountHead::where('branch_id', $branchId)
+                ->where(function ($q) use ($codePrefix, $normalizedTitle) {
+                    $q->where('code', $codePrefix)
+                        ->orWhereRaw('LOWER(TRIM(name)) = ?', [$normalizedTitle]);
+                })
+                ->first();
+
+            if (! $head) {
+                $head = AccountHead::create([
+                    'branch_id' => $branchId,
+                    'name'      => $title,
+                    'code'      => $codePrefix,
+                    'type'      => $headType,
+                    'level'     => 2,
+                ]);
+            }
+
+            $account = Account::create([
+                'branch_id'       => $branchId,
+                'head_id'         => $head->id,
+                'title'           => $title,
+                'account_code'    => $codePrefix . '-00001',
+                'type'            => $accountType,
+                'opening_balance' => 0,
+                'current_balance' => 0,
+                'status'          => 1,
+                'is_active'       => 1,
+            ]);
+        }
+
+        return $account?->id;
     }
 
     /**

@@ -18,8 +18,10 @@
     $vDate = $voucher->date ? \Carbon\Carbon::parse($voucher->date)->format('d/m/Y h:i:sa') : ($voucher->created_at ? $voucher->created_at->format('d/m/Y h:i:sa') : now()->format('d/m/Y h:i:sa'));
     $printedOn = now()->format('d/m/Y');
     
-    $chequeNo = $voucher->cheque_no ?? '(N/A)';
-    $chequeDate = $voucher->cheque_date ? \Carbon\Carbon::parse($voucher->cheque_date)->format('d/m/Y h:i:sa') : $vDate;
+    $linkedCheque = $voucher->cheques->first();
+    $chequeNo = $voucher->cheque_no ?? ($linkedCheque->cheque_no ?? '(N/A)');
+    $rawChequeDate = $voucher->cheque_date ?? ($linkedCheque->cheque_date ?? null);
+    $chequeDate = $rawChequeDate ? \Carbon\Carbon::parse($rawChequeDate)->format('d/m/Y') : $vDate;
 
     $location = $voucher->branch->name ?? $voucher->location ?? 'HEAD OFFICE';
 
@@ -238,8 +240,17 @@
       <div class="row-item"><span class="lbl">Location :</span> <span class="val">{{ $location }}</span></div>
       <div class="row-item"><span class="lbl">Voucher No :</span> <span class="val">{{ $voucherNo }}</span></div>
       <div class="row-item"><span class="lbl">Dated :</span> <span class="val">{{ $vDate }}</span></div>
-      @if(in_array($vTypeKey, ['bpv', 'brv', 'payment', 'receipt']) && $chequeNo !== '(N/A)')
-      <div class="row-item"><span class="lbl">Cheque No :</span> <span class="val">{{ $chequeNo }}</span> &nbsp;&nbsp;&nbsp;&nbsp; <span class="lbl">Cheque Date :</span> <span class="val">{{ $chequeDate }}</span></div>
+      @if($chequeNo !== '(N/A)')
+      <div class="row-item">
+        <span class="lbl">Cheque No :</span> <span class="val">{{ $chequeNo }}</span> &nbsp;&nbsp;&nbsp;&nbsp;
+        <span class="lbl">Cheque Date :</span> <span class="val">{{ $chequeDate }}</span>
+        @if($linkedCheque)
+          &nbsp;&nbsp;&nbsp;&nbsp; <span class="lbl">Status :</span> <span class="val">{{ strtoupper($linkedCheque->status) }}</span>
+          @if($linkedCheque->actualAccount)
+            &nbsp;&nbsp;&nbsp;&nbsp; <span class="lbl">Bank :</span> <span class="val">{{ $linkedCheque->actualAccount->title }}</span>
+          @endif
+        @endif
+      </div>
       @endif
     </div>
 

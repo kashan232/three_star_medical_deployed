@@ -442,9 +442,13 @@ Route::middleware('auth')->group(function () {
     Route::get('/vouchers/print-unified/{id}', [VoucherController::class, 'unifiedPrint'])->name('vouchers.print_unified');
 
     // Cheque Management Routes
-    Route::get('/cheques', [ChequeController::class, 'index'])->name('cheques.index')->middleware('permission:sales.view');
-    Route::post('/cheques/{id}/clear', [ChequeController::class, 'clear'])->name('cheques.clear')->middleware('permission:sales.create');
-    Route::post('/cheques/{id}/bounce', [ChequeController::class, 'bounce'])->name('cheques.bounce')->middleware('permission:sales.create');
+    Route::get('/cheques', [ChequeController::class, 'index'])->name('cheques.index')->middleware('permission:receipts.voucher.view|payment.voucher.view|sales.view');
+    Route::post('/cheques', [ChequeController::class, 'store'])->name('cheques.store')->middleware('permission:receipts.voucher.create|payment.voucher.create|sales.create');
+    Route::post('/cheques/{id}/deposit', [ChequeController::class, 'deposit'])->name('cheques.deposit')->middleware('permission:receipts.voucher.create|payment.voucher.create|sales.create');
+    Route::post('/cheques/{id}/clear', [ChequeController::class, 'clear'])->name('cheques.clear')->middleware('permission:receipts.voucher.create|payment.voucher.create|sales.create');
+    Route::post('/cheques/{id}/bounce', [ChequeController::class, 'bounce'])->name('cheques.bounce')->middleware('permission:receipts.voucher.create|payment.voucher.create|sales.create');
+    Route::post('/cheques/{id}/cancel', [ChequeController::class, 'cancel'])->name('cheques.cancel')->middleware('permission:receipts.voucher.create|payment.voucher.create|sales.create');
+    Route::post('/cheques/{id}/undo-clear', [ChequeController::class, 'undoClear'])->name('cheques.undo_clear')->middleware('permission:receipts.voucher.edit|payment.voucher.edit|sales.create');
 
     Route::post('/accounts-head/store', [AccountsHeadController::class, 'storeHead'])->name('account-heads.store');
     Route::put('/accounts-head/{id}/update', [AccountsHeadController::class, 'updateHead'])->name('account-heads.update');

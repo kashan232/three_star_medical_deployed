@@ -69,18 +69,22 @@ class VoucherMaster extends Model
         $branchCode = ($branchId && $branchId > 1) ? 'B'.$branchId.'-' : '';
         $prefix = $prefixCode.'-'.$branchCode;
 
-        $last = static::where('voucher_no', 'like', "{$prefixCode}-%")
-            ->when($branchId, fn ($q) => $q->where('branch_id', $branchId))
+        $last = static::where('voucher_no', 'like', "{$prefix}%")
             ->orderByDesc('id')
             ->value('voucher_no');
 
         if ($last && preg_match('/-(\d+)$/', $last, $m)) {
-            $num = (int)$m[1];
+            $num = (int) $m[1];
         } else {
             $num = 0;
         }
 
-        return $prefixCode.'-'.str_pad($num + 1, 5, '0', STR_PAD_LEFT);
+        do {
+            $num++;
+            $candidate = $prefix . str_pad($num, 5, '0', STR_PAD_LEFT);
+        } while (static::where('voucher_no', $candidate)->exists());
+
+        return $candidate;
     }
 
     /**
@@ -100,6 +104,11 @@ class VoucherMaster extends Model
     public function journalEntries()
     {
         return $this->morphMany(JournalEntry::class, 'source');
+    }
+
+    public function cheques()
+    {
+        return $this->hasMany(Cheque::class, 'voucher_master_id');
     }
 
     public function createdBy()

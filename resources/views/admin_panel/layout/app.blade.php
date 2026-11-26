@@ -416,30 +416,32 @@
                             {{-- ===== END BRANCH INDICATOR ===== --}}
 
                             <!-- Cheque Notifications -->
-                            @can('receipts.voucher.view')
+                            @canany(['receipts.voucher.view', 'payment.voucher.view'])
                                 @php
                                     $activeBranchIdForCheques = session('branch_id') ?? auth()->user()->branch_id;
-                                    $dueChequesCount = \App\Models\Cheque::where('status', 'pending')
+                                    $dueChequesCount = \App\Models\Cheque::whereIn('status', ['pending', 'deposited'])
                                         ->whereDate('cheque_date', '<=', now()->toDateString())
-                                        ->whereHas('voucherMaster', function ($query) use ($activeBranchIdForCheques) {
-                                            $query->when($activeBranchIdForCheques, function ($q) use (
-                                                $activeBranchIdForCheques,
-                                            ) {
-                                                $q->where('branch_id', $activeBranchIdForCheques);
-                                            });
+                                        ->where(function ($outer) use ($activeBranchIdForCheques) {
+                                            if ($activeBranchIdForCheques) {
+                                                $outer->where('branch_id', $activeBranchIdForCheques)
+                                                    ->orWhere(function ($sub) use ($activeBranchIdForCheques) {
+                                                        $sub->whereNull('branch_id')
+                                                            ->whereHas('voucherMaster', fn ($q) => $q->where('branch_id', $activeBranchIdForCheques));
+                                                    });
+                                            }
                                         })
                                         ->count();
                                 @endphp
                                 @if ($dueChequesCount > 0)
                                     <li class="nav-item mr-2 d-flex align-items-center">
-                                        <a href="{{ route('cheques.index', ['status' => 'pending']) }}" class="nav-link"
+                                        <a href="{{ route('cheques.index', ['status' => 'due']) }}" class="nav-link"
                                             style="background: #fee2e2; color: #dc2626; border-radius: 8px; padding: 6px 12px; font-weight: 600; font-size: 0.85rem; border: 1px solid #fca5a5; box-shadow: 0 2px 4px rgba(220,38,38,0.1);">
                                             <i class="fas fa-exclamation-circle mr-1"></i> {{ $dueChequesCount }} Due
                                             Cheque(s)
                                         </a>
                                     </li>
                                 @endif
-                            @endcan
+                            @endcanany
 
                             <!-- Notification Bell -->
                             <li class="nav-item dropdown mr-2" id="notificationLi">
@@ -793,10 +795,10 @@
                                             <li><a href="{{ route('vouchers.list', 'jv') }}"><i
                                                         class="fa-solid fa-book text-secondary"></i> Journal Voucher (JV)</a></li>
                                         @endcan
-                                        @can('receipts.voucher.view')
+                                        @canany(['receipts.voucher.view', 'payment.voucher.view'])
                                             <li><a href="{{ route('cheques.index') }}"><i
                                                         class="fa-solid fa-money-check"></i> Cheque Management</a></li>
-                                        @endcan
+                                        @endcanany
                                     </ul>
                                 </div>
                             @endcanany

@@ -478,13 +478,17 @@ class VoucherController extends Controller
                 throw new \Exception("Could not find the required Chart of Accounts entry for type '{$vType}'. Please run Chart of Accounts Setup from the Accounts menu first.");
             }
 
+            $branchId          = $this->getBranchId() ?? 1;
             $v2Lines           = [];
             $firstTargetBankId = null;
             $chequeInHandId    = null;
+            $isChequeMode      = strtolower($request->payment_mode ?? '') === 'cheque';
 
-            if ($request->payment_mode === 'cheque') {
-                $chequeInHand   = \App\Models\Account::where('title', 'Cheque In Hand')->first();
-                $chequeInHandId = $chequeInHand?->id;
+            if ($isChequeMode) {
+                if (empty(trim((string) $request->cheque_no))) {
+                    throw new \Exception('Cheque number is required when Payment Mode is Cheque.');
+                }
+                $chequeInHandId = $balanceService->getChequeInHandId($branchId);
             }
 
             // DEBIT SIDE (Cash/Bank/Cheque) - From Row Inputs
@@ -493,7 +497,7 @@ class VoucherController extends Controller
                 $amt = (float) ($request->amount[$idx] ?? 0);
                 if ($amt <= 0) continue;
 
-                if ($request->payment_mode === 'cheque' && $chequeInHandId) {
+                if ($isChequeMode && $chequeInHandId) {
                     if (! $firstTargetBankId) $firstTargetBankId = $accId;
                     $v2Lines[] = [
                         'account_id' => $chequeInHandId,
@@ -527,20 +531,31 @@ class VoucherController extends Controller
                 'voucher_type' => 'receipt',
                 'date'         => $request->receipt_date,
                 'status'       => 'posted',
+                'branch_id'    => $branchId,
                 'party_type'   => $partyType,
                 'party_id'     => $request->vendor_id,
+                'cheque_no'    => $isChequeMode ? trim((string) $request->cheque_no) : null,
+                'cheque_date'  => $isChequeMode ? ($request->cheque_date ?: $request->receipt_date) : null,
                 'remarks'      => (($request->remarks && strtolower($request->remarks) !== 'active') ? $request->remarks : "Manual Receipt Voucher") . " (Ref: $rvid)",
             ], $v2Lines, auth()->id());
 
-            if ($request->payment_mode === 'cheque' && $firstTargetBankId) {
-                \App\Models\Cheque::create([
-                    'voucher_master_id' => $createdVoucher->id,
-                    'cheque_no'         => $request->cheque_no,
-                    'cheque_date'       => $request->cheque_date,
-                    'bank_name'         => $request->bank_name,
-                    'status'            => 'pending',
-                    'amount'            => $totalAmt,
-                    'actual_account_id' => $firstTargetBankId,
+            if ($isChequeMode && $firstTargetBankId) {
+                app(\App\Services\ChequeService::class)->registerCheque([
+                    'type'                => \App\Models\Cheque::TYPE_RECEIVED,
+                    'voucher_master_id'   => $createdVoucher->id,
+                    'branch_id'           => $branchId,
+                    'party_type'          => $partyType,
+                    'party_id'            => $request->vendor_id,
+                    'cheque_no'           => trim((string) $request->cheque_no),
+                    'issue_date'          => $request->receipt_date,
+                    'cheque_date'         => $request->cheque_date ?: $request->receipt_date,
+                    'bank_name'           => $request->bank_name,
+                    'status'              => \App\Models\Cheque::STATUS_PENDING,
+                    'amount'              => $totalAmt,
+                    'actual_account_id'   => $firstTargetBankId,
+                    'clearing_account_id' => $chequeInHandId,
+                    'remarks'             => $request->remarks,
+                    'created_by'          => auth()->id(),
                 ]);
             }
 
@@ -754,6 +769,34 @@ class VoucherController extends Controller
                 }
             }
 
+            $branchId       = $this->getBranchId() ?? 1;
+            $journalService = app(\App\Services\JournalEntryService::class);
+            $balanceService = app(\App\Services\BalanceService::class);
+            $chequeService  = app(\App\Services\ChequeService::class);
+            $isChequeMode   = strtolower($request->payment_mode ?? '') === 'cheque';
+
+            if ($totalAmount <= 0) {
+                throw new \Exception('Total payment amount must be greater than zero.');
+            }
+
+            $creditAccountId = $request->header_account_id;
+            $sourceAccount   = $creditAccountId ? \App\Models\Account::find($creditAccountId) : null;
+
+            if ($isChequeMode) {
+                if (empty(trim((string) $request->cheque_no))) {
+                    throw new \Exception('Cheque number is required when Payment Mode is Cheque.');
+                }
+                if ($creditAccountId) {
+                    $chequeService->ensureUniqueIssuedCheque((int) $creditAccountId, trim((string) $request->cheque_no));
+                }
+                // Route issued cheques through Cheques Issued (PDC) clearing liability; bank is only credited when cleared
+                $creditAccountId = $balanceService->getChequeIssuedId($branchId);
+            } elseif ($sourceAccount && \App\Services\ChequeService::isCashAccount($sourceAccount) && (float) $sourceAccount->calculated_balance < $totalAmount) {
+                $avail  = number_format((float) $sourceAccount->calculated_balance, 2);
+                $reqAmt = number_format($totalAmount, 2);
+                throw new \Exception("Insufficient Cash Balance! '{$sourceAccount->title}' has available balance of Rs. {$avail}, but requested payment is Rs. {$reqAmt}.");
+            }
+
             $v2Voucher = \App\Models\VoucherMaster::create([
                 'voucher_type' => \App\Models\VoucherMaster::TYPE_PAYMENT,
                 'voucher_no'   => $pvid,
@@ -761,52 +804,63 @@ class VoucherController extends Controller
                 'status'       => \App\Models\VoucherMaster::STATUS_POSTED,
                 'party_type'   => $partyType,
                 'party_id'     => $partyId,
+                'cheque_no'    => $isChequeMode ? trim((string) $request->cheque_no) : null,
+                'cheque_date'  => $isChequeMode ? ($request->cheque_date ?? now()->toDateString()) : null,
                 'total_amount' => $totalAmount,
                 'remarks'      => ($request->remarks && strtolower($request->remarks) !== 'active') ? $request->remarks : "Manual Payment Voucher #$pvid",
                 'created_by'   => auth()->id(),
-                'branch_id'    => $this->getBranchId() ?? 1,
+                'branch_id'    => $branchId,
                 'posted_at'    => now(),
             ]);
 
-            // Create V2 Details for Source (CREDIT since money is leaving Cash/Bank)
-            if ($request->header_account_id) {
+            // Create V2 Details & Journal Entry for Credit Source (Cash / Bank / Cheques Issued PDC)
+            if ($creditAccountId) {
+                $creditNarration = $isChequeMode
+                    ? "Issued Cheque #{$request->cheque_no}" . ($sourceAccount ? " ({$sourceAccount->title})" : '')
+                    : 'Payment Source';
+
                 \App\Models\VoucherDetail::create([
                     'voucher_master_id' => $v2Voucher->id,
-                    'account_id'        => $request->header_account_id,
+                    'account_id'        => $creditAccountId,
                     'debit'             => 0,
                     'credit'            => $totalAmount,
-                    'narration'         => 'Payment Source',
+                    'narration'         => $creditNarration,
                 ]);
+
+                $journalService->recordEntry(
+                    $v2Voucher,
+                    (int) $creditAccountId,
+                    0,
+                    $totalAmount,
+                    $creditNarration,
+                    $request->receipt_date ?? now()->toDateString(),
+                    null
+                );
             }
 
-            /**
-             * STEP 1: Header Source (Account) -> MINUS (Money Leaving)
-             */
-            if ($request->header_account_id) {
-                $sourceAccount = \App\Models\Account::find($request->header_account_id);
-                if ($sourceAccount) {
-                    $sourceAccount->opening_balance = $sourceAccount->opening_balance - $totalAmount;
-                    $sourceAccount->save();
-                }
-
-                if (strtolower($request->payment_mode ?? '') === 'cheque') {
-                    \App\Models\Cheque::create([
-                        'voucher_master_id' => $v2Voucher->id,
-                        'cheque_no' => $request->cheque_no,
-                        'cheque_date' => $request->cheque_date ?? now()->toDateString(),
-                        'bank_name' => $request->bank_name,
-                        'status' => 'pending',
-                        'amount' => $totalAmount,
-                        'actual_account_id' => $request->header_account_id
-                    ]);
-                }
+            if ($isChequeMode) {
+                $chequeService->registerCheque([
+                    'type'                => \App\Models\Cheque::TYPE_ISSUED,
+                    'voucher_master_id'   => $v2Voucher->id,
+                    'branch_id'           => $branchId,
+                    'party_type'          => $partyType,
+                    'party_id'            => $partyId,
+                    'cheque_no'           => trim((string) $request->cheque_no),
+                    'issue_date'          => $request->receipt_date ?? now()->toDateString(),
+                    'cheque_date'         => $request->cheque_date ?? now()->toDateString(),
+                    'bank_name'           => trim((string) ($request->bank_name ?? '')) ?: ($sourceAccount?->title ?? null),
+                    'status'              => \App\Models\Cheque::STATUS_PENDING,
+                    'amount'              => $totalAmount,
+                    'actual_account_id'   => $request->header_account_id,
+                    'clearing_account_id' => $creditAccountId,
+                    'remarks'             => $request->remarks,
+                    'created_by'          => auth()->id(),
+                ]);
             }
 
             /**
              * STEP 2: Table Destinations (Parties) → Update Ledgers + Create Journal Entries
              */
-            $journalService = app(\App\Services\JournalEntryService::class);
-            $balanceService  = app(\App\Services\BalanceService::class);
 
             // The primary source model is now V2 VoucherMaster
             $savedSource = $v2Voucher;
@@ -1790,7 +1844,7 @@ class VoucherController extends Controller
     public function voucherList($type = 'all')
     {
         $branchId = $this->getBranchId();
-        $query = \App\Models\VoucherMaster::with(['details.account', 'party', 'createdBy', 'modifiedBy'])
+        $query = \App\Models\VoucherMaster::with(['details.account', 'party', 'createdBy', 'modifiedBy', 'cheques'])
             ->when($branchId, fn($q) => $q->where('branch_id', $branchId))
             ->orderByDesc('id');
 
@@ -1886,12 +1940,13 @@ class VoucherController extends Controller
     public function storeVoucherAction(Request $request, $type)
     {
         $selectedBranchId = $request->branch_id ?? $this->getBranchId() ?? 1;
-        $branchId = (int)$selectedBranchId;
+        $branchId = (int) $selectedBranchId;
         $branch = \App\Models\Branch::find($branchId);
         $locationName = $branch ? $branch->name : ($request->location ?? 'HEAD OFFICE');
         $type = strtolower($type);
         $voucherService = app(\App\Services\VoucherService::class);
         $balanceService = app(\App\Services\BalanceService::class);
+        $chequeService  = app(\App\Services\ChequeService::class);
 
         $firstAccountId = Account::first()?->id ?? 1;
         $arAccountId = $balanceService->getAccountsReceivableId($branchId) ?: $firstAccountId;
@@ -1909,197 +1964,353 @@ class VoucherController extends Controller
         ];
 
         $lines = [];
+        $pendingChequePayload = null;
 
-        if ($type === 'crv') {
-            $amount = (float)$request->amount;
-            $partyType = $request->party_type ?? 'customer';
-            $targetStr = $request->party_id ?? $request->customer_id ?? '';
+        try {
+            DB::beginTransaction();
 
-            if ($partyType === 'vendor' || str_starts_with((string)$targetStr, 'vendor_')) {
-                $vId = (int)str_replace('vendor_', '', (string)$targetStr);
-                $headerData['party_type'] = Vendor::class;
-                $headerData['party_id']   = $vId;
-                $creditAccountId          = $apAccountId;
-            } else {
-                $cId = (int)str_replace('customer_', '', (string)$targetStr);
-                $headerData['party_type'] = Customer::class;
-                $headerData['party_id']   = $cId;
-                $creditAccountId          = $arAccountId;
-            }
+            if ($type === 'crv') {
+                $amount = (float) $request->amount;
+                if ($amount <= 0) {
+                    throw new \InvalidArgumentException('Amount must be greater than zero.');
+                }
+                $partyType = $request->party_type ?? 'customer';
+                $targetStr = $request->party_id ?? $request->customer_id ?? '';
 
-            $lines[] = [
-                'account_id' => $request->cash_account_id,
-                'debit'      => $amount,
-                'credit'     => 0,
-                'narration'  => $request->line_narration ?? $request->remarks,
-            ];
-            $lines[] = [
-                'account_id' => $creditAccountId,
-                'party_type' => $headerData['party_type'],
-                'party_id'   => $headerData['party_id'],
-                'debit'      => 0,
-                'credit'     => $amount,
-                'narration'  => $request->line_narration ?? $request->remarks,
-            ];
-        } elseif ($type === 'brv') {
-            $amount = (float)$request->amount;
-            $partyType = $request->party_type ?? 'customer';
-            $targetStr = $request->party_id ?? $request->customer_id ?? '';
-
-            if ($partyType === 'vendor' || str_starts_with((string)$targetStr, 'vendor_')) {
-                $vId = (int)str_replace('vendor_', '', (string)$targetStr);
-                $headerData['party_type'] = Vendor::class;
-                $headerData['party_id']   = $vId;
-                $creditAccountId          = $apAccountId;
-            } else {
-                $cId = (int)str_replace('customer_', '', (string)$targetStr);
-                $headerData['party_type'] = Customer::class;
-                $headerData['party_id']   = $cId;
-                $creditAccountId          = $arAccountId;
-            }
-
-            $lines[] = [
-                'account_id' => $request->bank_account_id,
-                'debit'      => $amount,
-                'credit'     => 0,
-                'narration'  => $request->line_narration ?? $request->remarks,
-            ];
-            $lines[] = [
-                'account_id' => $creditAccountId,
-                'party_type' => $headerData['party_type'],
-                'party_id'   => $headerData['party_id'],
-                'debit'      => 0,
-                'credit'     => $amount,
-                'narration'  => $request->line_narration ?? $request->remarks,
-            ];
-        } elseif ($type === 'cpv') {
-            $amount = (float)$request->amount;
-            $cashAccount = Account::find($request->cash_account_id);
-            if ($cashAccount && (float)$cashAccount->calculated_balance < $amount) {
-                $avail = number_format((float)$cashAccount->calculated_balance, 2);
-                $reqAmt = number_format($amount, 2);
-                return back()->withInput()->with('error', "Insufficient Cash Balance! '{$cashAccount->title}' has available balance of Rs. {$avail}, but requested payment is Rs. {$reqAmt}. Payment cannot exceed available balance.");
-            }
-
-            $targetStr = $request->target_id;
-            
-            if (str_starts_with($targetStr, 'vendor_')) {
-                $vId = (int)str_replace('vendor_', '', $targetStr);
-                $headerData['party_type'] = Vendor::class;
-                $headerData['party_id']   = $vId;
-                $targetAccountId = $apAccountId;
-            } elseif (str_starts_with($targetStr, 'customer_')) {
-                $cId = (int)str_replace('customer_', '', $targetStr);
-                $headerData['party_type'] = Customer::class;
-                $headerData['party_id']   = $cId;
-                $targetAccountId = $arAccountId;
-            } else {
-                $targetAccountId = (int)str_replace('account_', '', $targetStr);
-            }
-
-            $lines[] = [
-                'account_id' => $targetAccountId,
-                'debit'      => $amount,
-                'credit'     => 0,
-                'narration'  => $request->line_narration ?? $request->remarks,
-            ];
-            $lines[] = [
-                'account_id' => $request->cash_account_id,
-                'debit'      => 0,
-                'credit'     => $amount,
-                'narration'  => $request->line_narration ?? $request->remarks,
-            ];
-        } elseif ($type === 'bpv') {
-            $amount = (float)$request->amount;
-            // Bank Payment Voucher (BPV) / Cheques: Post-dated & advance cheques allowed regardless of current balance
-
-            $targetStr = $request->target_id;
-            
-            if (str_starts_with($targetStr, 'vendor_')) {
-                $vId = (int)str_replace('vendor_', '', $targetStr);
-                $headerData['party_type'] = Vendor::class;
-                $headerData['party_id']   = $vId;
-                $targetAccountId = $apAccountId;
-            } elseif (str_starts_with($targetStr, 'customer_')) {
-                $cId = (int)str_replace('customer_', '', $targetStr);
-                $headerData['party_type'] = Customer::class;
-                $headerData['party_id']   = $cId;
-                $targetAccountId = $arAccountId;
-            } else {
-                $targetAccountId = (int)str_replace('account_', '', $targetStr);
-            }
-
-            $lines[] = [
-                'account_id' => $targetAccountId,
-                'debit'      => $amount,
-                'credit'     => 0,
-                'narration'  => $request->line_narration ?? $request->remarks,
-            ];
-            $lines[] = [
-                'account_id' => $request->bank_account_id,
-                'debit'      => 0,
-                'credit'     => $amount,
-                'narration'  => $request->line_narration ?? $request->remarks,
-            ];
-        } elseif ($type === 'jv') {
-            foreach ($request->rows as $r) {
-                $itemType = $r['item_type'] ?? 'account';
-                $targetId = $r['account_id'] ?? $r['target_id'] ?? '';
-                $partyType = null;
-                $partyId = null;
-                $lineAccountId = null;
-
-                $debit = (float)($r['debit'] ?? 0);
-                $credit = (float)($r['credit'] ?? 0);
-
-                if ($itemType === 'customer' || str_starts_with($targetId, 'customer_')) {
-                    $cId = (int)str_replace('customer_', '', $targetId);
-                    $partyType = Customer::class;
-                    $partyId = $cId;
-                    $lineAccountId = $arAccountId;
-                } elseif ($itemType === 'vendor' || str_starts_with($targetId, 'vendor_')) {
-                    $vId = (int)str_replace('vendor_', '', $targetId);
-                    $partyType = Vendor::class;
-                    $partyId = $vId;
-                    $lineAccountId = $apAccountId;
+                if ($partyType === 'vendor' || str_starts_with((string) $targetStr, 'vendor_')) {
+                    $vId = (int) str_replace('vendor_', '', (string) $targetStr);
+                    $headerData['party_type'] = Vendor::class;
+                    $headerData['party_id']   = $vId;
+                    $creditAccountId          = $apAccountId;
                 } else {
-                    $accId = (int)str_replace('account_', '', $targetId);
-                    $lineAccountId = $accId;
-
-                    // Restriction Check: If Cash or Bank account or Debit asset is Credited (deducted/paid) in JV
-                    if ($credit > 0 && $accId) {
-                        $deductAcc = Account::find($accId);
-                        if ($deductAcc && $deductAcc->type === 'Debit' && (float)$deductAcc->calculated_balance < $credit) {
-                            $avail = number_format((float)$deductAcc->calculated_balance, 2);
-                            $reqAmt = number_format($credit, 2);
-                            return back()->withInput()->with('error', "Insufficient Balance in '{$deductAcc->title}'! Available balance is Rs. {$avail}, but requested deduction is Rs. {$reqAmt}. Cannot withdraw more than available balance.");
-                        }
-                    }
+                    $cId = (int) str_replace('customer_', '', (string) $targetStr);
+                    $headerData['party_type'] = Customer::class;
+                    $headerData['party_id']   = $cId;
+                    $creditAccountId          = $arAccountId;
                 }
 
-                if ($lineAccountId || $partyId) {
+                $lines[] = [
+                    'account_id' => $request->cash_account_id,
+                    'debit'      => $amount,
+                    'credit'     => 0,
+                    'narration'  => $request->line_narration ?? $request->remarks,
+                ];
+                $lines[] = [
+                    'account_id' => $creditAccountId,
+                    'party_type' => $headerData['party_type'],
+                    'party_id'   => $headerData['party_id'],
+                    'debit'      => 0,
+                    'credit'     => $amount,
+                    'narration'  => $request->line_narration ?? $request->remarks,
+                ];
+            } elseif ($type === 'brv') {
+                $amount = (float) $request->amount;
+                if ($amount <= 0) {
+                    throw new \InvalidArgumentException('Amount must be greater than zero.');
+                }
+
+                $partyType = $request->party_type ?? 'customer';
+                $targetStr = $request->party_id ?? $request->customer_id ?? '';
+
+                if ($partyType === 'vendor' || str_starts_with((string) $targetStr, 'vendor_')) {
+                    $vId = (int) str_replace('vendor_', '', (string) $targetStr);
+                    $headerData['party_type'] = Vendor::class;
+                    $headerData['party_id']   = $vId;
+                    $creditAccountId          = $apAccountId;
+                } else {
+                    $cId = (int) str_replace('customer_', '', (string) $targetStr);
+                    $headerData['party_type'] = Customer::class;
+                    $headerData['party_id']   = $cId;
+                    $creditAccountId          = $arAccountId;
+                }
+
+                $instrument = strtolower((string) $request->input('payment_mode', ''));
+                if ($instrument === '') {
+                    $instrument = $request->filled('cheque_no') ? 'cheque' : 'online';
+                }
+
+                $bankAccount = Account::findOrFail((int) $request->bank_account_id);
+
+                if ($instrument === 'cheque') {
+                    $chequeNo = trim((string) $request->cheque_no);
+                    if ($chequeNo === '') {
+                        throw new \InvalidArgumentException('Cheque number is required when Payment Mode is Cheque.');
+                    }
+                    $chequeDate = $request->cheque_date ?: $headerData['date'];
+                    $chequeInHandId = $balanceService->getChequeInHandId($branchId);
+
+                    $headerData['cheque_no']   = $chequeNo;
+                    $headerData['cheque_date'] = $chequeDate;
+
+                    $baseNarr = $request->line_narration ?: $request->remarks;
+                    $debitNarr = "Cheque Receipt #{$chequeNo} (Due: {$chequeDate}, Target: {$bankAccount->title})" . ($baseNarr ? " - {$baseNarr}" : '');
+
                     $lines[] = [
-                        'account_id' => $lineAccountId ?: ($arAccountId ?? 1),
-                        'party_type' => $partyType,
-                        'party_id'   => $partyId,
-                        'debit'      => $debit,
-                        'credit'     => $credit,
-                        'narration'  => $r['narration'] ?? $request->remarks,
+                        'account_id' => $chequeInHandId,
+                        'debit'      => $amount,
+                        'credit'     => 0,
+                        'narration'  => $debitNarr,
+                    ];
+                    $lines[] = [
+                        'account_id' => $creditAccountId,
+                        'party_type' => $headerData['party_type'],
+                        'party_id'   => $headerData['party_id'],
+                        'debit'      => 0,
+                        'credit'     => $amount,
+                        'narration'  => $debitNarr,
+                    ];
+
+                    $pendingChequePayload = [
+                        'type'                => \App\Models\Cheque::TYPE_RECEIVED,
+                        'branch_id'           => $branchId,
+                        'party_type'          => $headerData['party_type'],
+                        'party_id'            => $headerData['party_id'],
+                        'cheque_no'           => $chequeNo,
+                        'issue_date'          => $headerData['date'],
+                        'cheque_date'         => $chequeDate,
+                        'bank_name'           => trim((string) $request->bank_name) ?: $bankAccount->title,
+                        'status'              => \App\Models\Cheque::STATUS_PENDING,
+                        'amount'              => $amount,
+                        'actual_account_id'   => $bankAccount->id,
+                        'clearing_account_id' => $chequeInHandId,
+                        'remarks'             => $request->remarks,
+                        'created_by'          => auth()->id(),
+                    ];
+                } else {
+                    $headerData['cheque_no']   = $request->filled('cheque_no') ? trim((string) $request->cheque_no) : null;
+                    $headerData['cheque_date'] = $request->filled('cheque_no') ? ($request->cheque_date ?? $headerData['date']) : null;
+
+                    $lines[] = [
+                        'account_id' => $bankAccount->id,
+                        'debit'      => $amount,
+                        'credit'     => 0,
+                        'narration'  => $request->line_narration ?? $request->remarks,
+                    ];
+                    $lines[] = [
+                        'account_id' => $creditAccountId,
+                        'party_type' => $headerData['party_type'],
+                        'party_id'   => $headerData['party_id'],
+                        'debit'      => 0,
+                        'credit'     => $amount,
+                        'narration'  => $request->line_narration ?? $request->remarks,
                     ];
                 }
+            } elseif ($type === 'cpv') {
+                $amount = (float) $request->amount;
+                if ($amount <= 0) {
+                    throw new \InvalidArgumentException('Amount must be greater than zero.');
+                }
+                $cashAccount = Account::find($request->cash_account_id);
+                if ($cashAccount && \App\Services\ChequeService::isCashAccount($cashAccount) && (float) $cashAccount->calculated_balance < $amount) {
+                    $avail = number_format((float) $cashAccount->calculated_balance, 2);
+                    $reqAmt = number_format($amount, 2);
+                    DB::rollBack();
+                    return back()->withInput()->with('error', "Insufficient Cash Balance! '{$cashAccount->title}' has available balance of Rs. {$avail}, but requested payment is Rs. {$reqAmt}. Payment cannot exceed available balance.");
+                }
+
+                $targetStr = $request->target_id;
+
+                if (str_starts_with($targetStr, 'vendor_')) {
+                    $vId = (int) str_replace('vendor_', '', $targetStr);
+                    $headerData['party_type'] = Vendor::class;
+                    $headerData['party_id']   = $vId;
+                    $targetAccountId = $apAccountId;
+                } elseif (str_starts_with($targetStr, 'customer_')) {
+                    $cId = (int) str_replace('customer_', '', $targetStr);
+                    $headerData['party_type'] = Customer::class;
+                    $headerData['party_id']   = $cId;
+                    $targetAccountId = $arAccountId;
+                } else {
+                    $targetAccountId = (int) str_replace('account_', '', $targetStr);
+                }
+
+                $lines[] = [
+                    'account_id' => $targetAccountId,
+                    'party_type' => $headerData['party_type'] ?? null,
+                    'party_id'   => $headerData['party_id'] ?? null,
+                    'debit'      => $amount,
+                    'credit'     => 0,
+                    'narration'  => $request->line_narration ?? $request->remarks,
+                ];
+                $lines[] = [
+                    'account_id' => $request->cash_account_id,
+                    'debit'      => 0,
+                    'credit'     => $amount,
+                    'narration'  => $request->line_narration ?? $request->remarks,
+                ];
+            } elseif ($type === 'bpv') {
+                $amount = (float) $request->amount;
+                if ($amount <= 0) {
+                    throw new \InvalidArgumentException('Amount must be greater than zero.');
+                }
+                // Bank Payment Voucher (BPV) / Cheques: Post-dated & advance cheques allowed regardless of current bank balance!
+
+                $targetStr = $request->target_id;
+
+                if (str_starts_with($targetStr, 'vendor_')) {
+                    $vId = (int) str_replace('vendor_', '', $targetStr);
+                    $headerData['party_type'] = Vendor::class;
+                    $headerData['party_id']   = $vId;
+                    $targetAccountId = $apAccountId;
+                } elseif (str_starts_with($targetStr, 'customer_')) {
+                    $cId = (int) str_replace('customer_', '', $targetStr);
+                    $headerData['party_type'] = Customer::class;
+                    $headerData['party_id']   = $cId;
+                    $targetAccountId = $arAccountId;
+                } else {
+                    $targetAccountId = (int) str_replace('account_', '', $targetStr);
+                }
+
+                $instrument = strtolower((string) $request->input('payment_mode', ''));
+                if ($instrument === '') {
+                    $instrument = $request->filled('cheque_no') ? 'cheque' : 'online';
+                }
+
+                $bankAccount = Account::findOrFail((int) $request->bank_account_id);
+
+                if ($instrument === 'cheque') {
+                    $chequeNo = trim((string) $request->cheque_no);
+                    if ($chequeNo === '') {
+                        throw new \InvalidArgumentException('Cheque number is required when Payment Mode is Cheque.');
+                    }
+                    $chequeService->ensureUniqueIssuedCheque($bankAccount->id, $chequeNo);
+
+                    $chequeDate = $request->cheque_date ?: $headerData['date'];
+                    $chequeIssuedId = $balanceService->getChequeIssuedId($branchId);
+
+                    $headerData['cheque_no']   = $chequeNo;
+                    $headerData['cheque_date'] = $chequeDate;
+
+                    $baseNarr = $request->line_narration ?: $request->remarks;
+                    $creditNarr = "Cheque Payment #{$chequeNo} (Due: {$chequeDate}, Bank: {$bankAccount->title})" . ($baseNarr ? " - {$baseNarr}" : '');
+
+                    $lines[] = [
+                        'account_id' => $targetAccountId,
+                        'party_type' => $headerData['party_type'] ?? null,
+                        'party_id'   => $headerData['party_id'] ?? null,
+                        'debit'      => $amount,
+                        'credit'     => 0,
+                        'narration'  => $creditNarr,
+                    ];
+                    $lines[] = [
+                        'account_id' => $chequeIssuedId,
+                        'debit'      => 0,
+                        'credit'     => $amount,
+                        'narration'  => $creditNarr,
+                    ];
+
+                    $pendingChequePayload = [
+                        'type'                => \App\Models\Cheque::TYPE_ISSUED,
+                        'branch_id'           => $branchId,
+                        'party_type'          => $headerData['party_type'] ?? null,
+                        'party_id'            => $headerData['party_id'] ?? null,
+                        'cheque_no'           => $chequeNo,
+                        'issue_date'          => $headerData['date'],
+                        'cheque_date'         => $chequeDate,
+                        'bank_name'           => trim((string) $request->bank_name) ?: $bankAccount->title,
+                        'status'              => \App\Models\Cheque::STATUS_PENDING,
+                        'amount'              => $amount,
+                        'actual_account_id'   => $bankAccount->id,
+                        'clearing_account_id' => $chequeIssuedId,
+                        'remarks'             => $request->remarks,
+                        'created_by'          => auth()->id(),
+                    ];
+                } else {
+                    $headerData['cheque_no']   = $request->filled('cheque_no') ? trim((string) $request->cheque_no) : null;
+                    $headerData['cheque_date'] = $request->filled('cheque_no') ? ($request->cheque_date ?? $headerData['date']) : null;
+
+                    $lines[] = [
+                        'account_id' => $targetAccountId,
+                        'party_type' => $headerData['party_type'] ?? null,
+                        'party_id'   => $headerData['party_id'] ?? null,
+                        'debit'      => $amount,
+                        'credit'     => 0,
+                        'narration'  => $request->line_narration ?? $request->remarks,
+                    ];
+                    $lines[] = [
+                        'account_id' => $bankAccount->id,
+                        'debit'      => 0,
+                        'credit'     => $amount,
+                        'narration'  => $request->line_narration ?? $request->remarks,
+                    ];
+                }
+            } elseif ($type === 'jv') {
+                foreach ($request->rows as $r) {
+                    $itemType = $r['item_type'] ?? 'account';
+                    $targetId = $r['account_id'] ?? $r['target_id'] ?? '';
+                    $partyType = null;
+                    $partyId = null;
+                    $lineAccountId = null;
+
+                    $debit = (float) ($r['debit'] ?? 0);
+                    $credit = (float) ($r['credit'] ?? 0);
+
+                    if ($itemType === 'customer' || str_starts_with($targetId, 'customer_')) {
+                        $cId = (int) str_replace('customer_', '', $targetId);
+                        $partyType = Customer::class;
+                        $partyId = $cId;
+                        $lineAccountId = $arAccountId;
+                    } elseif ($itemType === 'vendor' || str_starts_with($targetId, 'vendor_')) {
+                        $vId = (int) str_replace('vendor_', '', $targetId);
+                        $partyType = Vendor::class;
+                        $partyId = $vId;
+                        $lineAccountId = $apAccountId;
+                    } else {
+                        $accId = (int) str_replace('account_', '', $targetId);
+                        $lineAccountId = $accId;
+
+                        // Restriction Check: ONLY enforce non-negative balance on Cash accounts (Bank/PDC cheques can go negative or be post-dated)
+                        if ($credit > 0 && $accId) {
+                            $deductAcc = Account::find($accId);
+                            if ($deductAcc && \App\Services\ChequeService::isCashAccount($deductAcc) && (float) $deductAcc->calculated_balance < $credit) {
+                                $avail = number_format((float) $deductAcc->calculated_balance, 2);
+                                $reqAmt = number_format($credit, 2);
+                                DB::rollBack();
+                                return back()->withInput()->with('error', "Insufficient Cash Balance in '{$deductAcc->title}'! Available balance is Rs. {$avail}, but requested deduction is Rs. {$reqAmt}.");
+                            }
+                        }
+                    }
+
+                    if ($lineAccountId || $partyId) {
+                        $lines[] = [
+                            'account_id' => $lineAccountId ?: ($arAccountId ?? 1),
+                            'party_type' => $partyType,
+                            'party_id'   => $partyId,
+                            'debit'      => $debit,
+                            'credit'     => $credit,
+                            'narration'  => $r['narration'] ?? $request->remarks,
+                        ];
+                    }
+                }
             }
+
+            $voucher = $voucherService->createVoucher($headerData, $lines, auth()->id());
+
+            if ($pendingChequePayload) {
+                $pendingChequePayload['voucher_master_id'] = $voucher->id;
+                $chequeService->registerCheque($pendingChequePayload);
+            }
+
+            DB::commit();
+
+            return redirect()->route('vouchers.list', ['type' => $type])
+                ->with('success', strtoupper($type) . " voucher ({$voucher->voucher_no}) created and posted successfully!");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return back()->withInput()->with('error', $e->getMessage());
         }
-
-        $voucher = $voucherService->createVoucher($headerData, $lines, auth()->id());
-
-        return redirect()->route('vouchers.list', ['type' => $type])
-            ->with('success', strtoupper($type) . " voucher ({$voucher->voucher_no}) created and posted successfully!");
     }
 
     public function editVoucherPage($id)
     {
         $branchId = $this->getBranchId();
-        $voucher = \App\Models\VoucherMaster::with(['details.account', 'details.party', 'party'])->findOrFail($id);
+        $voucher = \App\Models\VoucherMaster::with(['details.account', 'details.party', 'party', 'cheques'])->findOrFail($id);
+
+        $linkedCheque = $voucher->cheques->first();
+        $isGeneratedByChequeMgmt = \App\Models\Cheque::where('clearance_voucher_id', $voucher->id)
+            ->orWhere('bounce_voucher_id', $voucher->id)
+            ->exists();
+        $isChequeLocked = $isGeneratedByChequeMgmt || ($linkedCheque && ! in_array($linkedCheque->status, [\App\Models\Cheque::STATUS_PENDING], true));
 
         $cashAccounts = Account::where('status', 1)
             ->where(fn($q) => $q->whereNull('is_active')->orWhere('is_active', 1))
@@ -2158,34 +2369,39 @@ class VoucherController extends Controller
 
         return view('admin_panel.vochers.unified_edit', compact(
             'voucher', 'allAccounts', 'cashAccounts', 'bankAccounts', 'expenseAccounts', 'customers', 'vendors',
-            'branches', 'isSuperAdmin', 'userBranch'
+            'branches', 'isSuperAdmin', 'userBranch', 'linkedCheque', 'isChequeLocked'
         ));
     }
 
     public function updateVoucherAction(Request $request, $id)
     {
-        $voucher = \App\Models\VoucherMaster::findOrFail($id);
+        $voucher = \App\Models\VoucherMaster::with(['details', 'cheques'])->findOrFail($id);
         $voucherService = app(\App\Services\VoucherService::class);
         $balanceService = app(\App\Services\BalanceService::class);
+        $chequeService  = app(\App\Services\ChequeService::class);
+
+        $isGeneratedByChequeMgmt = \App\Models\Cheque::where('clearance_voucher_id', $voucher->id)
+            ->orWhere('bounce_voucher_id', $voucher->id)
+            ->exists();
+        if ($isGeneratedByChequeMgmt) {
+            return back()->withInput()->with('error', 'This voucher was generated by Cheque Management. Manage or reverse it from Cheque Management.');
+        }
+
+        $linkedCheque = $voucher->cheques->first();
+        if ($linkedCheque && $linkedCheque->status !== \App\Models\Cheque::STATUS_PENDING) {
+            return back()->withInput()->with('error', "Cannot edit voucher {$voucher->voucher_no}: linked Cheque #{$linkedCheque->cheque_no} is already {$linkedCheque->status}.");
+        }
 
         $selectedBranchId = $request->branch_id ?? $voucher->branch_id ?? $this->getBranchId() ?? 1;
         $branch = \App\Models\Branch::find($selectedBranchId);
         $locationName = $branch ? $branch->name : ($request->location ?? $voucher->location ?? 'HEAD OFFICE');
 
         $firstAccountId = Account::first()?->id ?? 1;
-        $arAccountId = $balanceService->getAccountsReceivableId((int)$selectedBranchId) ?: $firstAccountId;
-        $apAccountId = $balanceService->getAccountsPayableId((int)$selectedBranchId) ?: $firstAccountId;
+        $arAccountId = $balanceService->getAccountsReceivableId((int) $selectedBranchId) ?: $firstAccountId;
+        $apAccountId = $balanceService->getAccountsPayableId((int) $selectedBranchId) ?: $firstAccountId;
 
-        $headerData = [
-            'voucher_type' => $request->voucher_type ?? $voucher->voucher_type,
-            'date'         => $request->date,
-            'location'     => $locationName,
-            'branch_id'    => $selectedBranchId,
-            'cheque_no'    => $request->cheque_no ?? null,
-            'cheque_date'  => $request->cheque_date ?? null,
-            'remarks'      => $request->remarks,
-            'status'       => 'posted',
-        ];
+        $headerPartyType = $voucher->party_type;
+        $headerPartyId   = $voucher->party_id;
 
         $lines = [];
         foreach ($request->rows as $r) {
@@ -2196,35 +2412,41 @@ class VoucherController extends Controller
             $lineAccountId = null;
 
             if ($itemType === 'customer' || str_starts_with($targetId, 'customer_')) {
-                $cId = (int)str_replace('customer_', '', $targetId);
+                $cId = (int) str_replace('customer_', '', $targetId);
                 $partyType = Customer::class;
                 $partyId = $cId;
                 $lineAccountId = $arAccountId;
             } elseif ($itemType === 'vendor' || str_starts_with($targetId, 'vendor_')) {
-                $vId = (int)str_replace('vendor_', '', $targetId);
+                $vId = (int) str_replace('vendor_', '', $targetId);
                 $partyType = Vendor::class;
                 $partyId = $vId;
                 $lineAccountId = $apAccountId;
             } else {
-                $accId = (int)str_replace('account_', '', $targetId);
+                $accId = (int) str_replace('account_', '', $targetId);
                 $lineAccountId = $accId;
             }
 
-            $debit = (float)($r['debit'] ?? 0);
-            $credit = (float)($r['credit'] ?? 0);
+            $debit = (float) ($r['debit'] ?? 0);
+            $credit = (float) ($r['credit'] ?? 0);
 
             if ($lineAccountId || $partyId) {
+                // Only restrict physical Cash accounts — never restrict Bank accounts or Cheques Issued (PDC)
                 if ($lineAccountId && $credit > 0) {
                     $deductAcc = Account::find($lineAccountId);
-                    if ($deductAcc && $deductAcc->type === 'Debit') {
+                    if ($deductAcc && \App\Services\ChequeService::isCashAccount($deductAcc)) {
                         $existingLineCredit = $voucher->details->where('account_id', $lineAccountId)->sum('credit');
-                        $effectiveAvail = (float)$deductAcc->calculated_balance + $existingLineCredit;
+                        $effectiveAvail = (float) $deductAcc->calculated_balance + $existingLineCredit;
                         if ($credit > $effectiveAvail) {
                             $avail = number_format($effectiveAvail, 2);
                             $reqAmt = number_format($credit, 2);
-                            return back()->withInput()->with('error', "Insufficient Balance in '{$deductAcc->title}'! Available balance is Rs. {$avail}, but requested deduction is Rs. {$reqAmt}.");
+                            return back()->withInput()->with('error', "Insufficient Cash Balance in '{$deductAcc->title}'! Available balance is Rs. {$avail}, but requested deduction is Rs. {$reqAmt}.");
                         }
                     }
+                }
+
+                if ($partyType && $partyId && strtolower($voucher->voucher_type) !== 'jv') {
+                    $headerPartyType = $partyType;
+                    $headerPartyId   = $partyId;
                 }
 
                 $lines[] = [
@@ -2238,10 +2460,54 @@ class VoucherController extends Controller
             }
         }
 
-        $voucherService->updateVoucher($voucher, $headerData, $lines, auth()->id());
+        $headerData = [
+            'voucher_type' => $request->voucher_type ?? $voucher->voucher_type,
+            'date'         => $request->date,
+            'location'     => $locationName,
+            'branch_id'    => $selectedBranchId,
+            'party_type'   => $headerPartyType,
+            'party_id'     => $headerPartyId,
+            'cheque_no'    => $request->cheque_no ?? null,
+            'cheque_date'  => $request->cheque_date ?? null,
+            'remarks'      => $request->remarks,
+            'status'       => 'posted',
+        ];
 
-        return redirect()->route('vouchers.list', ['type' => $voucher->voucher_type])
-            ->with('success', "Voucher {$voucher->voucher_no} updated and re-posted successfully with full ledger synchronization!");
+        try {
+            DB::beginTransaction();
+
+            $updatedVoucher = $voucherService->updateVoucher($voucher, $headerData, $lines, auth()->id());
+
+            if ($linkedCheque) {
+                $newChequeNo = trim((string) ($request->cheque_no ?: $linkedCheque->cheque_no));
+                if ($linkedCheque->type === \App\Models\Cheque::TYPE_ISSUED) {
+                    $chequeService->ensureUniqueIssuedCheque(
+                        $linkedCheque->actual_account_id,
+                        $newChequeNo,
+                        $linkedCheque->id
+                    );
+                }
+
+                $linkedCheque->update([
+                    'branch_id'   => $selectedBranchId,
+                    'party_type'  => $updatedVoucher->party_type,
+                    'party_id'    => $updatedVoucher->party_id,
+                    'cheque_no'   => $newChequeNo,
+                    'issue_date'  => $updatedVoucher->date ? $updatedVoucher->date->toDateString() : $linkedCheque->issue_date,
+                    'cheque_date' => $request->cheque_date ?: $linkedCheque->cheque_date,
+                    'amount'      => (float) $updatedVoucher->total_amount,
+                    'remarks'     => $request->remarks,
+                ]);
+            }
+
+            DB::commit();
+
+            return redirect()->route('vouchers.list', ['type' => $voucher->voucher_type])
+                ->with('success', "Voucher {$voucher->voucher_no} updated and re-posted successfully with full ledger synchronization!");
+        } catch (\Throwable $e) {
+            DB::rollBack();
+            return back()->withInput()->with('error', $e->getMessage());
+        }
     }
 
     public function destroyVoucherAction($id)
@@ -2250,16 +2516,20 @@ class VoucherController extends Controller
         $type = $voucher->voucher_type;
         $vNo = $voucher->voucher_no;
 
-        $voucherService = app(\App\Services\VoucherService::class);
-        $voucherService->deleteVoucher($voucher);
+        try {
+            $voucherService = app(\App\Services\VoucherService::class);
+            $voucherService->deleteVoucher($voucher);
 
-        return redirect()->route('vouchers.list', ['type' => $type])
-            ->with('success', "Voucher {$vNo} deleted and all accounting entries cleanly reversed!");
+            return redirect()->route('vouchers.list', ['type' => $type])
+                ->with('success', "Voucher {$vNo} deleted and all accounting entries cleanly reversed!");
+        } catch (\Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
     }
 
     public function unifiedPrint($id)
     {
-        $voucher = \App\Models\VoucherMaster::with(['details.account', 'details.party', 'party', 'createdBy', 'modifiedBy', 'verifiedBy', 'branch'])
+        $voucher = \App\Models\VoucherMaster::with(['details.account', 'details.party', 'party', 'createdBy', 'modifiedBy', 'verifiedBy', 'branch', 'cheques.actualAccount'])
             ->findOrFail($id);
 
         $locationName = $voucher->location ?? ($voucher->branch->name ?? 'HEAD OFFICE');

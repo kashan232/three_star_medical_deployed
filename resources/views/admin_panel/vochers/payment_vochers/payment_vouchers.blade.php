@@ -416,6 +416,9 @@
             @if (session('success'))
                 <div class="alert-success-erp"><i class="bi bi-check-circle-fill"></i> {{ session('success') }}</div>
             @endif
+            @if (session('error'))
+                <div class="alert alert-danger rounded-3 shadow-sm"><i class="bi bi-exclamation-triangle-fill me-2"></i>{{ session('error') }}</div>
+            @endif
 
             <form action="{{ route('store_Pay_vochers') }}" method="POST">
                 @csrf
@@ -622,8 +625,13 @@
         $('#paymentMode').on('change', function() {
             if ($(this).val() === 'cheque') {
                 $('#chequeDetailsSection').slideDown();
+                $('#cheque_no, #cheque_date').prop('required', true);
+                if (!$('#cheque_date').val()) {
+                    $('#cheque_date').val('{{ now()->toDateString() }}');
+                }
             } else {
                 $('#chequeDetailsSection').slideUp();
+                $('#cheque_no, #cheque_date').prop('required', false);
                 $('#cheque_no, #cheque_date, #bank_name').val('');
             }
         });

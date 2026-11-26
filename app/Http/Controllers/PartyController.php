@@ -430,12 +430,10 @@ class PartyController extends Controller
             // Receipt: Dr Cash (from customer), Cr Receivable (the customer)
             $receivableAccountId = $balanceService->getAccountsReceivableId($branchId);
             
-            // If payment_mode is cheque, we use "Cheque in Hand" if exists
+            // If payment_mode is cheque, route through branch-scoped Cheque In Hand control account
             $targetAccountId = $cashAccountId;
             if (strtolower($data['payment_mode'] ?? '') === 'cheque') {
-                $chequeInHand = \App\Models\Account::where('title', 'Cheque In Hand')
-                    ->where('branch_id', $branchId)->first();
-                if ($chequeInHand) $targetAccountId = $chequeInHand->id;
+                $targetAccountId = $balanceService->getChequeInHandId($branchId) ?: $cashAccountId;
             }
 
             $lines[] = ['account_id' => $targetAccountId, 'debit' => $amount, 'credit' => 0, 'narration' => 'Opening Balance Payment (Initial)'];
@@ -454,20 +452,29 @@ class PartyController extends Controller
             'status' => \App\Models\VoucherMaster::STATUS_POSTED,
             'party_type' => $partyType,
             'party_id' => $party->id,
+            'cheque_no' => $data['cheque_no'] ?? null,
+            'cheque_date' => $data['cheque_date'] ?? null,
             'remarks' => "Opening Balance Voucher for " . ($data['title'] ?? 'Party'),
             'branch_id' => $branchId
         ], $lines, Auth::id());
 
         // Handle Cheque Management
         if (strtolower($data['payment_mode'] ?? '') === 'cheque' && !empty($data['cheque_no'])) {
-            \App\Models\Cheque::create([
-                'voucher_master_id' => $voucher->id,
-                'cheque_no' => $data['cheque_no'],
-                'cheque_date' => $data['cheque_date'] ?? now()->toDateString(),
-                'bank_name' => $data['bank_name'] ?? null,
-                'status' => 'pending',
-                'amount' => $amount,
-                'actual_account_id' => $cashAccountId // Default target bank/clearing account
+            app(\App\Services\ChequeService::class)->registerCheque([
+                'type'                => $type === 'receipt' ? \App\Models\Cheque::TYPE_RECEIVED : \App\Models\Cheque::TYPE_ISSUED,
+                'voucher_master_id'   => $voucher->id,
+                'branch_id'           => $branchId,
+                'party_type'          => $partyType,
+                'party_id'            => $party->id,
+                'cheque_no'           => $data['cheque_no'],
+                'issue_date'          => now()->toDateString(),
+                'cheque_date'         => $data['cheque_date'] ?? now()->toDateString(),
+                'bank_name'           => $data['bank_name'] ?? null,
+                'status'              => \App\Models\Cheque::STATUS_PENDING,
+                'amount'              => $amount,
+                'actual_account_id'   => null,
+                'clearing_account_id' => $targetAccountId ?? null,
+                'created_by'          => Auth::id(),
             ]);
         }
     }
